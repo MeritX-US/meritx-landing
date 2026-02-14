@@ -60,7 +60,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Helper to handle the 'visible' class
-    // We add a style tag dynamically to handle the visible state if we don't want to clutter CSS
     const style = document.createElement('style');
     style.innerHTML = `
         .visible {
@@ -69,4 +68,40 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     `;
     document.head.appendChild(style);
+
+    // Waitlist Form Handler
+    const form = document.querySelector('form[name="waitlist"]');
+    if (form) {
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+
+            const formData = new FormData(form);
+            const submitBtn = form.querySelector('button[type="submit"]');
+            const originalBtnText = submitBtn.textContent;
+
+            // Loading state
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Joining...';
+
+            fetch('/', {
+                method: 'POST',
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: new URLSearchParams(formData).toString()
+            })
+                .then(() => {
+                    // Success state
+                    form.style.display = 'none';
+                    const successMsg = document.querySelector('.success-message');
+                    if (successMsg) {
+                        successMsg.style.display = 'block';
+                        successMsg.classList.add('fade-in');
+                    }
+                })
+                .catch((error) => {
+                    alert('Something went wrong. Please try again.');
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = originalBtnText;
+                });
+        });
+    }
 });

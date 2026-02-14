@@ -15,6 +15,7 @@
 
     <!-- Styles -->
     <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/success.css">
 </head>
 
 <body>
@@ -217,10 +218,18 @@
             <div class="container cta-container">
                 <h2>Ready to streamline your intake?</h2>
                 <p>Join the waitlist for early access to MeritX.</p>
-                <form class="waitlist-form">
-                    <input type="email" placeholder="Enter your work email" required>
+
+                <form class="waitlist-form" name="waitlist" method="POST" data-netlify="true">
+                    <input type="hidden" name="form-name" value="waitlist">
+                    <input type="email" name="email" placeholder="Enter your work email" required>
                     <button type="submit" class="btn btn-primary">Join Waitlist</button>
                 </form>
+
+                <div class="success-message" style="display: none;">
+                    <div class="icon">✨</div>
+                    <h3>You're on the list!</h3>
+                    <p>We'll be in touch shortly with early access details.</p>
+                </div>
             </div>
         </section>
     </main>
