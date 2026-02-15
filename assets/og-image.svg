@@ -1,0 +1,37 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="630" fill="#0F172A"/>
+    
+    <!-- Background Gradients -->
+    <circle cx="0" cy="0" r="500" fill="#4338ca" fill-opacity="0.2" filter="url(#f1)"/>
+    <circle cx="1200" cy="630" r="500" fill="#7c3aed" fill-opacity="0.2" filter="url(#f1)"/>
+    
+    <!-- Tech Grid -->
+    <path d="M0 63H1200M0 126H1200M0 189H1200M0 252H1200M0 315H1200M0 378H1200M0 441H1200M0 504H1200M0 567H1200" stroke="#334155" stroke-opacity="0.2"/>
+    <path d="M120 0V630M240 0V630M360 0V630M480 0V630M600 0V630M720 0V630M840 0V630M960 0V630M1080 0V630" stroke="#334155" stroke-opacity="0.2"/>
+    
+    <!-- Central Glow -->
+    <circle cx="600" cy="315" r="250" fill="url(#grad1)" fill-opacity="0.1"/>
+    
+    <!-- Decorative Nodes -->
+    <circle cx="240" cy="189" r="4" fill="#60a5fa" fill-opacity="0.6"/>
+    <circle cx="360" cy="441" r="4" fill="#a78bfa" fill-opacity="0.6"/>
+    <circle cx="960" cy="126" r="4" fill="#60a5fa" fill-opacity="0.6"/>
+    <circle cx="840" cy="504" r="4" fill="#a78bfa" fill-opacity="0.6"/>
+    
+    <!-- Main Text -->
+    <text x="600" y="280" text-anchor="middle" font-family="sans-serif" font-weight="bold" font-size="96" fill="white" letter-spacing="-3">MeritX</text>
+    <text x="600" y="380" text-anchor="middle" font-family="sans-serif" font-weight="400" font-size="36" fill="#cbd5e1" letter-spacing="4">AI INTAKE &amp; WORKFLOW</text>
+    
+    <!-- Definitions -->
+    <defs>
+        <filter id="f1" x="-500" y="-500" width="2000" height="2000" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+            <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+            <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+            <feGaussianBlur stdDeviation="150" result="effect1_foregroundBlur"/>
+        </filter>
+        <radialGradient id="grad1" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(600 315) rotate(90) scale(250)">
+            <stop stop-color="#4F46E5"/>
+            <stop offset="1" stop-color="#1e293b" stop-opacity="0"/>
+        </radialGradient>
+    </defs>
+</svg>
