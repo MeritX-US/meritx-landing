@@ -23,7 +23,6 @@
         <div class="container header-container">
             <a href="#" class="logo">MeritX</a>
             <nav class="nav">
-                <a href="#features">Features</a>
                 <a href="#how-it-works">How It Works</a>
                 <a href="#about">About</a>
                 <a href="#contact" class="btn btn-primary">Request Access</a>
@@ -45,7 +44,7 @@
                         law firms. Automate the chaos and close clients faster.</p>
                     <div class="hero-actions">
                         <a href="#contact" class="btn btn-primary">Get Early Access</a>
-                        <a href="#features" class="btn btn-secondary">Learn More</a>
+                        <a href="#how-it-works" class="btn btn-secondary">Learn More</a>
                     </div>
                 </div>
                 <!-- Hero visual/graphic meant to be here, placeholder for now -->
@@ -103,7 +102,7 @@
             </div>
         </section>
 
-        <section class="solution" id="features">
+        <section class="solution" id="how-it-works">
             <div class="container">
                 <div class="section-header text-center">
                     <h2>Operationalize Every Consultation</h2>
@@ -219,8 +218,12 @@
                 <h2>Ready to streamline your intake?</h2>
                 <p>Join the waitlist for early access to MeritX.</p>
 
-                <form class="waitlist-form" name="waitlist" method="POST" data-netlify="true">
+                <form class="waitlist-form" name="waitlist" method="POST" data-netlify="true"
+                    netlify-honeypot="bot-field" action="/">
                     <input type="hidden" name="form-name" value="waitlist">
+                    <p class="hidden" style="display: none;">
+                        <label>Don't fill this out if you're human: <input name="bot-field" /></label>
+                    </p>
                     <input type="email" name="email" placeholder="Enter your work email" required>
                     <button type="submit" class="btn btn-primary">Join Waitlist</button>
                 </form>
@@ -242,7 +245,7 @@
             </div>
             <div class="footer-col">
                 <h4>Product</h4>
-                <a href="#features">Features</a>
+                <a href="#how-it-works">Features</a>
                 <a href="#pricing">Pricing</a>
                 <a href="#security">Security</a>
             </div>
@@ -259,7 +262,7 @@
             </div>
         </div>
         <div class="container copyright">
-            <p>&copy; 2024 MeritX. All rights reserved.</p>
+            <p>&copy; 2026 MeritX. All rights reserved.</p>
         </div>
     </footer>
 

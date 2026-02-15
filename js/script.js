@@ -83,18 +83,22 @@ document.addEventListener('DOMContentLoaded', () => {
             submitBtn.disabled = true;
             submitBtn.textContent = 'Joining...';
 
-            fetch('/', {
+            fetch(form.getAttribute('action'), {
                 method: 'POST',
                 headers: { "Content-Type": "application/x-www-form-urlencoded" },
                 body: new URLSearchParams(formData).toString()
             })
-                .then(() => {
-                    // Success state
-                    form.style.display = 'none';
-                    const successMsg = document.querySelector('.success-message');
-                    if (successMsg) {
-                        successMsg.style.display = 'block';
-                        successMsg.classList.add('fade-in');
+                .then((response) => {
+                    if (response.ok) {
+                        // Success state
+                        form.style.display = 'none';
+                        const successMsg = document.querySelector('.success-message');
+                        if (successMsg) {
+                            successMsg.style.display = 'block';
+                            successMsg.classList.add('fade-in');
+                        }
+                    } else {
+                        throw new Error('Network response was not ok.');
                     }
                 })
                 .catch((error) => {
