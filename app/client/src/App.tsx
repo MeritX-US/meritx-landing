@@ -122,7 +122,7 @@ function App() {
 
     try {
       // 1. Transcribe
-      const transResponse = await fetch('http://localhost:3001/api/transcribe', {
+      const transResponse = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/transcribe`, {
         method: 'POST',
         body: formData,
       });
@@ -140,7 +140,7 @@ function App() {
       setProcessingStatus('Generating legal summary...');
 
       // 2. Summarize
-      const sumResponse = await fetch('http://localhost:3001/api/summarize', {
+      const sumResponse = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/summarize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transcriptIds: [transcriptId] }),
