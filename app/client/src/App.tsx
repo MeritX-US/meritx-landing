@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Upload, Mic, Square, FileText, Loader2, PlayCircle } from 'lucide-react';
+import { Upload, Mic, Square, FileText, PlayCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import './App.css';
 
