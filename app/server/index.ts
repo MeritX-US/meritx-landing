@@ -50,6 +50,11 @@ if (!apiKey) {
 }
 const client = new AssemblyAI({ apiKey });
 
+// 0. Health check endpoint for UptimeRobot monitoring
+app.get('/api/health', (req, res) => {
+    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 // 1. Endpoint to handle audio upload and generate transcript
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
     if (!req.file) {
