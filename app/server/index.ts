@@ -70,14 +70,16 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
             speaker_labels: true,
             speech_models: ["universal-2" as any], // Bypass TS definition error for newer models
             redact_pii: true,
-            pii_policies: [
-                "blood_type", "credit_card_cvv", "credit_card_expiration", "credit_card_number",
-                "date_of_birth", "drivers_license", "email_address", "injury", "medical_condition",
-                "medical_process", "person_age", "person_name", "phone_number", "political_affiliation",
-                "religion", "ssn", "us_social_security_number", "banking_information", "credentials"
+            redact_pii_policies: [
+                "banking_information",
+                "credit_card_number",
+                "credit_card_expiration",
+                "credit_card_cvv",
+                "ssn",
+                "us_social_security_number"
             ],
-            pii_redaction_policies: ["banking_information", "credit_card_number", "credit_card_expiration", "credit_card_cvv", "ssn", "us_social_security_number"] // Only strictly mask banking and SSNs to not ruin the legal transcript context initially
-        } as any); // cast as any to bypass SDK limitations regarding PII types sometimes
+            redact_pii_sub: "entity_name" // Replaces SSN with [SSN] instead of hashes
+        } as any);
 
         // Cleanup: Remove the file locally after uploading to AssemblyAI keeping zero-data-retention promise locally
         fs.unlinkSync(filePath);
