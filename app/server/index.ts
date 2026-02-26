@@ -75,7 +75,6 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
                 "credit_card_number",
                 "credit_card_expiration",
                 "credit_card_cvv",
-                "ssn",
                 "us_social_security_number"
             ],
             redact_pii_sub: "entity_name" // Replaces SSN with [SSN] instead of hashes
