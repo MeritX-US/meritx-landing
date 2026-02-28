@@ -7,7 +7,16 @@ import fs from 'fs';
 import path from 'path';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
+import { createClient } from "@deepgram/sdk";
+
 dotenv.config();
+
+// Initialize Deepgram
+const deepgramApiKey = process.env.DEEPGRAM_API_KEY;
+if (!deepgramApiKey) {
+    console.warn("Deepgram API Key not set - skipping Deepgram initialization");
+}
+const deepgram = deepgramApiKey ? createClient(deepgramApiKey) : null;
 
 // Initialize Gemini client
 const geminiApiKey = process.env.GEMINI_API_KEY;
@@ -45,10 +54,9 @@ const upload = multer({ storage });
 // Initialize AssemblyAI client
 const apiKey = process.env.ASSEMBLYAI_API_KEY;
 if (!apiKey) {
-    console.error("Missing AssemblyAI API Key in .env file");
-    process.exit(1);
+    console.warn("Missing AssemblyAI API Key in .env file - ensure TRANSCRIPTION_SERVICE is not assemblyai");
 }
-const client = new AssemblyAI({ apiKey });
+const client = new AssemblyAI({ apiKey: apiKey || '' });
 
 // 0. Health check endpoint for UptimeRobot monitoring
 app.get('/api/health', (req, res) => {
@@ -62,25 +70,71 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
     }
 
     const filePath = req.file.path;
+    const activeService = process.env.TRANSCRIPTION_SERVICE || 'assemblyai';
 
     try {
-        // Create a transcript with speaker diarization and PII redaction enabled
-        const transcript = await client.transcripts.transcribe({
-            audio: filePath,
-            speaker_labels: true,
-            speech_models: ["universal-2" as any], // Bypass TS definition error for newer models
-            redact_pii: true,
-            redact_pii_policies: [
-                "banking_information",
-                "credit_card_number",
-                "credit_card_expiration",
-                "credit_card_cvv",
-                "us_social_security_number"
-            ],
-            redact_pii_sub: "entity_name" // Replaces SSN with [SSN] instead of hashes
-        } as any);
+        let transcript;
 
-        // Cleanup: Remove the file locally after uploading to AssemblyAI keeping zero-data-retention promise locally
+        if (activeService === 'deepgram') {
+            if (!deepgram) throw new Error("Deepgram client not initialized");
+
+            // Deepgram Transcription
+            const audioStream = fs.readFileSync(filePath);
+            const { result, error } = await deepgram.listen.prerecorded.transcribeFile(audioStream, {
+                model: 'nova-2',
+                smart_format: true,
+                diarize: true,
+                utterances: true,
+                redact: ['pci', 'ssn'] // Built-in Deepgram PII masking
+            });
+
+            if (error) throw error;
+
+            // Map Deepgram's distinct JSON format to exactly match AssemblyAI frontend specification
+            const channel = result.results.channels[0];
+            const alt = channel.alternatives[0];
+            const rawUtterances = result.results.utterances || [];
+
+            transcript = {
+                id: result.metadata.request_id,
+                status: 'completed',
+                text: alt.transcript,
+                utterances: rawUtterances.map((u: any) => ({
+                    speaker: String.fromCharCode(65 + u.speaker), // Map '0' to 'A', '1' to 'B'
+                    text: u.transcript,
+                    start: Math.floor(u.start * 1000), // Deepgram uses seconds, assemblyAI uses MS
+                    end: Math.floor(u.end * 1000),
+                    words: u.words.map((w: any) => ({
+                        text: w.punctuated_word || w.word,
+                        start: Math.floor(w.start * 1000),
+                        end: Math.floor(w.end * 1000),
+                        confidence: w.confidence,
+                        speaker: String.fromCharCode(65 + w.speaker)
+                    }))
+                }))
+            };
+
+        } else {
+            // Default AssemblyAI Transcription
+            const aaiTranscript = await client.transcripts.transcribe({
+                audio: filePath,
+                speaker_labels: true,
+                speech_models: ["universal-2" as any],
+                redact_pii: true,
+                redact_pii_policies: [
+                    "banking_information",
+                    "credit_card_number",
+                    "credit_card_expiration",
+                    "credit_card_cvv",
+                    "us_social_security_number"
+                ],
+                redact_pii_sub: "entity_name"
+            } as any);
+
+            transcript = aaiTranscript;
+        }
+
+        // Cleanup: Remove the file locally after uploading to API provider keeping zero-data promise locally
         fs.unlinkSync(filePath);
 
         res.json({ transcript });
@@ -94,23 +148,15 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
     }
 });
 
-// 2. Endpoint to summarize the resulting transcript using Gemini
+// 2. Endpoint to summarize transcripts decoupled using Gemini
 app.post('/api/summarize', async (req, res) => {
-    const { transcriptIds } = req.body;
+    const { text } = req.body;
 
-    if (!transcriptIds || !Array.isArray(transcriptIds) || transcriptIds.length === 0) {
-        return res.status(400).json({ error: 'Valid transcriptIds array is required' });
+    if (!text) {
+        return res.status(400).json({ error: 'Valid text string is required for summarization' });
     }
 
     try {
-        // Fetch the transcript text from AssemblyAI first
-        const transcriptData = await client.transcripts.get(transcriptIds[0]);
-        const textToSummarize = transcriptData.text;
-
-        if (!textToSummarize) {
-            return res.status(400).json({ error: 'Transcript contains no text to summarize' });
-        }
-
         // Use Gemini 2.5 Flash to generate a summary tailored for a legal consultation
         const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
         const prompt = `You are a legal assistant summarizing a client consultation for a law firm (e.g. immigration, family, civil).
@@ -125,7 +171,7 @@ Please provide a structured summary including:
 Format the response in Markdown.
 
 Here is the consultation transcript:
-${textToSummarize}`;
+${text}`;
 
         const result = await model.generateContent(prompt);
         const responseText = result.response.text();

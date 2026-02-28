@@ -130,7 +130,6 @@ function App() {
       if (!transResponse.ok) throw new Error('Transcription failed');
 
       const transData = await transResponse.json();
-      const transcriptId = transData.transcript.id;
 
       // We would ideally poll here if using the async AssemblyAI API, 
       // but assuming the backend waits for completion if we used `.transcribe()`
@@ -143,7 +142,7 @@ function App() {
       const sumResponse = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/summarize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcriptIds: [transcriptId] }),
+        body: JSON.stringify({ text: transData.transcript.text }),
       });
 
       if (!sumResponse.ok) throw new Error('Summarization failed');

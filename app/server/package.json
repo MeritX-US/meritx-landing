@@ -9,6 +9,7 @@
     "dev": "nodemon index.ts"
   },
   "dependencies": {
+    "@deepgram/sdk": "^4.11.3",
     "@google/generative-ai": "^0.24.1",
     "assemblyai": "^4.9.0",
     "cors": "^2.8.5",
