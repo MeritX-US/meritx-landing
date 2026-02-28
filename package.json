@@ -1,0 +1,13 @@
+{
+    "name": "meritx-landing-root",
+    "version": "1.0.0",
+    "description": "Root for MeritX Landing and MVP",
+    "scripts": {
+        "install-all": "npm install && npm install --prefix app/client && npm install --prefix app/server",
+        "dev": "concurrently \"npm run dev --prefix app/client\" \"npm run dev --prefix app/server\"",
+        "build": "npm run build --prefix app/client && npm run build --prefix app/server"
+    },
+    "devDependencies": {
+        "concurrently": "^8.2.2"
+    }
+}

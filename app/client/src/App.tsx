@@ -42,6 +42,7 @@ function App() {
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const [currentTime, setCurrentTime] = useState(0);
+  const [language, setLanguage] = useState<string>('auto');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -119,6 +120,7 @@ function App() {
     const formData = new FormData();
     // Using a default name for blobs
     formData.append('audio', audioFile, 'consultation.webm');
+    formData.append('language', language);
 
     try {
       // 1. Transcribe
@@ -130,10 +132,12 @@ function App() {
       if (!transResponse.ok) throw new Error('Transcription failed');
 
       const transData = await transResponse.json();
+      console.log('Transcription result:', transData);
 
-      // We would ideally poll here if using the async AssemblyAI API, 
-      // but assuming the backend waits for completion if we used `.transcribe()`
-      // Actually, `.transcribe()` in the SDK handles waiting.
+      if (!transData.transcript || !transData.transcript.text) {
+        console.warn('Transcript text is missing!', transData.transcript);
+      }
+
       setTranscript(transData.transcript);
 
       setProcessingStatus('Generating legal summary...');
@@ -142,7 +146,7 @@ function App() {
       const sumResponse = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/summarize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: transData.transcript.text }),
+        body: JSON.stringify({ text: transData.transcript?.text || "" }),
       });
 
       if (!sumResponse.ok) throw new Error('Summarization failed');
@@ -223,6 +227,36 @@ function App() {
             <div style={{ marginTop: '2rem', textAlign: 'center' }}>
               <div className="audio-player-container">
                 <audio controls src={audioUrl}></audio>
+              </div>
+              <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem' }}>
+                <label htmlFor="language-select" style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Audio Language:</label>
+                <select
+                  id="language-select"
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value)}
+                  style={{
+                    padding: '0.5rem 1rem',
+                    borderRadius: '8px',
+                    background: 'var(--bg-card)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border-color)',
+                    fontSize: '0.9rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <option value="auto">Auto-detect</option>
+                  <option value="en">English</option>
+                  <option value="zh">Chinese (中文)</option>
+                  <option value="es">Spanish (Español)</option>
+                  <option value="fr">French (Français)</option>
+                  <option value="de">German (Deutsch)</option>
+                  <option value="ja">Japanese (日本語)</option>
+                  <option value="ko">Korean (한국어)</option>
+                  <option value="pt">Portuguese (Português)</option>
+                  <option value="vi">Vietnamese (Tiếng Việt)</option>
+                  <option value="hi">Hindi (हिन्दी)</option>
+                  <option value="ru">Russian (Русский)</option>
+                </select>
               </div>
               <button className="btn btn-primary" onClick={processAudio}>
                 <FileText size={20} />

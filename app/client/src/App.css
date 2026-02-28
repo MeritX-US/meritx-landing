@@ -209,7 +209,7 @@
 
 /* Transcript Styles */
 .transcript-card {
-  max-height: 600px;
+  max-height: 80vh;
   overflow-y: auto;
 }
 

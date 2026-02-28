@@ -71,6 +71,8 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
 
     const filePath = req.file.path;
     const activeService = process.env.TRANSCRIPTION_SERVICE || 'assemblyai';
+    const selectedLanguage = req.body.language || 'en';
+    console.log(`Using transcription service: ${activeService}, language: ${selectedLanguage}`);
 
     try {
         let transcript;
@@ -79,37 +81,58 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
             if (!deepgram) throw new Error("Deepgram client not initialized");
 
             // Deepgram Transcription
-            const audioStream = fs.readFileSync(filePath);
-            const { result, error } = await deepgram.listen.prerecorded.transcribeFile(audioStream, {
-                model: 'nova-2',
+            const audioBuffer = fs.readFileSync(filePath);
+            console.log(`Deepgram: Sending ${audioBuffer.length} bytes for transcription...`);
+
+            // Nova-3 does NOT support Chinese — fall back to Nova-2 for unsupported languages
+            const nova3Languages = ['en', 'es', 'fr', 'de', 'hi', 'ru', 'pt', 'ja', 'it', 'nl', 'ko', 'pl', 'tr', 'vi', 'uk', 'sv', 'da', 'fi', 'no', 'id', 'multi'];
+            const deepgramModel = (selectedLanguage === 'auto' || nova3Languages.includes(selectedLanguage)) ? 'nova-3-general' : 'nova-2';
+            console.log(`Deepgram model: ${deepgramModel}`);
+
+            const { result, error } = await deepgram.listen.prerecorded.transcribeFile(audioBuffer, {
+                model: deepgramModel,
                 smart_format: true,
                 diarize: true,
                 utterances: true,
-                redact: ['pci', 'ssn'] // Built-in Deepgram PII masking
+                ...(selectedLanguage === 'auto'
+                    ? { detect_language: true }
+                    : { language: selectedLanguage }),
             });
 
-            if (error) throw error;
+            if (error) {
+                console.error('Deepgram error:', error);
+                throw error;
+            }
 
-            // Map Deepgram's distinct JSON format to exactly match AssemblyAI frontend specification
-            const channel = result.results.channels[0];
-            const alt = channel.alternatives[0];
-            const rawUtterances = result.results.utterances || [];
+            console.log('Deepgram raw result metadata:', JSON.stringify(result?.metadata));
+            console.log('Deepgram channels count:', result?.results?.channels?.length);
+            console.log('Deepgram utterances count:', result?.results?.utterances?.length);
+
+            const channel = result?.results?.channels?.[0];
+            const alt = channel?.alternatives?.[0];
+            console.log('Deepgram transcript text length:', alt?.transcript?.length);
+
+            if (!alt?.transcript) {
+                console.error('Deepgram returned no transcript text. Full result:', JSON.stringify(result, null, 2));
+            }
+
+            const rawUtterances = result?.results?.utterances || [];
 
             transcript = {
-                id: result.metadata.request_id,
+                id: result?.metadata?.request_id || 'unknown',
                 status: 'completed',
-                text: alt.transcript,
+                text: alt?.transcript || '',
                 utterances: rawUtterances.map((u: any) => ({
-                    speaker: String.fromCharCode(65 + u.speaker), // Map '0' to 'A', '1' to 'B'
+                    speaker: String.fromCharCode(65 + (u.speaker || 0)), // Map 0 to 'A', 1 to 'B'
                     text: u.transcript,
                     start: Math.floor(u.start * 1000), // Deepgram uses seconds, assemblyAI uses MS
                     end: Math.floor(u.end * 1000),
-                    words: u.words.map((w: any) => ({
+                    words: (u.words || []).map((w: any) => ({
                         text: w.punctuated_word || w.word,
                         start: Math.floor(w.start * 1000),
                         end: Math.floor(w.end * 1000),
                         confidence: w.confidence,
-                        speaker: String.fromCharCode(65 + w.speaker)
+                        speaker: String.fromCharCode(65 + (w.speaker || 0))
                     }))
                 }))
             };
@@ -137,6 +160,7 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
         // Cleanup: Remove the file locally after uploading to API provider keeping zero-data promise locally
         fs.unlinkSync(filePath);
 
+        console.log(`Transcription completed internally. Text available: ${!!transcript?.text}. Keys: ${Object.keys(transcript || {})}`);
         res.json({ transcript });
     } catch (error) {
         console.error('Transcription error:', error);
@@ -151,8 +175,10 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
 // 2. Endpoint to summarize transcripts decoupled using Gemini
 app.post('/api/summarize', async (req, res) => {
     const { text } = req.body;
+    console.log('Summarization request received. Full body keys:', Object.keys(req.body));
+    console.log('Text length:', text?.length || 0);
 
-    if (!text) {
+    if (!text || text.trim() === '') {
         return res.status(400).json({ error: 'Valid text string is required for summarization' });
     }
 
