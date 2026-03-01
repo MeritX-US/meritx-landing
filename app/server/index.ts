@@ -84,57 +84,110 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
             const audioBuffer = fs.readFileSync(filePath);
             console.log(`Deepgram: Sending ${audioBuffer.length} bytes for transcription...`);
 
-            // Nova-3 does NOT support Chinese — fall back to Nova-2 for unsupported languages
-            const nova3Languages = ['en', 'es', 'fr', 'de', 'hi', 'ru', 'pt', 'ja', 'it', 'nl', 'ko', 'pl', 'tr', 'vi', 'uk', 'sv', 'da', 'fi', 'no', 'id', 'multi'];
-            const deepgramModel = (selectedLanguage === 'auto' || nova3Languages.includes(selectedLanguage)) ? 'nova-3-general' : 'nova-2';
-            console.log(`Deepgram model: ${deepgramModel}`);
-
-            const { result, error } = await deepgram.listen.prerecorded.transcribeFile(audioBuffer, {
-                model: deepgramModel,
+            // Performance note: nova-2 is often more robust for non-English auto-detection 
+            // than the very new nova-3-general on certain short/challenging audio.
+            // Chinese (zh) is specifically not yet supported by Nova-3.
+            const nova3SupportedLanguages = ['en', 'es', 'fr', 'de', 'hi', 'ru', 'pt', 'ja', 'it', 'nl'];
+            const deepgramOptions: Record<string, any> = {
+                model: (selectedLanguage === 'auto' || !nova3SupportedLanguages.includes(selectedLanguage)) ? 'nova-2' : 'nova-3-general',
                 smart_format: true,
                 diarize: true,
                 utterances: true,
-                ...(selectedLanguage === 'auto'
-                    ? { detect_language: true }
-                    : { language: selectedLanguage }),
-            });
+                // Comprehensive legal-grade redaction
+                redact: [
+                    'pci', 'pii', 'phi',
+                    'name', 'location', 'phone_number',
+                    'email_address', 'bank_account', 'passport_number',
+                    'driver_license', 'date', 'ssn'
+                ],
+            };
+
+            if (selectedLanguage === 'auto') {
+                deepgramOptions.detect_language = true;
+            } else {
+                deepgramOptions.language = selectedLanguage;
+            }
+
+            console.log(`Deepgram options:`, JSON.stringify(deepgramOptions));
+            const { result, error } = await deepgram.listen.prerecorded.transcribeFile(audioBuffer, deepgramOptions);
 
             if (error) {
                 console.error('Deepgram error:', error);
                 throw error;
             }
 
-            console.log('Deepgram raw result metadata:', JSON.stringify(result?.metadata));
-            console.log('Deepgram channels count:', result?.results?.channels?.length);
-            console.log('Deepgram utterances count:', result?.results?.utterances?.length);
-
-            const channel = result?.results?.channels?.[0];
-            const alt = channel?.alternatives?.[0];
-            console.log('Deepgram transcript text length:', alt?.transcript?.length);
-
-            if (!alt?.transcript) {
-                console.error('Deepgram returned no transcript text. Full result:', JSON.stringify(result, null, 2));
+            // Log detailed results for debugging
+            if (result.metadata) {
+                console.log(`Deepgram raw result metadata:`, JSON.stringify(result.metadata));
+            }
+            if (result.results?.channels?.[0]) {
+                const chan = result.results.channels[0];
+                if (chan.detected_language) {
+                    console.log(`Deepgram detected language: ${chan.detected_language} (confidence: ${chan.language_confidence})`);
+                }
             }
 
-            const rawUtterances = result?.results?.utterances || [];
+            const channels = result.results?.channels || [];
+            const utterances = result.results?.utterances || [];
+            const transcriptText = channels[0]?.alternatives[0]?.transcript || '';
+
+            console.log(`Deepgram channels count: ${channels.length}`);
+            console.log(`Deepgram utterances count: ${utterances.length}`);
+            console.log(`Deepgram transcript text length: ${transcriptText.length}`);
+
+            if (!transcriptText && selectedLanguage === 'auto') {
+                const chan = result.results?.channels?.[0];
+                const confidence = chan?.language_confidence || 0;
+                const detected = chan?.detected_language || 'unknown';
+                console.warn(`Deepgram auto-detect failed. Detected: ${detected} with confidence: ${confidence}`);
+                throw new Error(`Language detection failed (detected ${detected} with only ${Math.round(confidence * 100)}% confidence). Please manually select the correct language from the dropdown and try again.`);
+            }
+
+            if (!transcriptText && channels[0]?.alternatives?.[0]?.words?.length === 0) {
+                console.warn('Deepgram returned no transcript text. Full result:', JSON.stringify(result, null, 2));
+                throw new Error("No speech detected in the audio file. Please ensure the recording is clear and has audible speech.");
+            }
+
+            // Merge consecutive fragments from the same speaker to avoid fragmented view
+            const mergedUtterances: any[] = [];
+            utterances.forEach((u: any) => {
+                const speaker = u.speaker !== undefined ? String.fromCharCode(65 + u.speaker) : 'A';
+                const last = mergedUtterances[mergedUtterances.length - 1];
+
+                const currentWords = (u.words || []).map((w: any) => ({
+                    text: w.punctuated_word || w.word,
+                    start: Math.floor(w.start * 1000),
+                    end: Math.floor(w.end * 1000),
+                    confidence: w.confidence,
+                    speaker: speaker
+                }));
+
+                if (last && last.speaker === speaker) {
+                    // Merge into last one
+                    // For non-Chinese (which uses spaces), we might need to join with a space.
+                    // For Chinese, we don't necessarily need a space. 
+                    // To be safe, we join with space if the last one doesn't end with a space.
+                    const needsSpace = last.text && !last.text.endsWith(' ') && u.transcript && !u.transcript.startsWith(' ');
+                    last.text += (needsSpace ? ' ' : '') + u.transcript;
+                    last.end = Math.floor(u.end * 1000);
+                    last.words.push(...currentWords);
+                } else {
+                    // Start new utterance
+                    mergedUtterances.push({
+                        speaker: speaker,
+                        text: u.transcript,
+                        start: Math.floor(u.start * 1000),
+                        end: Math.floor(u.end * 1000),
+                        words: currentWords
+                    });
+                }
+            });
 
             transcript = {
                 id: result?.metadata?.request_id || 'unknown',
                 status: 'completed',
-                text: alt?.transcript || '',
-                utterances: rawUtterances.map((u: any) => ({
-                    speaker: String.fromCharCode(65 + (u.speaker || 0)), // Map 0 to 'A', 1 to 'B'
-                    text: u.transcript,
-                    start: Math.floor(u.start * 1000), // Deepgram uses seconds, assemblyAI uses MS
-                    end: Math.floor(u.end * 1000),
-                    words: (u.words || []).map((w: any) => ({
-                        text: w.punctuated_word || w.word,
-                        start: Math.floor(w.start * 1000),
-                        end: Math.floor(w.end * 1000),
-                        confidence: w.confidence,
-                        speaker: String.fromCharCode(65 + (w.speaker || 0))
-                    }))
-                }))
+                text: transcriptText,
+                utterances: mergedUtterances
             };
 
         } else {
@@ -145,11 +198,24 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
                 speech_models: ["universal-2" as any],
                 redact_pii: true,
                 redact_pii_policies: [
+                    "person_name",
+                    "email_address",
+                    "phone_number",
+                    "location",
+                    "drivers_license",
+                    "passport_number",
+                    "us_social_security_number",
                     "banking_information",
-                    "credit_card_number",
-                    "credit_card_expiration",
-                    "credit_card_cvv",
-                    "us_social_security_number"
+                    "account_number",
+                    "date",
+                    "date_of_birth",
+                    "medical_condition",
+                    "drug",
+                    "injury",
+                    "medical_process",
+                    "blood_type",
+                    "money_amount",
+                    "organization"
                 ],
                 redact_pii_sub: "entity_name"
             } as any);
@@ -162,13 +228,13 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
 
         console.log(`Transcription completed internally. Text available: ${!!transcript?.text}. Keys: ${Object.keys(transcript || {})}`);
         res.json({ transcript });
-    } catch (error) {
+    } catch (error: any) {
         console.error('Transcription error:', error);
         // Attempt cleanup if it failed during processing
         if (fs.existsSync(filePath)) {
             fs.unlinkSync(filePath);
         }
-        res.status(500).json({ error: 'Transcription failed' });
+        res.status(500).json({ error: error.message || 'Transcription failed' });
     }
 });
 

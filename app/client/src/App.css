@@ -16,6 +16,7 @@
 .header h1 {
   font-size: 2.5rem;
   background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   margin-bottom: 0.5rem;
@@ -47,6 +48,39 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 2rem;
+}
+
+.language-selector-container {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+}
+
+.language-selector-container label {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.language-selector-container select {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  font-size: 1rem;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.language-selector-container select:hover {
+  border-color: var(--accent-primary);
 }
 
 @media (max-width: 768px) {
@@ -166,15 +200,29 @@
 /* Results Layout */
 .results-container {
   display: grid;
-  grid-template-columns: 1fr 350px;
+  grid-template-columns: 1fr 380px;
   gap: 2rem;
+  align-items: start;
+  /* Essential for sticky to work */
 }
 
 @media (max-width: 992px) {
   .results-container {
     grid-template-columns: 1fr;
     display: flex;
-    flex-direction: column-reverse;
+    flex-direction: column;
+    /* Stack naturally: Summary top, Transcript bottom */
+  }
+
+  .transcript-card-wrapper {
+    position: static;
+    /* Disable sticky on mobile */
+  }
+
+  .transcript-card {
+    max-height: none;
+    /* Let the page scroll handle it */
+    overflow-y: visible;
   }
 }
 
@@ -207,9 +255,19 @@
   color: var(--text-primary);
 }
 
+.transcript-card-wrapper {
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 2rem;
+}
+
 /* Transcript Styles */
 .transcript-card {
-  max-height: 80vh;
+  flex: 1;
+  width: 100%;
+  padding-right: 0.5rem;
+  max-height: calc(100vh - 15rem);
   overflow-y: auto;
 }
 
@@ -243,14 +301,23 @@
 }
 
 .speaker-tag {
-  display: inline-block;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-width: 130px;
+  width: fit-content;
   font-size: 0.8rem;
   font-weight: 600;
-  padding: 0.25rem 0.5rem;
+  padding: 0.25rem 0.6rem;
   border-radius: 4px;
-  background: rgba(59, 130, 246, 0.2);
-  color: var(--accent-primary);
   margin-bottom: 0.5rem;
+}
+
+.timestamp {
+  font-family: monospace;
+  font-size: 0.75rem;
+  opacity: 0.7;
+  margin-left: 1rem;
 }
 
 /* For different speakers */

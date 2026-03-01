@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Upload, Mic, Square, FileText, PlayCircle } from 'lucide-react';
+import { Upload, Mic, AlertCircle, FileText, PlayCircle, Square } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import './App.css';
 
@@ -43,6 +43,7 @@ function App() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [language, setLanguage] = useState<string>('auto');
+  const [processingError, setProcessingError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -116,6 +117,7 @@ function App() {
 
     setIsProcessing(true);
     setProcessingStatus('Transcribing audio (this may take a minute)...');
+    setProcessingError(null);
 
     const formData = new FormData();
     // Using a default name for blobs
@@ -129,7 +131,10 @@ function App() {
         body: formData,
       });
 
-      if (!transResponse.ok) throw new Error('Transcription failed');
+      if (!transResponse.ok) {
+        const errorData = await transResponse.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Transcription failed');
+      }
 
       const transData = await transResponse.json();
       console.log('Transcription result:', transData);
@@ -149,14 +154,17 @@ function App() {
         body: JSON.stringify({ text: transData.transcript?.text || "" }),
       });
 
-      if (!sumResponse.ok) throw new Error('Summarization failed');
+      if (!sumResponse.ok) {
+        const errorData = await sumResponse.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Summarization failed');
+      }
 
       const sumData = await sumResponse.json();
       setSummary(sumData.summary);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Processing error:', error);
-      alert('An error occurred during processing. Is the backend running?');
+      setProcessingError(error.message || 'An error occurred during processing.');
     } finally {
       setIsProcessing(false);
       setProcessingStatus('');
@@ -170,7 +178,12 @@ function App() {
     }
   };
 
-  // Replaced custom renderSummary with react-markdown in the return block
+  const formatTime = (ms: number) => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
 
   return (
     <div className="app-container">
@@ -184,6 +197,49 @@ function App() {
           <div className="section-title">
             <PlayCircle size={24} className="icon-small" style={{ color: 'var(--accent-primary)' }} />
             Start Consultation
+          </div>
+
+          {processingError && (
+            <div className="error-message" style={{
+              backgroundColor: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid var(--danger)',
+              color: 'var(--danger)',
+              padding: '1rem',
+              borderRadius: '12px',
+              marginBottom: '2rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem',
+              fontSize: '0.95rem',
+              lineHeight: '1.4'
+            }}>
+              <AlertCircle size={20} style={{ flexShrink: 0 }} />
+              <div>
+                <strong>Error:</strong> {processingError}
+              </div>
+            </div>
+          )}
+
+          <div className="language-selector-container">
+            <label htmlFor="language-select">Audio Language:</label>
+            <select
+              id="language-select"
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+            >
+              <option value="auto">Auto-detect</option>
+              <option value="en">English (English)</option>
+              <option value="zh">Chinese (中文)</option>
+              <option value="es">Spanish (Español)</option>
+              <option value="fr">French (Français)</option>
+              <option value="de">German (Deutsch)</option>
+              <option value="ja">Japanese (日本語)</option>
+              <option value="ko">Korean (한국어)</option>
+              <option value="pt">Portuguese (Português)</option>
+              <option value="vi">Vietnamese (Tiếng Việt)</option>
+              <option value="hi">Hindi (हिन्दी)</option>
+              <option value="ru">Russian (Русский)</option>
+            </select>
           </div>
 
           <div className="upload-section">
@@ -228,36 +284,6 @@ function App() {
               <div className="audio-player-container">
                 <audio controls src={audioUrl}></audio>
               </div>
-              <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem' }}>
-                <label htmlFor="language-select" style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Audio Language:</label>
-                <select
-                  id="language-select"
-                  value={language}
-                  onChange={(e) => setLanguage(e.target.value)}
-                  style={{
-                    padding: '0.5rem 1rem',
-                    borderRadius: '8px',
-                    background: 'var(--bg-card)',
-                    color: 'var(--text-primary)',
-                    border: '1px solid var(--border-color)',
-                    fontSize: '0.9rem',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <option value="auto">Auto-detect</option>
-                  <option value="en">English</option>
-                  <option value="zh">Chinese (中文)</option>
-                  <option value="es">Spanish (Español)</option>
-                  <option value="fr">French (Français)</option>
-                  <option value="de">German (Deutsch)</option>
-                  <option value="ja">Japanese (日本語)</option>
-                  <option value="ko">Korean (한국어)</option>
-                  <option value="pt">Portuguese (Português)</option>
-                  <option value="vi">Vietnamese (Tiếng Việt)</option>
-                  <option value="hi">Hindi (हिन्दी)</option>
-                  <option value="ru">Russian (Русский)</option>
-                </select>
-              </div>
               <button className="btn btn-primary" onClick={processAudio}>
                 <FileText size={20} />
                 Generate Intake Record
@@ -265,70 +291,77 @@ function App() {
             </div>
           )}
         </main>
-      )}
+      )
+      }
 
-      {isProcessing && (
-        <div className="glass-card processing-card">
-          <div className="spinner"></div>
-          <h3>Processing Consultation</h3>
-          <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>{processingStatus}</p>
-        </div>
-      )}
+      {
+        isProcessing && (
+          <div className="glass-card processing-card">
+            <div className="spinner"></div>
+            <h3>Processing Consultation</h3>
+            <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>{processingStatus}</p>
+          </div>
+        )
+      }
 
-      {transcript && summary && (
-        <div className="results-container">
-          <div className="glass-card summary-card">
-            <div className="section-title">
-              <FileText size={24} style={{ color: 'var(--success)' }} />
-              Structured Intake Record
+      {
+        transcript && summary && (
+          <div className="results-container">
+            <div className="glass-card summary-card">
+              <div className="section-title">
+                <FileText size={24} style={{ color: 'var(--success)' }} />
+                Structured Intake Record
+              </div>
+              <div className="markdown-body">
+                <ReactMarkdown>{summary}</ReactMarkdown>
+              </div>
             </div>
-            <div className="markdown-body">
-              <ReactMarkdown>{summary}</ReactMarkdown>
+
+            <div className="glass-card transcript-card-wrapper">
+              <div className="section-title">
+                Transcript
+              </div>
+
+              <div className="audio-player-container">
+                <audio ref={audioRef} controls src={audioUrl || ''} />
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.5rem', textAlign: 'center' }}>
+                  Click any word to jump to that timestamp
+                </p>
+              </div>
+
+              <div className="transcript-card">
+                {transcript.utterances ? (
+                  transcript.utterances.map((utt, i) => (
+                    <div key={i} className="utterance">
+                      <div className={`speaker-tag speaker-${utt.speaker}`}>
+                        Speaker {utt.speaker} <span className="timestamp">{formatTime(utt.start)}</span>
+                      </div>
+                      <p>
+                        {utt.words.map((word, j) => {
+                          const isActive = currentTime >= word.start && currentTime <= word.end;
+                          return (
+                            <span
+                              key={j}
+                              className={`word ${isActive ? 'active' : ''}`}
+                              onClick={() => handleWordClick(word.start)}
+                              title={`Confidence: ${Math.round(word.confidence * 100)}%`}
+                            >
+                              {word.text}{' '}
+                            </span>
+                          );
+                        })}
+                      </p>
+                    </div>
+                  ))
+                ) : (
+                  <p>{transcript.text}</p>
+                )}
+              </div>
             </div>
           </div>
-
-          <div className="glass-card transcript-card-wrapper">
-            <div className="section-title">
-              Transcript
-            </div>
-
-            <div className="audio-player-container">
-              <audio ref={audioRef} controls src={audioUrl || ''} />
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.5rem', textAlign: 'center' }}>
-                Click any word to jump to that timestamp
-              </p>
-            </div>
-
-            <div className="transcript-card">
-              {transcript.utterances ? (
-                transcript.utterances.map((utt, i) => (
-                  <div key={i} className="utterance">
-                    <div className={`speaker-tag speaker-${utt.speaker}`}>Speaker {utt.speaker}</div>
-                    <p>
-                      {utt.words.map((word, j) => {
-                        const isActive = currentTime >= word.start && currentTime <= word.end;
-                        return (
-                          <span
-                            key={j}
-                            className={`word ${isActive ? 'active' : ''}`}
-                            onClick={() => handleWordClick(word.start)}
-                            title={`Confidence: ${Math.round(word.confidence * 100)}%`}
-                          >
-                            {word.text}{' '}
-                          </span>
-                        );
-                      })}
-                    </p>
-                  </div>
-                ))
-              ) : (
-                <p>{transcript.text}</p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 }
 
