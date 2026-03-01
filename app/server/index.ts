@@ -33,6 +33,7 @@ const port = process.env.PORT || 3001;
 // Use CORS to allow frontend to communicate with backend
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: false })); // To parse Twilio's form-encoded body
 
 // Set up Multer for handling file uploads
 const uploadDirectory = path.join(__dirname, 'uploads');
@@ -64,102 +65,110 @@ const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID;
 const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
 const twilioClient = (twilioAccountSid && twilioAuthToken) ? twilio(twilioAccountSid, twilioAuthToken) : null;
 
-// 0. Health check endpoint for UptimeRobot monitoring
-app.get('/api/health', (req, res) => {
-    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
-});
+// Persistence Utility for Consultation History
+const recordsPath = path.join(__dirname, 'records.json');
 
-// 1. Endpoint to handle audio upload and generate transcript
-app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
-    if (!req.file) {
-        return res.status(400).json({ error: 'No audio file provided' });
-    }
-
-    const filePath = req.file.path;
-    const activeService = process.env.TRANSCRIPTION_SERVICE || 'assemblyai';
-    const selectedLanguage = req.body.language || 'en';
-    console.log(`Using transcription service: ${activeService}, language: ${selectedLanguage}`);
-
+const getRecords = (): any[] => {
     try {
-        let transcript;
+        if (!fs.existsSync(recordsPath)) {
+            fs.writeFileSync(recordsPath, JSON.stringify([]));
+            return [];
+        }
+        const data = fs.readFileSync(recordsPath, 'utf8');
+        return JSON.parse(data);
+    } catch (err) {
+        console.error('Error reading records.json:', err);
+        return [];
+    }
+};
 
-        if (activeService === 'deepgram') {
-            if (!deepgram) throw new Error("Deepgram client not initialized");
+const saveRecord = (record: any) => {
+    try {
+        const records = getRecords();
+        records.unshift(record); // Add to beginning
+        fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
+    } catch (err) {
+        console.error('Error saving record:', err);
+    }
+};
 
-            // Deepgram Transcription
-            const audioBuffer = fs.readFileSync(filePath);
-            console.log(`Deepgram: Sending ${audioBuffer.length} bytes for transcription...`);
+const deleteRecord = (id: string) => {
+    try {
+        const records = getRecords();
+        const filtered = records.filter(r => r.id !== id);
+        fs.writeFileSync(recordsPath, JSON.stringify(filtered, null, 2));
+        return true;
+    } catch (err) {
+        console.error('Error deleting record:', err);
+        return false;
+    }
+};
 
-            // Performance note: nova-2 is often more robust for non-English auto-detection 
-            // than the very new nova-3-general on certain short/challenging audio.
-            // Chinese (zh) is specifically not yet supported by Nova-3.
-            const nova3SupportedLanguages = ['en', 'es', 'fr', 'de', 'hi', 'ru', 'pt', 'ja', 'it', 'nl'];
-            const deepgramOptions: Record<string, any> = {
-                model: (selectedLanguage === 'auto' || !nova3SupportedLanguages.includes(selectedLanguage)) ? 'nova-2' : 'nova-3-general',
-                smart_format: true,
-                diarize: true,
-                utterances: true,
-                // Comprehensive legal-grade redaction
-                redact: [
-                    'pci', 'pii', 'phi',
-                    'name', 'location', 'phone_number',
-                    'email_address', 'bank_account', 'passport_number',
-                    'driver_license', 'date', 'ssn'
-                ],
-            };
+/**
+ * SHARED PIPELINE LOGIC
+ */
 
-            if (selectedLanguage === 'auto') {
-                deepgramOptions.detect_language = true;
-            } else {
-                deepgramOptions.language = selectedLanguage;
-            }
+async function runConsultationPipeline(audioSource: string, selectedLanguage: string = 'en', isUrl: boolean = false) {
+    const activeService = process.env.TRANSCRIPTION_SERVICE || 'assemblyai';
+    let transcript;
 
-            console.log(`Deepgram options:`, JSON.stringify(deepgramOptions));
-            const { result, error } = await deepgram.listen.prerecorded.transcribeFile(audioBuffer, deepgramOptions);
+    // 1. Transcription Phase
+    if (activeService === 'deepgram') {
+        if (!deepgram) throw new Error("Deepgram client not initialized");
 
-            if (error) {
-                console.error('Deepgram error:', error);
-                throw error;
-            }
+        const nova3SupportedLanguages = ['en', 'es', 'fr', 'de', 'hi', 'ru', 'pt', 'ja', 'it', 'nl'];
+        const deepgramOptions: Record<string, any> = {
+            model: (selectedLanguage === 'auto' || !nova3SupportedLanguages.includes(selectedLanguage)) ? 'nova-2' : 'nova-3-general',
+            smart_format: true,
+            utterances: true,
+            redact: [
+                'pci', 'pii', 'phi', 'name', 'location', 'phone_number',
+                'email_address', 'bank_account', 'passport_number',
+                'driver_license', 'date', 'ssn'
+            ],
+        };
 
-            // Log detailed results for debugging
-            if (result.metadata) {
-                console.log(`Deepgram raw result metadata:`, JSON.stringify(result.metadata));
-            }
-            if (result.results?.channels?.[0]) {
-                const chan = result.results.channels[0];
-                if (chan.detected_language) {
-                    console.log(`Deepgram detected language: ${chan.detected_language} (confidence: ${chan.language_confidence})`);
-                }
-            }
+        // For phone calls, use native multichannel instead of probabilistic diarization
+        if (isUrl) {
+            deepgramOptions.multichannel = true;
+        } else {
+            deepgramOptions.diarize = true;
+        }
 
-            const channels = result.results?.channels || [];
-            const utterances = result.results?.utterances || [];
-            const transcriptText = channels[0]?.alternatives[0]?.transcript || '';
+        if (selectedLanguage === 'auto') {
+            deepgramOptions.detect_language = true;
+        } else {
+            deepgramOptions.language = selectedLanguage;
+        }
 
-            console.log(`Deepgram channels count: ${channels.length}`);
-            console.log(`Deepgram utterances count: ${utterances.length}`);
-            console.log(`Deepgram transcript text length: ${transcriptText.length}`);
+        let response;
+        if (isUrl) {
+            response = await deepgram.listen.prerecorded.transcribeUrl({ url: audioSource }, deepgramOptions);
+        } else {
+            const buffer = fs.readFileSync(audioSource);
+            response = await deepgram.listen.prerecorded.transcribeFile(buffer, deepgramOptions);
+        }
 
-            if (!transcriptText && selectedLanguage === 'auto') {
-                const chan = result.results?.channels?.[0];
-                const confidence = chan?.language_confidence || 0;
-                const detected = chan?.detected_language || 'unknown';
-                console.warn(`Deepgram auto-detect failed. Detected: ${detected} with confidence: ${confidence}`);
-                throw new Error(`Language detection failed (detected ${detected} with only ${Math.round(confidence * 100)}% confidence). Please manually select the correct language from the dropdown and try again.`);
-            }
+        const { result, error } = response;
+        if (error) throw error;
 
-            if (!transcriptText && channels[0]?.alternatives?.[0]?.words?.length === 0) {
-                console.warn('Deepgram returned no transcript text. Full result:', JSON.stringify(result, null, 2));
-                throw new Error("No speech detected in the audio file. Please ensure the recording is clear and has audible speech.");
-            }
+        const channels = result.results?.channels || [];
+        const utterances = result.results?.utterances || [];
 
-            // Merge consecutive fragments from the same speaker to avoid fragmented view
-            const mergedUtterances: any[] = [];
+        // If multichannel, we might need to synthesize utterances if Deepgram didn't provide them globally
+        // but typically for phone calls, we want to see the sequence.
+        const transcriptText = channels[0]?.alternatives[0]?.transcript || '';
+
+        // Merging logic
+        const mergedUtterances: any[] = [];
+
+        // Use utterances if available (better for flow)
+        if (utterances.length > 0) {
             utterances.forEach((u: any) => {
-                const speaker = u.speaker !== undefined ? String.fromCharCode(65 + u.speaker) : 'A';
+                // If multichannel, channel 0 is usually the left speaker (Attorney), channel 1 is right (Client)
+                const channelId = u.channel !== undefined ? u.channel : (u.speaker !== undefined ? u.speaker : 0);
+                const speaker = String.fromCharCode(65 + channelId);
                 const last = mergedUtterances[mergedUtterances.length - 1];
-
                 const currentWords = (u.words || []).map((w: any) => ({
                     text: w.punctuated_word || w.word,
                     start: Math.floor(w.start * 1000),
@@ -169,16 +178,11 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
                 }));
 
                 if (last && last.speaker === speaker) {
-                    // Merge into last one
-                    // For non-Chinese (which uses spaces), we might need to join with a space.
-                    // For Chinese, we don't necessarily need a space. 
-                    // To be safe, we join with space if the last one doesn't end with a space.
                     const needsSpace = last.text && !last.text.endsWith(' ') && u.transcript && !u.transcript.startsWith(' ');
                     last.text += (needsSpace ? ' ' : '') + u.transcript;
                     last.end = Math.floor(u.end * 1000);
                     last.words.push(...currentWords);
                 } else {
-                    // Start new utterance
                     mergedUtterances.push({
                         speaker: speaker,
                         text: u.transcript,
@@ -188,96 +192,116 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
                     });
                 }
             });
-
-            transcript = {
-                id: result?.metadata?.request_id || 'unknown',
-                status: 'completed',
-                text: transcriptText,
-                utterances: mergedUtterances
-            };
-
-        } else {
-            // Default AssemblyAI Transcription
-            const aaiTranscript = await client.transcripts.transcribe({
-                audio: filePath,
-                speaker_labels: true,
-                speech_models: ["universal-2" as any],
-                redact_pii: true,
-                redact_pii_policies: [
-                    "person_name",
-                    "email_address",
-                    "phone_number",
-                    "location",
-                    "drivers_license",
-                    "passport_number",
-                    "us_social_security_number",
-                    "banking_information",
-                    "account_number",
-                    "date",
-                    "date_of_birth",
-                    "medical_condition",
-                    "drug",
-                    "injury",
-                    "medical_process",
-                    "blood_type",
-                    "money_amount",
-                    "organization"
-                ],
-                redact_pii_sub: "entity_name"
-            } as any);
-
-            transcript = aaiTranscript;
         }
 
-        // Cleanup: Remove the file locally after uploading to API provider keeping zero-data promise locally
-        fs.unlinkSync(filePath);
+        transcript = {
+            id: result?.metadata?.request_id || 'unknown',
+            status: 'completed',
+            text: transcriptText,
+            utterances: mergedUtterances
+        };
+    } else {
+        // AssemblyAI
+        const aaiOptions: any = {
+            audio: audioSource as string,
+            speaker_labels: !isUrl, // Use labels for mono uploads
+            multichannel: isUrl,    // Use native channels for phone calls
+            speech_models: ["universal-2" as any],
+            redact_pii: true,
+            redact_pii_policies: [
+                "person_name", "email_address", "phone_number", "location", "drivers_license",
+                "passport_number", "us_social_security_number", "banking_information",
+                "account_number", "date", "date_of_birth", "medical_condition"
+            ],
+            redact_pii_sub: "entity_name"
+        };
 
-        console.log(`Transcription completed internally. Text available: ${!!transcript?.text}. Keys: ${Object.keys(transcript || {})}`);
-        res.json({ transcript });
-    } catch (error: any) {
-        console.error('Transcription error:', error);
-        // Attempt cleanup if it failed during processing
-        if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
-        }
-        res.status(500).json({ error: error.message || 'Transcription failed' });
+        const aaiTranscript = await client.transcripts.transcribe(aaiOptions);
+        transcript = aaiTranscript;
     }
-});
 
-// 2. Endpoint to summarize transcripts decoupled using Gemini
-app.post('/api/summarize', async (req, res) => {
-    const { text } = req.body;
-    console.log('Summarization request received. Full body keys:', Object.keys(req.body));
-    console.log('Text length:', text?.length || 0);
+    if (!transcript?.text) throw new Error("No speech detected in audio.");
 
-    if (!text || text.trim() === '') {
-        return res.status(400).json({ error: 'Valid text string is required for summarization' });
-    }
-
-    try {
-        // Use Gemini 2.5 Flash to generate a summary tailored for a legal consultation
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-        const prompt = `You are a legal assistant summarizing a client consultation for a law firm (e.g. immigration, family, civil).
+    // 2. Summarization Phase
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const prompt = `You are a legal assistant summarizing a client consultation for a law firm.
       
-Please provide a structured summary including:
+Please provide a structured summary in Markdown including:
 1. Client Information & Core Issue
 2. Key Facts & Timeline
 3. Potential Legal Strategies discussed
 4. Next Steps & Required Documents for the client
 5. Recommended Follow-up Actions for the law firm
 
-Format the response in Markdown.
+Consultation Transcript:
+${transcript.text}`;
 
-Here is the consultation transcript:
-${text}`;
+    const sumResult = await model.generateContent(prompt);
+    const summary = sumResult.response.text();
 
-        const result = await model.generateContent(prompt);
-        const responseText = result.response.text();
+    // 3. Persistence Phase
+    const newRecord = {
+        id: `rec_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        transcript: transcript,
+        summary: summary,
+        source: isUrl ? 'phone_call' : 'upload'
+    };
+    saveRecord(newRecord);
 
-        res.json({ summary: responseText });
+    return newRecord;
+}
+
+// 0. Health check endpoint for UptimeRobot monitoring
+app.get('/api/health', (req, res) => {
+    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// 1. Endpoint to handle audio upload and generate transcript
+app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No audio file provided' });
+    const filePath = req.file.path;
+    try {
+        const record = await runConsultationPipeline(filePath, req.body.language || 'en', false);
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath); // Cleanup
+        res.json({ transcript: record.transcript, summary: record.summary, recordId: record.id });
     } catch (error: any) {
-        console.error('Summarization error with Gemini:', error.message);
-        res.status(500).json({ error: 'Summarization failed', details: error.message });
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        res.status(500).json({ error: error.message || 'Processing failed' });
+    }
+});
+
+// 2. Endpoint to summarize (Legacy support or manual override)
+app.post('/api/summarize', async (req, res) => {
+    const { text } = req.body;
+    if (!text) return res.status(400).json({ error: 'Text required' });
+    try {
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+        const result = await model.generateContent(`Summarize this legal consultation in Markdown:\n${text}`);
+        const summary = result.response.text();
+        const newRecord = { id: `rec_${Date.now()}`, timestamp: new Date().toISOString(), transcript: { text }, summary };
+        saveRecord(newRecord);
+        res.json({ summary, recordId: newRecord.id });
+    } catch (error: any) {
+        res.status(500).json({ error: 'Summarization failed' });
+    }
+});
+
+/**
+ * CONSULTATION RECORDS ENDPOINTS
+ */
+
+app.get('/api/records', (req, res) => {
+    res.json(getRecords());
+});
+
+app.delete('/api/records/:id', (req, res) => {
+    const { id } = req.params;
+    const success = deleteRecord(id);
+    if (success) {
+        res.status(200).json({ status: 'deleted' });
+    } else {
+        res.status(500).json({ error: 'Failed to delete record' });
     }
 });
 
@@ -319,16 +343,17 @@ app.post('/api/twilio/recording-callback', async (req, res) => {
     console.log(`Twilio Recording ${RecordingStatus}: ${RecordingSid} for Call ${CallSid}`);
 
     if (RecordingStatus === 'completed' && RecordingUrl) {
-        console.log(`Processing recording from: ${RecordingUrl}`);
+        console.log(`🚀 Automatically processing recording from: ${RecordingUrl}`);
 
-        // This is where post-call automation lives:
-        // 1. Download recording
-        // 2. Transcribe using AssemblyAI/Deepgram
-        // 3. Summarize with Gemini
-        // 4. Store result
+        try {
+            const record = await runConsultationPipeline(RecordingUrl, 'en', true);
+            console.log(`✅ Automated capture successful for Call ${CallSid}. Record ID: ${record.id}`);
 
-        // Note: For MVP, we simply log compliance. In the next step, we'll implement the 
-        // automated background job to ingest this into the records list.
+            // Note: In production, you might want to call Twilio API to delete the recording
+            // to fulfill the zero-retention promise on their side too.
+        } catch (error: any) {
+            console.error(`❌ Automated capture failed for Call ${CallSid}:`, error.message);
+        }
     }
 
     res.status(200).end();

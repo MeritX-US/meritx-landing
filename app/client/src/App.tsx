@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Upload, Mic, AlertCircle, FileText, PlayCircle, Square } from 'lucide-react';
+import { Upload, Mic, AlertCircle, FileText, PlayCircle, Square, History, ArrowLeft, Trash2, Calendar } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import './App.css';
 
@@ -45,6 +45,10 @@ function App() {
   const [language, setLanguage] = useState<string>('auto');
   const [processingError, setProcessingError] = useState<string | null>(null);
 
+  const [records, setRecords] = useState<any[]>([]);
+  const [view, setView] = useState<'home' | 'history' | 'results'>('home');
+  const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -58,6 +62,51 @@ function App() {
     audioEl.addEventListener('timeupdate', handleTimeUpdate);
     return () => audioEl.removeEventListener('timeupdate', handleTimeUpdate);
   }, [audioUrl]);
+
+  useEffect(() => {
+    fetchRecords();
+  }, []);
+
+  const fetchRecords = async () => {
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/records`);
+      if (response.ok) {
+        const data = await response.json();
+        setRecords(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch records:', err);
+    }
+  };
+
+  const deleteRecord = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Don't trigger "view record"
+    if (!window.confirm('Are you sure you want to delete this consultation record?')) return;
+
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/records/${id}`, {
+        method: 'DELETE'
+      });
+      if (response.ok) {
+        setRecords(records.filter(r => r.id !== id));
+        if (selectedRecordId === id) {
+          setView('home');
+          setTranscript(null);
+          setSummary(null);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to delete record:', err);
+    }
+  };
+
+  const loadRecord = (record: any) => {
+    setTranscript(record.transcript);
+    setSummary(record.summary);
+    setAudioUrl(null); // Previous audio url might not match
+    setSelectedRecordId(record.id);
+    setView('results');
+  };
 
   const startRecording = async () => {
     try {
@@ -144,23 +193,11 @@ function App() {
       }
 
       setTranscript(transData.transcript);
+      setSummary(transData.summary);
+      setSelectedRecordId(transData.recordId);
 
-      setProcessingStatus('Generating legal summary...');
-
-      // 2. Summarize
-      const sumResponse = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/summarize`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: transData.transcript?.text || "" }),
-      });
-
-      if (!sumResponse.ok) {
-        const errorData = await sumResponse.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Summarization failed');
-      }
-
-      const sumData = await sumResponse.json();
-      setSummary(sumData.summary);
+      fetchRecords(); // Refresh history
+      setView('results');
 
     } catch (error: any) {
       console.error('Processing error:', error);
@@ -188,11 +225,129 @@ function App() {
   return (
     <div className="app-container">
       <header className="header">
-        <h1>MeritX Intake</h1>
-        <p>AI-powered consultation workflow & extraction</p>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', position: 'relative' }}>
+          {view !== 'home' && (
+            <button
+              className="btn-icon"
+              onClick={() => setView('home')}
+              style={{ position: 'absolute', left: 0 }}
+              title="Back to Start"
+            >
+              <ArrowLeft size={24} />
+            </button>
+          )}
+          <div>
+            <h1>MeritX Intake</h1>
+            <p>AI-powered consultation workflow & extraction</p>
+          </div>
+          <button
+            className={`btn-history ${view === 'history' ? 'active' : ''}`}
+            onClick={() => setView(view === 'history' ? 'home' : 'history')}
+            style={{ position: 'absolute', right: 0 }}
+          >
+            <History size={20} />
+            <span className="hide-mobile">History</span>
+          </button>
+        </div>
       </header>
 
-      {!transcript && !isProcessing && (
+      {view === 'history' && (
+        <main className="glass-card">
+          <div className="section-title">
+            <History size={24} className="icon-small" style={{ color: 'var(--accent-primary)' }} />
+            Consultation History
+          </div>
+
+          <div className="history-list">
+            {records.length === 0 ? (
+              <p style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '2rem' }}>
+                No past consultations found.
+              </p>
+            ) : (
+              records.map((record) => (
+                <div key={record.id} className="history-item" onClick={() => loadRecord(record)}>
+                  <div className="history-info">
+                    <div className="history-title">
+                      <Calendar size={14} />
+                      {new Date(record.timestamp).toLocaleDateString()} {new Date(record.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                    <div className="history-preview">
+                      {record.transcript?.text?.substring(0, 100)}...
+                    </div>
+                  </div>
+                  <button className="delete-btn" onClick={(e) => deleteRecord(record.id, e)} title="Delete Record">
+                    <Trash2 size={18} />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </main>
+      )}
+
+      {view === 'results' && transcript && summary && (
+        <div className="results-container">
+          <div className="glass-card summary-card">
+            <div className="section-title">
+              <FileText size={24} style={{ color: 'var(--success)' }} />
+              Structured Intake Record
+            </div>
+            <div className="markdown-body">
+              <ReactMarkdown>{summary}</ReactMarkdown>
+            </div>
+          </div>
+
+          <div className="glass-card transcript-card-wrapper">
+            <div className="section-title">
+              Transcript
+            </div>
+
+            {audioUrl ? (
+              <div className="audio-player-container">
+                <audio ref={audioRef} controls src={audioUrl} />
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.5rem', textAlign: 'center' }}>
+                  Click any word to jump to that timestamp
+                </p>
+              </div>
+            ) : (
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1rem', fontStyle: 'italic' }}>
+                Note: Audio playback is only available for the current session's recording.
+              </p>
+            )}
+
+            <div className="transcript-card">
+              {transcript.utterances ? (
+                transcript.utterances.map((utt, i) => (
+                  <div key={i} className="utterance">
+                    <div className={`speaker-tag speaker-${utt.speaker}`}>
+                      Speaker {utt.speaker} <span className="timestamp">{formatTime(utt.start)}</span>
+                    </div>
+                    <p>
+                      {utt.words.map((word, j) => {
+                        const isActive = currentTime >= word.start && currentTime <= word.end;
+                        return (
+                          <span
+                            key={j}
+                            className={`word ${isActive ? 'active' : ''}`}
+                            onClick={() => audioUrl && handleWordClick(word.start)}
+                            title={`Confidence: ${Math.round(word.confidence * 100)}%`}
+                          >
+                            {word.text}{' '}
+                          </span>
+                        );
+                      })}
+                    </p>
+                  </div>
+                ))
+              ) : (
+                <p>{transcript.text}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {view === 'home' && !transcript && !isProcessing && (
         <main className="glass-card">
           <div className="section-title">
             <PlayCircle size={24} className="icon-small" style={{ color: 'var(--accent-primary)' }} />
@@ -304,63 +459,6 @@ function App() {
         )
       }
 
-      {
-        transcript && summary && (
-          <div className="results-container">
-            <div className="glass-card summary-card">
-              <div className="section-title">
-                <FileText size={24} style={{ color: 'var(--success)' }} />
-                Structured Intake Record
-              </div>
-              <div className="markdown-body">
-                <ReactMarkdown>{summary}</ReactMarkdown>
-              </div>
-            </div>
-
-            <div className="glass-card transcript-card-wrapper">
-              <div className="section-title">
-                Transcript
-              </div>
-
-              <div className="audio-player-container">
-                <audio ref={audioRef} controls src={audioUrl || ''} />
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.5rem', textAlign: 'center' }}>
-                  Click any word to jump to that timestamp
-                </p>
-              </div>
-
-              <div className="transcript-card">
-                {transcript.utterances ? (
-                  transcript.utterances.map((utt, i) => (
-                    <div key={i} className="utterance">
-                      <div className={`speaker-tag speaker-${utt.speaker}`}>
-                        Speaker {utt.speaker} <span className="timestamp">{formatTime(utt.start)}</span>
-                      </div>
-                      <p>
-                        {utt.words.map((word, j) => {
-                          const isActive = currentTime >= word.start && currentTime <= word.end;
-                          return (
-                            <span
-                              key={j}
-                              className={`word ${isActive ? 'active' : ''}`}
-                              onClick={() => handleWordClick(word.start)}
-                              title={`Confidence: ${Math.round(word.confidence * 100)}%`}
-                            >
-                              {word.text}{' '}
-                            </span>
-                          );
-                        })}
-                      </p>
-                    </div>
-                  ))
-                ) : (
-                  <p>{transcript.text}</p>
-                )}
-              </div>
-            </div>
-          </div>
-        )
-      }
     </div >
   );
 }
