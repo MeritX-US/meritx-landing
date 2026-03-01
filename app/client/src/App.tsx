@@ -225,29 +225,31 @@ function App() {
   return (
     <div className="app-container">
       <header className="header">
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', position: 'relative' }}>
-          {view !== 'home' && (
-            <button
-              className="btn-icon"
-              onClick={() => setView('home')}
-              style={{ position: 'absolute', left: 0 }}
-              title="Back to Start"
-            >
-              <ArrowLeft size={24} />
-            </button>
-          )}
-          <div>
+        <div className="header-content">
+          <div style={{ width: '44px', display: 'flex', justifyContent: 'flex-start' }}>
+            {view !== 'home' && (
+              <button
+                className="btn-icon"
+                onClick={() => setView('home')}
+                title="Back to Start"
+              >
+                <ArrowLeft size={24} />
+              </button>
+            )}
+          </div>
+          <div className="header-center">
             <h1>MeritX Intake</h1>
             <p>AI-powered consultation workflow & extraction</p>
           </div>
-          <button
-            className={`btn-history ${view === 'history' ? 'active' : ''}`}
-            onClick={() => setView(view === 'history' ? 'home' : 'history')}
-            style={{ position: 'absolute', right: 0 }}
-          >
-            <History size={20} />
-            <span className="hide-mobile">History</span>
-          </button>
+          <div style={{ width: 'auto', display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+              className={`btn-history ${view === 'history' ? 'active' : ''}`}
+              onClick={() => setView(view === 'history' ? 'home' : 'history')}
+            >
+              <History size={20} />
+              <span className="hide-mobile">History</span>
+            </button>
+          </div>
         </div>
       </header>
 
