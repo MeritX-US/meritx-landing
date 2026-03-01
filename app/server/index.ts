@@ -328,9 +328,15 @@ app.post('/api/twilio/voice', (req, res) => {
         recordingStatusCallback: '/api/twilio/recording-callback',
     });
 
-    // Temporary: Forward to a default number for demo
-    // In production, this would be dynamic
-    dial.number('+15104035644');
+    // Forward to the configured attorney number
+    const attorneyNumber = process.env.ATTORNEY_PHONE_NUMBER;
+    if (!attorneyNumber) {
+        console.error('Missing ATTORNEY_PHONE_NUMBER in .env');
+        twiml.say({ voice: 'Polly.Amy' }, 'Sorry, the attorney phone number is not configured. Please contact the administrator.');
+        res.type('text/xml');
+        return res.send(twiml.toString());
+    }
+    dial.number(attorneyNumber);
 
     res.type('text/xml');
     res.send(twiml.toString());
