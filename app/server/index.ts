@@ -8,6 +8,7 @@ import path from 'path';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 import { createClient } from "@deepgram/sdk";
+import twilio from 'twilio';
 
 dotenv.config();
 
@@ -57,6 +58,11 @@ if (!apiKey) {
     console.warn("Missing AssemblyAI API Key in .env file - ensure TRANSCRIPTION_SERVICE is not assemblyai");
 }
 const client = new AssemblyAI({ apiKey: apiKey || '' });
+
+// Initialize Twilio client
+const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID;
+const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
+const twilioClient = (twilioAccountSid && twilioAuthToken) ? twilio(twilioAccountSid, twilioAuthToken) : null;
 
 // 0. Health check endpoint for UptimeRobot monitoring
 app.get('/api/health', (req, res) => {
@@ -277,4 +283,53 @@ ${text}`;
 
 app.listen(port, () => {
     console.log(`Backend server running on port ${port}`);
+});
+
+/**
+ * TWILIO INTEGRATION ENDPOINTS
+ */
+
+// 1. TwiML Endpoint for Inbound/Outbound Calls
+app.post('/api/twilio/voice', (req, res) => {
+    const twiml = new twilio.twiml.VoiceResponse();
+
+    console.log('Voice request received from Twilio:', req.body);
+
+    // Legal Compliance Greeting
+    twiml.say({ voice: 'Polly.Amy' }, 'This consultation is being recorded for legal record-keeping and intake purposes.');
+
+    // Dial logic - In a real app, we'd lookup the attorney's number based on the Twilio number dialed
+    const dial = twiml.dial({
+        record: 'record-from-answer-dual', // Dual channel for speaker separation
+        recordingStatusCallback: '/api/twilio/recording-callback',
+    });
+
+    // Temporary: Forward to a default number for demo
+    // In production, this would be dynamic
+    dial.number('+15104035644');
+
+    res.type('text/xml');
+    res.send(twiml.toString());
+});
+
+// 2. Webhook for when a recording is finished
+app.post('/api/twilio/recording-callback', async (req, res) => {
+    const { RecordingUrl, CallSid, RecordingSid, RecordingStatus } = req.body;
+
+    console.log(`Twilio Recording ${RecordingStatus}: ${RecordingSid} for Call ${CallSid}`);
+
+    if (RecordingStatus === 'completed' && RecordingUrl) {
+        console.log(`Processing recording from: ${RecordingUrl}`);
+
+        // This is where post-call automation lives:
+        // 1. Download recording
+        // 2. Transcribe using AssemblyAI/Deepgram
+        // 3. Summarize with Gemini
+        // 4. Store result
+
+        // Note: For MVP, we simply log compliance. In the next step, we'll implement the 
+        // automated background job to ingest this into the records list.
+    }
+
+    res.status(200).end();
 });

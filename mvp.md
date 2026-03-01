@@ -6,15 +6,15 @@ The MVP will focus on the intake process, converting audio recording to transcri
 
 Users can rewind by timestamp, and review the summary.
 
-Record should be easily taken for both phone calls and online meetings.
+Record should be easily taken for both browser-based phone calls (WebRTC) and file uploads.
 
 Transcript should be able to tell who is speaking, aka speaker diarization.
 
 ## Non-Functional requirements
 
-1. Easy to use, no complex setup
+1. Easy to use, no complex setup (Click-to-Call in browser)
 
-2. Privacy compliance with zero-data-retention guarantees
+2. Privacy compliance with zero-data-retention guarantees (Auto-delete recordings from Twilio after processing)
 
 3. Higher accuracy is more favored than speed
 
@@ -24,9 +24,9 @@ Transcript should be able to tell who is speaking, aka speaker diarization.
 
 Building a web app that takes/uploads recordings, converts to transcripts that can rewind by timestamp, and generates summary.
 
-Focus on post call processing instead of real time in call processing.
+Focus on browser-based calling (WebRTC) for real-time recording capture.
 
-Defer phone call recording and online meeting recording integration later, which could be implemented by leveraging [twilio](https://www.twilio.com) and [recall.ai](https://www.recall.ai)
+Implement phone call recording by leveraging [Twilio Voice SDK](https://www.twilio.com/docs/voice/webrtc) for WebRTC and [Twilio Recording](https://www.twilio.com/docs/voice/api/recording). Defer meeting recording (Recall.ai) to a later stage.
 
 Start with rapid MVP using cloud services:
 
