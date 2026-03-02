@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Upload, Mic, AlertCircle, FileText, PlayCircle, Square, History, ArrowLeft, Trash2, Calendar } from 'lucide-react';
+import { Upload, Mic, AlertCircle, FileText, PlayCircle, Square, History, ArrowLeft, Trash2, Calendar, RefreshCw, X, CheckCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import './App.css';
 
@@ -35,6 +35,10 @@ function App() {
   const audioChunks = useRef<Blob[]>([]);
 
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState(0);
+  const [syncStatus, setSyncStatus] = useState('');
+  const [notification, setNotification] = useState<{ title: string, message: string, type: 'success' | 'error' | 'info' } | null>(null);
   const [processingStatus, setProcessingStatus] = useState<string>('');
 
   const [transcript, setTranscript] = useState<Transcript | null>(null);
@@ -100,10 +104,81 @@ function App() {
     }
   };
 
+  const showNotification = (title: string, message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setNotification({ title, message, type });
+    setTimeout(() => setNotification(null), 5000);
+  };
+
+  const syncFromTwilio = async () => {
+    setIsSyncing(true);
+    setSyncProgress(0);
+    setSyncStatus('Checking Twilio...');
+
+    try {
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+      // 1. Check for missing recordings
+      const checkRes = await fetch(`${baseUrl}/api/twilio/sync/check`);
+      if (!checkRes.ok) throw new Error('Failed to check Twilio recordings');
+      const { missing } = await checkRes.json();
+
+      if (!missing || missing.length === 0) {
+        showNotification('Sync Complete', 'History is already up to date!', 'success');
+        setIsSyncing(false);
+        return;
+      }
+
+      showNotification('Sync Started', `Found ${missing.length} missing records. Processing...`, 'info');
+
+      let syncedCount = 0;
+      // 2. Process each SID sequentially to show progress
+      for (let i = 0; i < missing.length; i++) {
+        const record = missing[i];
+        setSyncStatus(`Syncing ${i + 1} of ${missing.length}...`);
+
+        try {
+          const procRes = await fetch(`${baseUrl}/api/twilio/sync/process/${record.sid}`);
+          if (procRes.ok) {
+            syncedCount++;
+          } else {
+            console.error(`Failed to process SID ${record.sid}`);
+          }
+        } catch (e) {
+          console.error(`Network error for SID ${record.sid}`, e);
+        }
+
+        // Update progress bar
+        setSyncProgress(((i + 1) / missing.length) * 100);
+      }
+
+      await fetchRecords();
+      showNotification('Sync Finished', `Successfully recovered ${syncedCount} new records.`, 'success');
+    } catch (error: any) {
+      console.error('Sync error:', error);
+      showNotification('Sync Failed', error.message || 'An error occurred during synchronization.', 'error');
+    } finally {
+      setIsSyncing(false);
+      setSyncStatus('');
+      setSyncProgress(0);
+    }
+  };
+
   const loadRecord = (record: any) => {
     setTranscript(record.transcript);
     setSummary(record.summary);
-    setAudioUrl(null); // Previous audio url might not match
+
+    // Resolve audio URL
+    if (record.audioUrl) {
+      if (record.audioUrl.startsWith('http')) {
+        setAudioUrl(record.audioUrl);
+      } else {
+        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+        setAudioUrl(`${baseUrl}${record.audioUrl}`);
+      }
+    } else {
+      setAudioUrl(null);
+    }
+
     setSelectedRecordId(record.id);
     setView('results');
   };
@@ -255,10 +330,33 @@ function App() {
 
       {view === 'history' && (
         <main className="glass-card">
-          <div className="section-title">
-            <History size={24} className="icon-small" style={{ color: 'var(--accent-primary)' }} />
-            Consultation History
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+            <div className="section-title" style={{ marginBottom: 0 }}>
+              <History size={24} className="icon-small" style={{ color: 'var(--accent-primary)' }} />
+              Consultation History
+            </div>
+            <button
+              className={`btn-history ${isSyncing ? 'loading' : ''}`}
+              onClick={syncFromTwilio}
+              disabled={isSyncing}
+              style={{ fontSize: '0.8rem', padding: '0.5rem 0.8rem' }}
+            >
+              <RefreshCw size={14} className={isSyncing ? 'spin' : ''} />
+              {isSyncing ? 'Syncing...' : 'Sync Twilio'}
+            </button>
           </div>
+
+          {isSyncing && (
+            <div className="sync-status-bar">
+              <div className="sync-info">
+                <span>{syncStatus}</span>
+                <span>{Math.round(syncProgress)}%</span>
+              </div>
+              <div className="sync-progress-container">
+                <div className="progress-fill" style={{ width: `${syncProgress}%` }}></div>
+              </div>
+            </div>
+          )}
 
           <div className="history-list">
             {records.length === 0 ? (
@@ -304,17 +402,13 @@ function App() {
               Transcript
             </div>
 
-            {audioUrl ? (
+            {audioUrl && (
               <div className="audio-player-container">
                 <audio ref={audioRef} controls src={audioUrl} />
                 <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.5rem', textAlign: 'center' }}>
                   Click any word to jump to that timestamp
                 </p>
               </div>
-            ) : (
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1rem', fontStyle: 'italic' }}>
-                Note: Audio playback is only available for the current session's recording.
-              </p>
             )}
 
             <div className="transcript-card">
@@ -461,7 +555,24 @@ function App() {
         )
       }
 
-    </div >
+      {notification && (
+        <div className="toast-container">
+          <div className={`toast ${notification.type}`}>
+            <div className="toast-content">
+              <div className="toast-title">
+                {notification.type === 'success' && <CheckCircle size={16} style={{ verticalAlign: 'middle', marginRight: '0.5rem', color: '#22c55e' }} />}
+                {notification.type === 'error' && <AlertCircle size={16} style={{ verticalAlign: 'middle', marginRight: '0.5rem', color: '#ef4444' }} />}
+                {notification.title}
+              </div>
+              <div className="toast-message">{notification.message}</div>
+            </div>
+            <button className="toast-close" onClick={() => setNotification(null)}>
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -34,6 +34,7 @@ const port = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false })); // To parse Twilio's form-encoded body
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Set up Multer for handling file uploads
 const uploadDirectory = path.join(__dirname, 'uploads');
@@ -108,7 +109,7 @@ const deleteRecord = (id: string) => {
  * SHARED PIPELINE LOGIC
  */
 
-async function runConsultationPipeline(audioSource: string, selectedLanguage: string = 'en', isUrl: boolean = false) {
+async function runConsultationPipeline(audioSource: string, selectedLanguage: string = 'en', isUrl: boolean = false, recordingSid?: string) {
     const activeService = process.env.TRANSCRIPTION_SERVICE || 'assemblyai';
     let transcript;
 
@@ -239,13 +240,23 @@ ${transcript.text}`;
     const sumResult = await model.generateContent(prompt);
     const summary = sumResult.response.text();
 
+    // Generate audio URL for the record
+    let recordAudioUrl = audioSource;
+    if (!isUrl) {
+        // For local uploads, store the relative path
+        const fileName = path.basename(audioSource);
+        recordAudioUrl = `/uploads/${fileName}`;
+    }
+
     // 3. Persistence Phase
     const newRecord = {
         id: `rec_${Date.now()}`,
         timestamp: new Date().toISOString(),
         transcript: transcript,
         summary: summary,
-        source: isUrl ? 'phone_call' : 'upload'
+        source: isUrl ? 'phone_call' : 'upload',
+        audioUrl: recordAudioUrl,
+        recordingSid: recordingSid
     };
     saveRecord(newRecord);
 
@@ -263,7 +274,6 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
     const filePath = req.file.path;
     try {
         const record = await runConsultationPipeline(filePath, req.body.language || 'en', false);
-        if (fs.existsSync(filePath)) fs.unlinkSync(filePath); // Cleanup
         res.json({ transcript: record.transcript, summary: record.summary, recordId: record.id });
     } catch (error: any) {
         if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
@@ -352,7 +362,7 @@ app.post('/api/twilio/recording-callback', async (req, res) => {
         console.log(`🚀 Automatically processing recording from: ${RecordingUrl}`);
 
         try {
-            const record = await runConsultationPipeline(RecordingUrl, 'en', true);
+            const record = await runConsultationPipeline(RecordingUrl, 'en', true, RecordingSid);
             console.log(`✅ Automated capture successful for Call ${CallSid}. Record ID: ${record.id}`);
 
             // Note: In production, you might want to call Twilio API to delete the recording
@@ -363,4 +373,64 @@ app.post('/api/twilio/recording-callback', async (req, res) => {
     }
 
     res.status(200).end();
+});
+
+// 3. Sync Endpoints to recover missing recordings
+
+// Check for missing recordings
+app.get('/api/twilio/sync/check', async (req, res) => {
+    if (!twilioClient) {
+        return res.status(500).json({ error: 'Twilio client not initialized' });
+    }
+
+    try {
+        console.log('🔍 Checking Twilio for missing recordings...');
+        const records = getRecords();
+        const existingSids = new Set(records.map(r => r.recordingSid).filter(Boolean));
+
+        // Get recordings from the last 2 days
+        const recordings = await twilioClient.recordings.list({
+            dateCreatedAfter: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+            limit: 20
+        });
+
+        const missing = recordings
+            .filter(r => !existingSids.has(r.sid) && r.status === 'completed')
+            .map(r => ({
+                sid: r.sid,
+                dateCreated: r.dateCreated,
+                duration: r.duration
+            }));
+
+        res.json({
+            total_found: recordings.length,
+            missing_count: missing.length,
+            missing: missing
+        });
+    } catch (error: any) {
+        console.error('❌ Twilio Check Error:', error);
+        res.status(500).json({ error: 'Check failed', message: error.message });
+    }
+});
+
+// Process a specific missing recording
+app.get('/api/twilio/sync/process/:sid', async (req, res) => {
+    const { sid } = req.params;
+    if (!twilioClient) return res.status(500).json({ error: 'Twilio client not initialized' });
+
+    try {
+        const r = await twilioClient.recordings(sid).fetch();
+        if (r.status !== 'completed') {
+            return res.status(400).json({ error: 'Recording is not yet completed' });
+        }
+
+        const audioUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/Recordings/${sid}.mp3`;
+        console.log(`🚀 Sync-processing recording: ${sid}`);
+
+        const record = await runConsultationPipeline(audioUrl, 'en', true, sid);
+        res.json({ sid, status: 'synced', id: record.id });
+    } catch (error: any) {
+        console.error(`❌ Sync failed for recording ${sid}:`, error.message);
+        res.status(500).json({ sid, status: 'failed', error: error.message });
+    }
 });
