@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Upload, Mic, AlertCircle, FileText, PlayCircle, Square, History, ArrowLeft, Trash2, Calendar, RefreshCw, X, CheckCircle } from 'lucide-react';
+import { Upload, Mic, AlertCircle, FileText, PlayCircle, Square, History, ArrowLeft, Trash2, Calendar, RefreshCw, X, CheckCircle, Plus } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import './App.css';
 
@@ -50,7 +50,7 @@ function App() {
   const [processingError, setProcessingError] = useState<string | null>(null);
 
   const [records, setRecords] = useState<any[]>([]);
-  const [view, setView] = useState<'home' | 'history' | 'results'>('home');
+  const [view, setView] = useState<'home' | 'history' | 'results'>('history');
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -94,7 +94,7 @@ function App() {
       if (response.ok) {
         setRecords(records.filter(r => r.id !== id));
         if (selectedRecordId === id) {
-          setView('home');
+          setView('history');
           setTranscript(null);
           setSummary(null);
         }
@@ -302,11 +302,11 @@ function App() {
       <header className="header">
         <div className="header-content">
           <div style={{ width: '44px', display: 'flex', justifyContent: 'flex-start' }}>
-            {view !== 'home' && (
+            {view !== 'history' && (
               <button
                 className="btn-icon"
-                onClick={() => setView('home')}
-                title="Back to Start"
+                onClick={() => setView('history')}
+                title="Back to History"
               >
                 <ArrowLeft size={24} />
               </button>
@@ -321,8 +321,17 @@ function App() {
               className={`btn-history ${view === 'history' ? 'active' : ''}`}
               onClick={() => setView(view === 'history' ? 'home' : 'history')}
             >
-              <History size={20} />
-              <span className="hide-mobile">History</span>
+              {view === 'history' ? (
+                <>
+                  <Plus size={20} />
+                  <span className="hide-mobile">New Intake</span>
+                </>
+              ) : (
+                <>
+                  <History size={20} />
+                  <span className="hide-mobile">History</span>
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -383,166 +392,170 @@ function App() {
             )}
           </div>
         </main>
-      )}
+      )
+      }
 
-      {view === 'results' && transcript && summary && (
-        <div className="results-container">
-          <div className="glass-card summary-card">
-            <div className="section-title">
-              <FileText size={24} style={{ color: 'var(--success)' }} />
-              Structured Intake Record
+      {
+        view === 'results' && transcript && summary && (
+          <div className="results-container">
+            <div className="glass-card summary-card">
+              <div className="section-title">
+                <FileText size={24} style={{ color: 'var(--success)' }} />
+                Structured Intake Record
+              </div>
+              <div className="markdown-body">
+                <ReactMarkdown>{summary}</ReactMarkdown>
+              </div>
             </div>
-            <div className="markdown-body">
-              <ReactMarkdown>{summary}</ReactMarkdown>
+
+            <div className="glass-card transcript-card-wrapper">
+              <div className="section-title">
+                Transcript
+              </div>
+
+              {audioUrl && (
+                <div className="audio-player-container">
+                  <audio ref={audioRef} controls src={audioUrl} />
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.5rem', textAlign: 'center' }}>
+                    Click any word to jump to that timestamp
+                  </p>
+                </div>
+              )}
+
+              <div className="transcript-card">
+                {transcript.utterances ? (
+                  transcript.utterances.map((utt, i) => (
+                    <div key={i} className="utterance">
+                      <div className={`speaker-tag speaker-${utt.speaker}`}>
+                        Speaker {utt.speaker} <span className="timestamp">{formatTime(utt.start)}</span>
+                      </div>
+                      <p>
+                        {utt.words.map((word, j) => {
+                          const isActive = currentTime >= word.start && currentTime <= word.end;
+                          return (
+                            <span
+                              key={j}
+                              className={`word ${isActive ? 'active' : ''}`}
+                              onClick={() => audioUrl && handleWordClick(word.start)}
+                              title={`Confidence: ${Math.round(word.confidence * 100)}%`}
+                            >
+                              {word.text}{' '}
+                            </span>
+                          );
+                        })}
+                      </p>
+                    </div>
+                  ))
+                ) : (
+                  <p>{transcript.text}</p>
+                )}
+              </div>
             </div>
           </div>
+        )
+      }
 
-          <div className="glass-card transcript-card-wrapper">
+      {
+        view === 'home' && !transcript && !isProcessing && (
+          <main className="glass-card">
             <div className="section-title">
-              Transcript
+              <PlayCircle size={24} className="icon-small" style={{ color: 'var(--accent-primary)' }} />
+              Start Consultation
             </div>
 
-            {audioUrl && (
-              <div className="audio-player-container">
-                <audio ref={audioRef} controls src={audioUrl} />
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.5rem', textAlign: 'center' }}>
-                  Click any word to jump to that timestamp
-                </p>
+            {processingError && (
+              <div className="error-message" style={{
+                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid var(--danger)',
+                color: 'var(--danger)',
+                padding: '1rem',
+                borderRadius: '12px',
+                marginBottom: '2rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                fontSize: '0.95rem',
+                lineHeight: '1.4'
+              }}>
+                <AlertCircle size={20} style={{ flexShrink: 0 }} />
+                <div>
+                  <strong>Error:</strong> {processingError}
+                </div>
               </div>
             )}
 
-            <div className="transcript-card">
-              {transcript.utterances ? (
-                transcript.utterances.map((utt, i) => (
-                  <div key={i} className="utterance">
-                    <div className={`speaker-tag speaker-${utt.speaker}`}>
-                      Speaker {utt.speaker} <span className="timestamp">{formatTime(utt.start)}</span>
-                    </div>
-                    <p>
-                      {utt.words.map((word, j) => {
-                        const isActive = currentTime >= word.start && currentTime <= word.end;
-                        return (
-                          <span
-                            key={j}
-                            className={`word ${isActive ? 'active' : ''}`}
-                            onClick={() => audioUrl && handleWordClick(word.start)}
-                            title={`Confidence: ${Math.round(word.confidence * 100)}%`}
-                          >
-                            {word.text}{' '}
-                          </span>
-                        );
-                      })}
-                    </p>
-                  </div>
-                ))
-              ) : (
-                <p>{transcript.text}</p>
-              )}
+            <div className="language-selector-container">
+              <label htmlFor="language-select">Audio Language:</label>
+              <select
+                id="language-select"
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
+              >
+                <option value="auto">Auto-detect</option>
+                <option value="en">English (English)</option>
+                <option value="zh">Chinese (中文)</option>
+                <option value="es">Spanish (Español)</option>
+                <option value="fr">French (Français)</option>
+                <option value="de">German (Deutsch)</option>
+                <option value="ja">Japanese (日本語)</option>
+                <option value="ko">Korean (한국어)</option>
+                <option value="pt">Portuguese (Português)</option>
+                <option value="vi">Vietnamese (Tiếng Việt)</option>
+                <option value="hi">Hindi (हिन्दी)</option>
+                <option value="ru">Russian (Русский)</option>
+              </select>
             </div>
-          </div>
-        </div>
-      )}
 
-      {view === 'home' && !transcript && !isProcessing && (
-        <main className="glass-card">
-          <div className="section-title">
-            <PlayCircle size={24} className="icon-small" style={{ color: 'var(--accent-primary)' }} />
-            Start Consultation
-          </div>
+            <div className="upload-section">
+              <div
+                className={`action-card ${isRecording ? 'recording' : ''}`}
+                onClick={isRecording ? stopRecording : startRecording}
+              >
+                {isRecording ? (
+                  <>
+                    <Square className="icon" />
+                    <h3>Stop Recording</h3>
+                    <p className="text-secondary">Recording in progress...</p>
+                  </>
+                ) : (
+                  <>
+                    <Mic className="icon" />
+                    <h3>Record Audio</h3>
+                    <p className="text-secondary">Record client consultation directly</p>
+                  </>
+                )}
+              </div>
 
-          {processingError && (
-            <div className="error-message" style={{
-              backgroundColor: 'rgba(239, 68, 68, 0.1)',
-              border: '1px solid var(--danger)',
-              color: 'var(--danger)',
-              padding: '1rem',
-              borderRadius: '12px',
-              marginBottom: '2rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.75rem',
-              fontSize: '0.95rem',
-              lineHeight: '1.4'
-            }}>
-              <AlertCircle size={20} style={{ flexShrink: 0 }} />
-              <div>
-                <strong>Error:</strong> {processingError}
+              <div
+                className="action-card"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload className="icon" />
+                <h3>Upload File</h3>
+                <p className="text-secondary">MP3, WAV, or WebM</p>
+                <input
+                  type="file"
+                  className="file-input"
+                  ref={fileInputRef}
+                  accept="audio/*"
+                  onChange={handleFileUpload}
+                />
               </div>
             </div>
-          )}
 
-          <div className="language-selector-container">
-            <label htmlFor="language-select">Audio Language:</label>
-            <select
-              id="language-select"
-              value={language}
-              onChange={(e) => setLanguage(e.target.value)}
-            >
-              <option value="auto">Auto-detect</option>
-              <option value="en">English (English)</option>
-              <option value="zh">Chinese (中文)</option>
-              <option value="es">Spanish (Español)</option>
-              <option value="fr">French (Français)</option>
-              <option value="de">German (Deutsch)</option>
-              <option value="ja">Japanese (日本語)</option>
-              <option value="ko">Korean (한국어)</option>
-              <option value="pt">Portuguese (Português)</option>
-              <option value="vi">Vietnamese (Tiếng Việt)</option>
-              <option value="hi">Hindi (हिन्दी)</option>
-              <option value="ru">Russian (Русский)</option>
-            </select>
-          </div>
-
-          <div className="upload-section">
-            <div
-              className={`action-card ${isRecording ? 'recording' : ''}`}
-              onClick={isRecording ? stopRecording : startRecording}
-            >
-              {isRecording ? (
-                <>
-                  <Square className="icon" />
-                  <h3>Stop Recording</h3>
-                  <p className="text-secondary">Recording in progress...</p>
-                </>
-              ) : (
-                <>
-                  <Mic className="icon" />
-                  <h3>Record Audio</h3>
-                  <p className="text-secondary">Record client consultation directly</p>
-                </>
-              )}
-            </div>
-
-            <div
-              className="action-card"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Upload className="icon" />
-              <h3>Upload File</h3>
-              <p className="text-secondary">MP3, WAV, or WebM</p>
-              <input
-                type="file"
-                className="file-input"
-                ref={fileInputRef}
-                accept="audio/*"
-                onChange={handleFileUpload}
-              />
-            </div>
-          </div>
-
-          {audioUrl && !isRecording && (
-            <div style={{ marginTop: '2rem', textAlign: 'center' }}>
-              <div className="audio-player-container">
-                <audio controls src={audioUrl}></audio>
+            {audioUrl && !isRecording && (
+              <div style={{ marginTop: '2rem', textAlign: 'center' }}>
+                <div className="audio-player-container">
+                  <audio controls src={audioUrl}></audio>
+                </div>
+                <button className="btn btn-primary" onClick={processAudio}>
+                  <FileText size={20} />
+                  Generate Intake Record
+                </button>
               </div>
-              <button className="btn btn-primary" onClick={processAudio}>
-                <FileText size={20} />
-                Generate Intake Record
-              </button>
-            </div>
-          )}
-        </main>
-      )
+            )}
+          </main>
+        )
       }
 
       {
@@ -555,24 +568,26 @@ function App() {
         )
       }
 
-      {notification && (
-        <div className="toast-container">
-          <div className={`toast ${notification.type}`}>
-            <div className="toast-content">
-              <div className="toast-title">
-                {notification.type === 'success' && <CheckCircle size={16} style={{ verticalAlign: 'middle', marginRight: '0.5rem', color: '#22c55e' }} />}
-                {notification.type === 'error' && <AlertCircle size={16} style={{ verticalAlign: 'middle', marginRight: '0.5rem', color: '#ef4444' }} />}
-                {notification.title}
+      {
+        notification && (
+          <div className="toast-container">
+            <div className={`toast ${notification.type}`}>
+              <div className="toast-content">
+                <div className="toast-title">
+                  {notification.type === 'success' && <CheckCircle size={16} style={{ verticalAlign: 'middle', marginRight: '0.5rem', color: '#22c55e' }} />}
+                  {notification.type === 'error' && <AlertCircle size={16} style={{ verticalAlign: 'middle', marginRight: '0.5rem', color: '#ef4444' }} />}
+                  {notification.title}
+                </div>
+                <div className="toast-message">{notification.message}</div>
               </div>
-              <div className="toast-message">{notification.message}</div>
+              <button className="toast-close" onClick={() => setNotification(null)}>
+                <X size={18} />
+              </button>
             </div>
-            <button className="toast-close" onClick={() => setNotification(null)}>
-              <X size={18} />
-            </button>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 }
 
