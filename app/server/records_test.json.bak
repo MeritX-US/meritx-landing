@@ -1,0 +1,23 @@
+[
+    {
+        "id": "test_legacy_1",
+        "timestamp": "2026-03-01T20:00:00Z",
+        "audioUrl": "http://example.com/audio1.mp3",
+        "summary": "# Summary 1",
+        "transcript": {
+            "text": "Transcript 1"
+        }
+    },
+    {
+        "id": "test_already_migrated",
+        "timestamp": "2026-03-02T20:00:00Z",
+        "type": "matter",
+        "items": [
+            {
+                "type": "image",
+                "url": "/uploads/img1.png"
+            }
+        ],
+        "summary": "# Summary 2"
+    }
+]
