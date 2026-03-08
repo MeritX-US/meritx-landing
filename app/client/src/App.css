@@ -167,6 +167,7 @@
   text-align: center;
   gap: 1rem;
   min-height: 200px;
+  padding: 2rem;
   cursor: pointer;
   border: 2px dashed var(--border-color);
 }
@@ -757,4 +758,123 @@ audio::-webkit-media-controls-time-remaining-display {
   .toast {
     min-width: 0;
   }
+}
+
+/* Call Out Feature UI */
+.call-input-group {
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
+  padding-top: 1rem;
+}
+
+.call-input {
+  flex: 1;
+  padding: 0.8rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-light, #e2e8f0);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 1rem;
+  transition: all 0.2s ease;
+  min-width: 0;
+}
+
+.call-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.btn-dial {
+  background: var(--accent-primary);
+  color: white;
+  border: none;
+  padding: 0 1.2rem;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 80px;
+}
+
+.btn-dial:hover:not(:disabled) {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.btn-dial:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.action-card.call-card {
+  cursor: default;
+}
+
+.action-card.call-card:hover {
+  transform: none;
+  border-color: var(--border-color);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+}
+
+@media (max-width: 480px) {
+  .call-input-group {
+    flex-direction: column;
+  }
+
+  .btn-dial {
+    padding: 0.8rem;
+    width: 100%;
+  }
+}
+/* Client Call-In Info Card */
+.info-card {
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.info-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--accent-primary);
+  box-shadow: 0 12px 24px rgba(0,0,0,0.06);
+}
+
+.phone-display {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background: rgba(59, 130, 246, 0.05);
+  border-radius: 99px;
+  gap: 0.75rem;
+  margin-top: auto;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+}
+
+.phone-display:hover {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+.phone-text {
+  color: var(--accent-primary);
+  font-family: 'Inter', monospace;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.copy-icon {
+  color: var(--text-secondary);
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.phone-display:hover .copy-icon {
+  opacity: 1;
+  color: var(--accent-primary);
 }

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Upload, Mic, AlertCircle, FileText, PlayCircle, Square, History, ArrowLeft, Trash2, Calendar, RefreshCw, X, CheckCircle, Plus } from 'lucide-react';
+import { Upload, Mic, AlertCircle, FileText, PlayCircle, Square, History, ArrowLeft, Trash2, Calendar, RefreshCw, X, CheckCircle, Plus, PhoneCall, Copy } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import './App.css';
 
@@ -53,6 +53,10 @@ function App() {
   const [view, setView] = useState<'home' | 'history' | 'results'>('history');
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
 
+  const [clientPhone, setClientPhone] = useState('');
+  const [isCallingOut, setIsCallingOut] = useState(false);
+  const [twilioNumber, setTwilioNumber] = useState('');
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -69,7 +73,20 @@ function App() {
 
   useEffect(() => {
     fetchRecords();
+    fetchConfig();
   }, []);
+
+  const fetchConfig = async () => {
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/config`);
+      if (response.ok) {
+        const data = await response.json();
+        setTwilioNumber(data.twilioPhoneNumber);
+      }
+    } catch (err) {
+      console.error('Failed to fetch config:', err);
+    }
+  };
 
   const fetchRecords = async () => {
     try {
@@ -161,6 +178,57 @@ function App() {
       setSyncStatus('');
       setSyncProgress(0);
     }
+  };
+
+  const formatPhoneNumber = (value: string) => {
+    if (!value) return value;
+    const phoneNumber = value.replace(/[^\d]/g, '');
+    const phoneNumberLength = phoneNumber.length;
+    if (phoneNumberLength < 4) return phoneNumber;
+    if (phoneNumberLength < 7) {
+      return `(${phoneNumber.slice(0, 3)}) ${phoneNumber.slice(3)}`;
+    }
+    return `(${phoneNumber.slice(0, 3)}) ${phoneNumber.slice(3, 6)}-${phoneNumber.slice(6, 10)}`;
+  };
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formattedValue = formatPhoneNumber(e.target.value);
+    setClientPhone(formattedValue);
+  };
+
+  const initiateCallOut = async () => {
+    const cleanNumber = clientPhone.replace(/\D/g, '');
+
+    if (cleanNumber.length !== 10) {
+      showNotification('Invalid Number', 'Please enter a 10-digit US phone number.', 'error');
+      return;
+    }
+
+    const e164Number = `+1${cleanNumber}`;
+    setIsCallingOut(true);
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/twilio/call-out`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientPhoneNumber: e164Number }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        showNotification('Calling Attorney', 'Please answer your phone. Twilio will bridge to the client.', 'info');
+        setClientPhone('');
+      } else {
+        showNotification('Call Failed', data.error || 'Unknown error', 'error');
+      }
+    } catch (error: any) {
+      showNotification('Call Failed', error.message, 'error');
+    } finally {
+      setIsCallingOut(false);
+    }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    showNotification('Copied', 'Phone number copied to clipboard', 'success');
   };
 
   const loadRecord = (record: any) => {
@@ -541,6 +609,42 @@ function App() {
                   onChange={handleFileUpload}
                 />
               </div>
+
+              <div className="action-card call-card">
+                <PhoneCall className="icon" />
+                <h3>Call Client</h3>
+                <p className="text-secondary">Two-legged dial via Twilio</p>
+                <div className="call-input-group" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="tel"
+                    placeholder="(555) 000-0000"
+                    value={clientPhone}
+                    onChange={handlePhoneChange}
+                    className="call-input"
+                  />
+                  <button
+                    className="btn-dial"
+                    onClick={initiateCallOut}
+                    disabled={isCallingOut}
+                  >
+                    {isCallingOut ? <RefreshCw className="spin" size={16} /> : 'Dial'}
+                  </button>
+                </div>
+              </div>
+
+              {twilioNumber && (
+                <div className="action-card info-card">
+                  <div className="icon-container">
+                    <PhoneCall className="icon" />
+                  </div>
+                  <h3>Client Call-In</h3>
+                  <p className="text-secondary">Give this number to your client</p>
+                  <div className="phone-display" onClick={() => copyToClipboard(twilioNumber)}>
+                    <span className="phone-text">{twilioNumber}</span>
+                    <Copy size={16} className="copy-icon" />
+                  </div>
+                </div>
+              )}
             </div>
 
             {audioUrl && !isRecording && (

@@ -305,6 +305,12 @@ app.get('/api/records', (req, res) => {
     res.json(getRecords());
 });
 
+app.get('/api/config', (req, res) => {
+    res.json({
+        twilioPhoneNumber: process.env.TWILIO_PHONE_NUMBER || ''
+    });
+});
+
 app.delete('/api/records/:id', (req, res) => {
     const { id } = req.params;
     const success = deleteRecord(id);
@@ -433,4 +439,74 @@ app.get('/api/twilio/sync/process/:sid', async (req, res) => {
         console.error(`❌ Sync failed for recording ${sid}:`, error.message);
         res.status(500).json({ sid, status: 'failed', error: error.message });
     }
+});
+
+// 4. Outbound Click-to-Call Endpoints
+
+app.post('/api/twilio/call-out', async (req, res) => {
+    const { clientPhoneNumber } = req.body;
+
+    if (!twilioClient) {
+        return res.status(500).json({ error: 'Twilio client not initialized' });
+    }
+
+    const attorneyNumber = process.env.ATTORNEY_PHONE_NUMBER;
+    const twilioNumber = process.env.TWILIO_PHONE_NUMBER;
+
+    if (!attorneyNumber || !twilioNumber) {
+        return res.status(500).json({ error: 'Attorney or Twilio phone number not configured in .env' });
+    }
+
+    if (!clientPhoneNumber) {
+        return res.status(400).json({ error: 'Client phone number is required' });
+    }
+
+    try {
+        console.log(`Initiating Two-Legged Call: Attorney (${attorneyNumber}) -> Client (${clientPhoneNumber})`);
+
+        // We call the attorney first. When they answer, Twilio hits the 'url' TwiML to dial the client.
+        const encodedClientNumber = encodeURIComponent(clientPhoneNumber);
+
+        // In local development, the host might just be localhost:3001, which Twilio can't reach.
+        // For Render/Netlify, req.headers.host works great.
+        // If testing locally, the user can set PUBLIC_SERVER_URL in .env (e.g. ngrok)
+        const publicBase = process.env.PUBLIC_SERVER_URL || `${req.headers['x-forwarded-proto'] || req.protocol}://${req.headers.host}`;
+        const bridgeUrl = `${publicBase}/api/twilio/call-out/bridge?clientNumber=${encodedClientNumber}`;
+
+        const call = await twilioClient.calls.create({
+            to: attorneyNumber,
+            from: twilioNumber,
+            url: bridgeUrl
+        });
+
+        res.json({ success: true, callSid: call.sid, message: 'Dialing attorney first...' });
+    } catch (error: any) {
+        console.error('❌ Call out failed:', error.message);
+        res.status(500).json({ error: 'Failed to initiate call', message: error.message });
+    }
+});
+
+app.post('/api/twilio/call-out/bridge', (req, res) => {
+    const { clientNumber } = req.query;
+
+    console.log(`Attorney answered. Bridging call to client: ${clientNumber}`);
+
+    const twiml = new twilio.twiml.VoiceResponse();
+
+    // Announce to the attorney that we are connecting
+    twiml.say({ voice: 'Polly.Amy' }, 'Connecting to client. This call will be recorded.');
+
+    if (clientNumber) {
+        const dial = twiml.dial({
+            record: 'record-from-answer-dual',
+            recordingStatusCallback: '/api/twilio/recording-callback',
+        });
+        // We must tell Twilio what number to dial for the client side of the leg
+        dial.number(clientNumber as string);
+    } else {
+        twiml.say({ voice: 'Polly.Amy' }, 'Error: No client number provided.');
+    }
+
+    res.type('text/xml');
+    res.send(twiml.toString());
 });
