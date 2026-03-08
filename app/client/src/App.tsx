@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Upload, Mic, AlertCircle, FileText, PlayCircle, Square, History, ArrowLeft, Trash2, Calendar, RefreshCw, X, CheckCircle, Plus, PhoneCall, Copy } from 'lucide-react';
+import { Upload, Mic, AlertCircle, FileText, PlayCircle, Square, History, ArrowLeft, Trash2, Calendar, RefreshCw, X, CheckCircle, Plus, PhoneCall, Copy, FileIcon, ImageIcon } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import './App.css';
 
@@ -56,6 +56,9 @@ function App() {
   const [clientPhone, setClientPhone] = useState('');
   const [isCallingOut, setIsCallingOut] = useState(false);
   const [twilioNumber, setTwilioNumber] = useState('');
+
+  const [isAnalyzingFiles, setIsAnalyzingFiles] = useState(false);
+  const docInputRef = useRef<HTMLInputElement>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -226,22 +229,74 @@ function App() {
     }
   };
 
+  const handleMultimodalUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsAnalyzingFiles(true);
+    showNotification('Analyzing Materials', `Processing ${files.length} file(s) with Gemini...`, 'info');
+
+    const formData = new FormData();
+    for (let i = 0; i < files.length; i++) {
+      formData.append('files', files[i]);
+    }
+
+    // If we are currently in "results" view, we can link these to the current record
+    if (view === 'results' && selectedRecordId) {
+      formData.append('existingRecordId', selectedRecordId);
+    }
+
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/intake/process`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        showNotification('Analysis Complete', 'Materials successfully added to the matter.', 'success');
+        await fetchRecords();
+        // Load the updated/new record
+        loadRecord(data.record);
+      } else {
+        showNotification('Analysis Failed', data.error || 'Unknown error', 'error');
+      }
+    } catch (error: any) {
+      showNotification('Analysis Failed', error.message, 'error');
+    } finally {
+      setIsAnalyzingFiles(false);
+      if (docInputRef.current) docInputRef.current.value = '';
+    }
+  };
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     showNotification('Copied', 'Phone number copied to clipboard', 'success');
   };
 
   const loadRecord = (record: any) => {
-    setTranscript(record.transcript);
+    // For matter collections without audio, create a placeholder transcript
+    if (record.transcript) {
+      setTranscript(record.transcript);
+    } else {
+      // Placeholder so the results view renders
+      setTranscript({ id: record.id, status: 'completed', text: '' });
+    }
     setSummary(record.summary);
 
-    // Resolve audio URL
-    if (record.audioUrl) {
-      if (record.audioUrl.startsWith('http')) {
-        setAudioUrl(record.audioUrl);
+    // Resolve audio URL — check both legacy field and items array
+    let resolvedAudioUrl = record.audioUrl;
+    if (!resolvedAudioUrl && record.items) {
+      const audioItem = record.items.find((i: any) => i.type === 'audio');
+      if (audioItem) resolvedAudioUrl = audioItem.url;
+    }
+
+    if (resolvedAudioUrl) {
+      if (resolvedAudioUrl.startsWith('http')) {
+        setAudioUrl(resolvedAudioUrl);
       } else {
         const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-        setAudioUrl(`${baseUrl}${record.audioUrl}`);
+        setAudioUrl(`${baseUrl}${resolvedAudioUrl}`);
       }
     } else {
       setAudioUrl(null);
@@ -447,9 +502,14 @@ function App() {
                     <div className="history-title">
                       <Calendar size={14} />
                       {new Date(record.timestamp).toLocaleDateString()} {new Date(record.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      <div className="matter-badge-group">
+                        {record.items?.some((i: any) => i.type === 'audio') && <PhoneCall size={12} className="badge-icon" />}
+                        {record.items?.filter((i: any) => i.type === 'image').length > 0 && <span><ImageIcon size={12} /> {record.items.filter((i: any) => i.type === 'image').length}</span>}
+                        {record.items?.filter((i: any) => i.type === 'pdf').length > 0 && <span><FileIcon size={12} /> {record.items.filter((i: any) => i.type === 'pdf').length}</span>}
+                      </div>
                     </div>
                     <div className="history-preview">
-                      {record.transcript?.text?.substring(0, 100)}...
+                      {record.summary ? record.summary.substring(0, 80) + '...' : (record.transcript?.text?.substring(0, 80) || 'Processing...')}
                     </div>
                   </div>
                   <button className="delete-btn" onClick={(e) => deleteRecord(record.id, e)} title="Delete Record">
@@ -464,12 +524,12 @@ function App() {
       }
 
       {
-        view === 'results' && transcript && summary && (
+        view === 'results' && transcript && (summary || records.find(r => r.id === selectedRecordId)?.items?.length > 0) && (
           <div className="results-container">
             <div className="glass-card summary-card">
               <div className="section-title">
                 <FileText size={24} style={{ color: 'var(--success)' }} />
-                Structured Intake Record
+                {records.find(r => r.id === selectedRecordId)?.items ? 'Matter Analysis' : 'Structured Intake Record'}
               </div>
               <div className="markdown-body">
                 <ReactMarkdown>{summary}</ReactMarkdown>
@@ -491,33 +551,76 @@ function App() {
               )}
 
               <div className="transcript-card">
-                {transcript.utterances ? (
-                  transcript.utterances.map((utt, i) => (
-                    <div key={i} className="utterance">
-                      <div className={`speaker-tag speaker-${utt.speaker}`}>
-                        Speaker {utt.speaker} <span className="timestamp">{formatTime(utt.start)}</span>
-                      </div>
-                      <p>
-                        {utt.words.map((word, j) => {
-                          const isActive = currentTime >= word.start && currentTime <= word.end;
-                          return (
+                {records.find(r => r.id === selectedRecordId)?.items?.filter((i: any) => i.type === 'audio').length > 0 || transcript.utterances ? (
+                  transcript.utterances ? (
+                    transcript.utterances.map((utt, i) => (
+                      <div key={i} className="utterance">
+                        <div className={`speaker-tag speaker-${utt.speaker}`}>
+                          Speaker {utt.speaker} <span className="timestamp">{formatTime(utt.start)}</span>
+                        </div>
+                        <p>
+                          {utt.words.map((word, wordIndex) => (
                             <span
-                              key={j}
-                              className={`word ${isActive ? 'active' : ''}`}
-                              onClick={() => audioUrl && handleWordClick(word.start)}
-                              title={`Confidence: ${Math.round(word.confidence * 100)}%`}
+                              key={wordIndex}
+                              className={`transcript-word ${currentTime >= word.start && currentTime <= word.end ? 'active' : ''}`}
+                              onClick={() => handleWordClick(word.start)}
                             >
                               {word.text}{' '}
                             </span>
-                          );
-                        })}
-                      </p>
+                          ))}
+                        </p>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                      No detailed transcript available for this audio.
                     </div>
-                  ))
+                  )
                 ) : (
-                  <p>{transcript.text}</p>
+                  <div className="no-transcript-placeholder">
+                    <FileText size={48} style={{ opacity: 0.1, marginBottom: '1rem' }} />
+                    <p>This matter collection focuses on document/image analysis.</p>
+                  </div>
                 )}
               </div>
+
+              {records.find(r => r.id === selectedRecordId)?.items && records.find(r => r.id === selectedRecordId)?.items.length > 0 && (
+                <div className="linked-items-section">
+                  <div className="section-title-small">Linked Materials</div>
+                  <div className="items-grid">
+                    {records.find(r => r.id === selectedRecordId).items.map((item: any, idx: number) => (
+                      <div key={idx} className="linked-item-card" onClick={() => {
+                        if (item.type === 'audio') {
+                          // Scroll to audio player
+                          audioRef.current?.scrollIntoView({ behavior: 'smooth' });
+                          audioRef.current?.focus();
+                        } else {
+                          // Open images and PDFs in a new tab
+                          const base = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+                          window.open(`${base}${item.url}`, '_blank');
+                        }
+                      }}>
+                        {item.type === 'image' ? <ImageIcon size={20} /> : item.type === 'audio' ? <PlayCircle size={20} /> : <FileIcon size={20} />}
+                        <div className="item-meta">
+                          <span className="item-name">{item.name || `Item ${idx + 1}`}</span>
+                          <span className="item-type">{item.type.toUpperCase()}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <button className="btn-add-more" onClick={() => docInputRef.current?.click()} disabled={isAnalyzingFiles}>
+                    <Plus size={16} /> {isAnalyzingFiles ? 'Analyzing...' : 'Add More Materials'}
+                  </button>
+                  <input
+                    type="file"
+                    className="file-input"
+                    ref={docInputRef}
+                    accept="image/*,application/pdf"
+                    multiple
+                    onChange={(e) => handleMultimodalUpload(e)}
+                  />
+                </div>
+              )}
             </div>
           </div>
         )
@@ -630,6 +733,27 @@ function App() {
                     {isCallingOut ? <RefreshCw className="spin" size={16} /> : 'Dial'}
                   </button>
                 </div>
+              </div>
+
+              <div
+                className={`action-card ${isAnalyzingFiles ? 'processing' : ''}`}
+                onClick={() => docInputRef.current?.click()}
+              >
+                {isAnalyzingFiles ? (
+                  <RefreshCw className="icon spin" />
+                ) : (
+                  <FileIcon className="icon" />
+                )}
+                <h3>Analyze Matters</h3>
+                <p className="text-secondary">Upload images or PDFs for analysis</p>
+                <input
+                  type="file"
+                  className="file-input"
+                  ref={docInputRef}
+                  accept="image/*,application/pdf"
+                  multiple
+                  onChange={(e) => handleMultimodalUpload(e)}
+                />
               </div>
 
               {twilioNumber && (

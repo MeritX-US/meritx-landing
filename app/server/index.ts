@@ -510,3 +510,106 @@ app.post('/api/twilio/call-out/bridge', (req, res) => {
     res.type('text/xml');
     res.send(twiml.toString());
 });
+
+// 5. Multimodal Matter Ingestion Endpoint
+
+app.post('/api/intake/process', upload.array('files'), async (req, res) => {
+    const files = req.files as Express.Multer.File[];
+    const { existingRecordId } = req.body;
+
+    if (!files || files.length === 0) {
+        return res.status(400).json({ error: 'No files provided' });
+    }
+
+    try {
+        console.log(`Processing Multimodal Intake: ${files.length} files. Target Collection: ${existingRecordId || 'New'}`);
+
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+        // Prepare media for Gemini
+        const parts = await Promise.all(files.map(async (file) => {
+            const data = fs.readFileSync(file.path);
+            const mimeType = file.mimetype;
+
+            return {
+                inlineData: {
+                    data: data.toString('base64'),
+                    mimeType
+                }
+            };
+        }));
+
+        let contextPrompt = "";
+        let existingRecord: any = null;
+
+        if (existingRecordId) {
+            const records = getRecords();
+            existingRecord = records.find(r => r.id === existingRecordId);
+            if (existingRecord && existingRecord.transcript) {
+                contextPrompt = `\n\nExisting Consultation Context:\n${existingRecord.transcript.text}\n\n`;
+            }
+        }
+
+        const prompt = `You are a legal intake specialist. You have been provided with multiple documents/images.
+        ${contextPrompt}
+        Please analyze all provided materials and any existing consultation context.
+        Provide a unified, structural summary in Markdown that:
+        1. Identifies the Client and the Case Type.
+        2. Summarizes the key facts from these new materials.
+        3. Explain the relationship between these materials and the initial consultation (if provided).
+        4. List specific actionable items or legal red flags found in these documents.
+        5. Suggest next steps.
+        
+        If there are multiple files, treat them as a single "Matter Collection". Refer to files as "Document 1", "Image 2" etc. based on their order.`;
+
+        const result = await model.generateContent([prompt, ...parts]);
+        const summary = result.response.text();
+
+        // Create item objects for the record
+        const newItems = files.map(file => ({
+            type: file.mimetype.startsWith('image/') ? 'image' : 'pdf',
+            url: `/uploads/${path.basename(file.path)}`,
+            name: file.originalname,
+            metadata: { size: file.size, mimetype: file.mimetype }
+        }));
+
+        const records = getRecords();
+        let record;
+
+        if (existingRecordId) {
+            // Find and update the existing record IN the same array we'll write back
+            const idx = records.findIndex(r => r.id === existingRecordId);
+            if (idx !== -1) {
+                records[idx].items = [...(records[idx].items || []), ...newItems];
+                records[idx].summary = summary; // Update with holistic summary
+                fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
+                record = records[idx];
+            } else {
+                // Fallback: record not found, create new
+                record = {
+                    id: `matter_${Date.now()}`,
+                    timestamp: new Date().toISOString(),
+                    type: 'matter',
+                    items: newItems,
+                    summary: summary
+                };
+                saveRecord(record);
+            }
+        } else {
+            // Create new Matter record
+            record = {
+                id: `matter_${Date.now()}`,
+                timestamp: new Date().toISOString(),
+                type: 'matter',
+                items: newItems,
+                summary: summary
+            };
+            saveRecord(record);
+        }
+
+        res.json({ success: true, record });
+    } catch (error: any) {
+        console.error('❌ Multimodal processing failed:', error.message);
+        res.status(500).json({ error: 'Failed to process materials', message: error.message });
+    }
+});
