@@ -105,6 +105,37 @@ const deleteRecord = (id: string) => {
     }
 };
 
+const migrateRecordsOnStartup = () => {
+    try {
+        if (!fs.existsSync(recordsPath)) return;
+        const records = getRecords();
+        let migratedCount = 0;
+
+        const migratedRecords = records.map(record => {
+            // If already matter type or has items, skip
+            if (record.type === 'matter' || record.items) return record;
+
+            migratedCount++;
+            return {
+                ...record,
+                type: 'matter',
+                items: record.audioUrl ? [{
+                    type: 'audio',
+                    url: record.audioUrl,
+                    name: 'Original Recording'
+                }] : []
+            };
+        });
+
+        if (migratedCount > 0) {
+            fs.writeFileSync(recordsPath, JSON.stringify(migratedRecords, null, 2));
+            console.log(`✅ Auto-migrated ${migratedCount} legacy records to Matter format.`);
+        }
+    } catch (err) {
+        console.error('❌ Startup migration failed:', err);
+    }
+};
+
 /**
  * SHARED PIPELINE LOGIC
  */
@@ -320,6 +351,11 @@ app.delete('/api/records/:id', (req, res) => {
         res.status(500).json({ error: 'Failed to delete record' });
     }
 });
+
+/**
+ * START SERVER
+ */
+migrateRecordsOnStartup();
 
 app.listen(port, () => {
     console.log(`Backend server running on port ${port}`);
