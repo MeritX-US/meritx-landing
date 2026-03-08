@@ -615,7 +615,7 @@ function App() {
                     type="file"
                     className="file-input"
                     ref={docInputRef}
-                    accept="image/*,application/pdf"
+                    accept="image/*,application/pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                     multiple
                     onChange={(e) => handleMultimodalUpload(e)}
                   />
@@ -745,12 +745,12 @@ function App() {
                   <FileIcon className="icon" />
                 )}
                 <h3>Analyze Matters</h3>
-                <p className="text-secondary">Upload images or PDFs for analysis</p>
+                <p className="text-secondary">Upload images, PDFs, or Word docs</p>
                 <input
                   type="file"
                   className="file-input"
                   ref={docInputRef}
-                  accept="image/*,application/pdf"
+                  accept="image/*,application/pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                   multiple
                   onChange={(e) => handleMultimodalUpload(e)}
                 />
