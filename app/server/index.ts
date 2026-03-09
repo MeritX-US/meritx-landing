@@ -105,36 +105,6 @@ const deleteRecord = (id: string) => {
     }
 };
 
-const migrateRecordsOnStartup = () => {
-    try {
-        if (!fs.existsSync(recordsPath)) return;
-        const records = getRecords();
-        let migratedCount = 0;
-
-        const migratedRecords = records.map(record => {
-            // If already matter type or has items, skip
-            if (record.type === 'matter' || record.items) return record;
-
-            migratedCount++;
-            return {
-                ...record,
-                type: 'matter',
-                items: record.audioUrl ? [{
-                    type: 'audio',
-                    url: record.audioUrl,
-                    name: 'Original Recording'
-                }] : []
-            };
-        });
-
-        if (migratedCount > 0) {
-            fs.writeFileSync(recordsPath, JSON.stringify(migratedRecords, null, 2));
-            console.log(`✅ Auto-migrated ${migratedCount} legacy records to Matter format.`);
-        }
-    } catch (err) {
-        console.error('❌ Startup migration failed:', err);
-    }
-};
 
 /**
  * SHARED PIPELINE LOGIC
@@ -283,10 +253,18 @@ ${transcript.text}`;
     const newRecord = {
         id: `rec_${Date.now()}`,
         timestamp: new Date().toISOString(),
+        type: 'matter',
+        items: [
+            {
+                type: 'audio',
+                url: recordAudioUrl,
+                name: 'Original Recording'
+            }
+        ],
         transcript: transcript,
         summary: summary,
         source: isUrl ? 'phone_call' : 'upload',
-        audioUrl: recordAudioUrl,
+        audioUrl: recordAudioUrl, // Keeping legacy for safety, but UI prefers items
         recordingSid: recordingSid
     };
     saveRecord(newRecord);
@@ -355,8 +333,6 @@ app.delete('/api/records/:id', (req, res) => {
 /**
  * START SERVER
  */
-migrateRecordsOnStartup();
-
 app.listen(port, () => {
     console.log(`Backend server running on port ${port}`);
 });
