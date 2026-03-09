@@ -552,27 +552,38 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
         }));
 
         let contextPrompt = "";
+        let existingSummary = "";
         let existingRecord: any = null;
 
         if (existingRecordId) {
             const records = getRecords();
             existingRecord = records.find(r => r.id === existingRecordId);
-            if (existingRecord && existingRecord.transcript) {
-                contextPrompt = `\n\nExisting Consultation Context:\n${existingRecord.transcript.text}\n\n`;
+            if (existingRecord) {
+                if (existingRecord.transcript) {
+                    contextPrompt = `\n\nExisting Consultation Transcript Context:\n${existingRecord.transcript.text}\n\n`;
+                }
+                if (existingRecord.summary) {
+                    existingSummary = `\n\nPREVIOUS SUMMARY (USE THIS AS THE BASELINE AND MAINTAIN ITS STYLE):\n${existingRecord.summary}\n\n`;
+                }
             }
         }
 
-        const prompt = `You are a legal intake specialist. You have been provided with multiple documents/images.
-        ${contextPrompt}
-        Please analyze all provided materials and any existing consultation context.
-        Provide a unified, structural summary in Markdown that:
-        1. Identifies the Client and the Case Type.
-        2. Summarizes the key facts from these new materials.
-        3. Explain the relationship between these materials and the initial consultation (if provided).
-        4. List specific actionable items or legal red flags found in these documents.
-        5. Suggest next steps.
+        const prompt = `You are a legal intake specialist. You have been provided with new documents/images for a "Matter Collection".
         
-        If there are multiple files, treat them as a single "Matter Collection". Refer to files as "Document 1", "Image 2" etc. based on their order.`;
+        ${contextPrompt}
+        ${existingSummary}
+        
+        Please analyze all provided materials and any existing consultation context.
+        Provide a unified, structural summary in Markdown.
+        
+        CRITICAL INSTRUCTIONS FOR CONSISTENCY:
+        1. Maintain the existing tone, structure, and Markdown formatting from the "PREVIOUS SUMMARY" if provided.
+        2. Integrate new facts from the documents into the relevant sections.
+        3. Do NOT rewrite or substantially change the "Next Steps & Required Documents" or "Recommended Follow-up Actions" from scratch. Only APPEND or modify them if the new documents strictly require it. Keep existing phrasing as much as possible.
+        4. If the new material only adds a minor detail (e.g., a new co-plaintiff or a specific date), simply incorporate that detail without altering the surrounding text.
+        5. If there are multiple files, treat them as a single "Matter Collection".
+        
+        Deliver an updated, professional legal intake summary.`;
 
         const result = await model.generateContent([prompt, ...parts]);
         const summary = result.response.text();
