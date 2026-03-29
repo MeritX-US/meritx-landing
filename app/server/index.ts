@@ -124,9 +124,9 @@ async function runConsultationPipeline(audioSource: string, selectedLanguage: st
             smart_format: true,
             utterances: true,
             redact: [
-                'pci', 'pii', 'phi', 'name', 'location', 'phone_number',
+                'pci', 'pii', 'phi', 'location', 'phone_number',
                 'email_address', 'bank_account', 'passport_number',
-                'driver_license', 'date', 'ssn'
+                'driver_license', 'ssn'
             ],
         };
 
@@ -211,9 +211,9 @@ async function runConsultationPipeline(audioSource: string, selectedLanguage: st
             speech_models: ["universal-2" as any],
             redact_pii: true,
             redact_pii_policies: [
-                "person_name", "email_address", "phone_number", "location", "drivers_license",
+                "email_address", "phone_number", "location", "drivers_license",
                 "passport_number", "us_social_security_number", "banking_information",
-                "account_number", "date", "date_of_birth", "medical_condition"
+                "account_number", "medical_condition"
             ],
             redact_pii_sub: "entity_name"
         };
