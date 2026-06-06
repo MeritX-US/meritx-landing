@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Upload, Mic, AlertCircle, FileText, PlayCircle, Square, History, ArrowLeft, Trash2, Calendar, RefreshCw, X, CheckCircle, Plus, PhoneCall, Copy, FileIcon, ImageIcon } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import './App.css';
@@ -18,6 +18,8 @@ interface Utterance {
   start: number;
   end: number;
   words: TranscriptWord[];
+  fileName?: string;
+  audioUrl?: string;
 }
 
 interface Transcript {
@@ -32,6 +34,8 @@ function App() {
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [audioFile, setAudioFile] = useState<File | Blob | null>(null);
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
+  const [pendingSeek, setPendingSeek] = useState<number | null>(null);
   const audioChunks = useRef<Blob[]>([]);
 
   const [isProcessing, setIsProcessing] = useState(false);
@@ -61,6 +65,24 @@ function App() {
   const docInputRef = useRef<HTMLInputElement>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const selectedFilesRef = useRef<HTMLDivElement>(null);
+  const recordedPlayerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (uploadFiles.length > 0 && selectedFilesRef.current) {
+      setTimeout(() => {
+        selectedFilesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 50);
+    }
+  }, [uploadFiles.length]);
+
+  useEffect(() => {
+    if (audioUrl && recordedPlayerRef.current) {
+      setTimeout(() => {
+        recordedPlayerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 50);
+    }
+  }, [audioUrl]);
 
   useEffect(() => {
     const audioEl = audioRef.current;
@@ -323,6 +345,7 @@ function App() {
         const url = URL.createObjectURL(audioBlob);
         setAudioUrl(url);
         setAudioFile(audioBlob);
+        setUploadFiles([]);
         stream.getTracks().forEach(track => track.stop());
       };
 
@@ -347,28 +370,55 @@ function App() {
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const url = URL.createObjectURL(file);
-      setAudioUrl(url);
-      setAudioFile(file);
-
-      // Reset previous results
+    const files = Array.from(event.target.files || []);
+    if (files.length > 0) {
+      setUploadFiles(files);
+      setAudioFile(null);
+      setAudioUrl(null);
       setTranscript(null);
       setSummary(null);
     }
   };
 
+  const moveFileUp = (index: number) => {
+    if (index === 0) return;
+    const newFiles = [...uploadFiles];
+    const temp = newFiles[index - 1];
+    newFiles[index - 1] = newFiles[index];
+    newFiles[index] = temp;
+    setUploadFiles(newFiles);
+  };
+
+  const moveFileDown = (index: number) => {
+    if (index === uploadFiles.length - 1) return;
+    const newFiles = [...uploadFiles];
+    const temp = newFiles[index + 1];
+    newFiles[index + 1] = newFiles[index];
+    newFiles[index] = temp;
+    setUploadFiles(newFiles);
+  };
+  
+  const removeFile = (index: number) => {
+    const newFiles = [...uploadFiles];
+    newFiles.splice(index, 1);
+    setUploadFiles(newFiles);
+  };
+
   const processAudio = async () => {
-    if (!audioFile) return;
+    if (!audioFile && uploadFiles.length === 0) return;
 
     setIsProcessing(true);
     setProcessingStatus('Transcribing audio (this may take a minute)...');
     setProcessingError(null);
 
     const formData = new FormData();
-    // Using a default name for blobs
-    formData.append('audio', audioFile, 'consultation.webm');
+    if (audioFile) {
+        formData.append('audios', audioFile, 'consultation.webm');
+    } else {
+        uploadFiles.forEach(file => {
+            formData.append('audios', file);
+        });
+    }
     formData.append('language', language);
 
     try {
@@ -390,12 +440,16 @@ function App() {
         console.warn('Transcript text is missing!', transData.transcript);
       }
 
-      setTranscript(transData.transcript);
-      setSummary(transData.summary);
-      setSelectedRecordId(transData.recordId);
+      if (transData.record) {
+        loadRecord(transData.record);
+      } else {
+        setTranscript(transData.transcript);
+        setSummary(transData.summary);
+        setSelectedRecordId(transData.recordId);
+        setView('results');
+      }
 
       fetchRecords(); // Refresh history
-      setView('results');
 
     } catch (error: any) {
       console.error('Processing error:', error);
@@ -406,11 +460,41 @@ function App() {
     }
   };
 
-  const handleWordClick = (startTimeMs: number) => {
+  const handleWordClick = (utt: any, startTimeMs: number) => {
     if (audioRef.current) {
-      audioRef.current.currentTime = startTimeMs / 1000;
-      audioRef.current.play();
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const record = records.find(r => r.id === selectedRecordId);
+      const audioItems = record?.items?.filter((i: any) => i.type === 'audio') || [];
+      const firstAudioUrl = audioItems[0]?.url;
+      const targetUrl = utt.audioUrl || utt.fileUrl || firstAudioUrl;
+      const fullUrl = targetUrl ? (targetUrl.startsWith('http') ? targetUrl : `${baseUrl}${targetUrl}`) : null;
+
+      if (fullUrl && audioUrl !== fullUrl) {
+        // Register play in user gesture context before changing the src via state
+        audioRef.current.play().catch(() => {});
+        setAudioUrl(fullUrl);
+        setPendingSeek(startTimeMs / 1000);
+      } else {
+        const seekTime = startTimeMs / 1000;
+        if (audioRef.current.readyState < 1) {
+          setPendingSeek(seekTime);
+        } else {
+          audioRef.current.currentTime = seekTime;
+        }
+        audioRef.current.play().catch(err => {
+          console.warn("Audio play failed:", err);
+        });
+      }
     }
+  };
+
+  const isActiveWord = (utt: any, word: any) => {
+    const record = records.find(r => r.id === selectedRecordId);
+    const audioItems = record?.items?.filter((i: any) => i.type === 'audio') || [];
+    const firstAudioUrl = audioItems[0]?.url;
+    const targetUrl = utt.audioUrl || utt.fileUrl || firstAudioUrl;
+    const isSameAudio = !targetUrl || (audioUrl && audioUrl.endsWith(targetUrl));
+    return isSameAudio && currentTime >= word.start && currentTime <= word.end;
   };
 
   const formatTime = (ms: number) => {
@@ -442,7 +526,19 @@ function App() {
           <div style={{ width: 'auto', display: 'flex', justifyContent: 'flex-end' }}>
             <button
               className={`btn-history ${view === 'history' ? 'active' : ''}`}
-              onClick={() => setView(view === 'history' ? 'home' : 'history')}
+              onClick={() => {
+                if (view === 'history') {
+                  setTranscript(null);
+                  setSummary(null);
+                  setAudioUrl(null);
+                  setAudioFile(null);
+                  setUploadFiles([]);
+                  setSelectedRecordId(null);
+                  setView('home');
+                } else {
+                  setView('history');
+                }
+              }}
             >
               {view === 'history' ? (
                 <>
@@ -543,7 +639,23 @@ function App() {
 
               {audioUrl && (
                 <div className="audio-player-container">
-                  <audio ref={audioRef} controls src={audioUrl} />
+                  <audio 
+                    ref={audioRef} 
+                    controls 
+                    src={audioUrl} 
+                    onLoadedMetadata={() => {
+                      if (pendingSeek !== null && audioRef.current) {
+                        const seekTime = pendingSeek;
+                        setPendingSeek(null);
+                        setTimeout(() => {
+                          if (audioRef.current) {
+                            audioRef.current.currentTime = seekTime;
+                            audioRef.current.play().catch(() => {});
+                          }
+                        }, 50);
+                      }
+                    }}
+                  />
                   <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.5rem', textAlign: 'center' }}>
                     Click any word to jump to that timestamp
                   </p>
@@ -553,24 +665,91 @@ function App() {
               <div className="transcript-card">
                 {records.find(r => r.id === selectedRecordId)?.items?.filter((i: any) => i.type === 'audio').length > 0 || transcript.utterances ? (
                   transcript.utterances ? (
-                    transcript.utterances.map((utt, i) => (
-                      <div key={i} className="utterance">
-                        <div className={`speaker-tag speaker-${utt.speaker}`}>
-                          Speaker {utt.speaker} <span className="timestamp">{formatTime(utt.start)}</span>
-                        </div>
-                        <p>
-                          {utt.words.map((word, wordIndex) => (
-                            <span
-                              key={wordIndex}
-                              className={`transcript-word ${currentTime >= word.start && currentTime <= word.end ? 'active' : ''}`}
-                              onClick={() => handleWordClick(word.start)}
-                            >
-                              {word.text}{' '}
-                            </span>
-                          ))}
-                        </p>
-                      </div>
-                    ))
+                    (() => {
+                      const record = records.find(r => r.id === selectedRecordId);
+                      const audioItems = record?.items?.filter((i: any) => i.type === 'audio') || [];
+                      const hasAudioUrls = transcript.utterances.some((u: any) => u.audioUrl || u.fileUrl);
+                      
+                      const activeUtterances = (hasAudioUrls && audioUrl)
+                        ? transcript.utterances.filter((utt: any) => {
+                            const targetUrl = utt.audioUrl || utt.fileUrl || audioItems[0]?.url;
+                            return targetUrl && audioUrl.endsWith(targetUrl);
+                          })
+                        : transcript.utterances;
+
+                      return (
+                        <>
+                          {audioItems.length > 1 && (
+                            <div className="audio-tabs" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem', flexWrap: 'wrap' }}>
+                              {audioItems.map((item: any, idx: number) => {
+                                const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+                                const fullUrl = item.url.startsWith('http') ? item.url : `${baseUrl}${item.url}`;
+                                const isActive = audioUrl === fullUrl;
+                                return (
+                                  <button
+                                    key={idx}
+                                    className={`btn-tab ${isActive ? 'active' : ''}`}
+                                    onClick={() => {
+                                      setAudioUrl(fullUrl);
+                                      if (audioRef.current) {
+                                        audioRef.current.src = fullUrl;
+                                        audioRef.current.load();
+                                        audioRef.current.play().catch(e => console.error(e));
+                                      }
+                                    }}
+                                    style={{
+                                      padding: '0.4rem 0.8rem',
+                                      borderRadius: '16px',
+                                      border: '1px solid',
+                                      borderColor: isActive ? 'var(--accent-primary)' : 'var(--border-color)',
+                                      background: isActive ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                                      color: isActive ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                                      fontWeight: isActive ? '600' : 'normal',
+                                      cursor: 'pointer',
+                                      fontSize: '0.8rem',
+                                      transition: 'all 0.2s',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '0.3rem'
+                                    }}
+                                  >
+                                    <PhoneCall size={12} />
+                                    {item.name || `Recording ${idx + 1}`}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {activeUtterances.length === 0 ? (
+                            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                              No transcript text for this clip.
+                            </div>
+                          ) : (
+                            activeUtterances.map((utt: any, i: number) => {
+                              return (
+                                <div className="utterance" key={i}>
+                                  <div className={`speaker-tag speaker-${utt.speaker}`}>
+                                    Speaker {utt.speaker} <span className="timestamp">{formatTime(utt.start)}</span>
+                                  </div>
+                                  <p>
+                                    {utt.words.map((word: any, wordIndex: number) => (
+                                      <span
+                                        key={wordIndex}
+                                        className={`transcript-word ${isActiveWord(utt, word) ? 'active' : ''}`}
+                                        onClick={() => handleWordClick(utt, word.start)}
+                                      >
+                                        {word.text}{' '}
+                                      </span>
+                                    ))}
+                                  </p>
+                                </div>
+                              );
+                            })
+                          )}
+                        </>
+                      );
+                    })()
                   ) : (
                     <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
                       No detailed transcript available for this audio.
@@ -591,6 +770,14 @@ function App() {
                     {records.find(r => r.id === selectedRecordId).items.map((item: any, idx: number) => (
                       <div key={idx} className="linked-item-card" onClick={() => {
                         if (item.type === 'audio') {
+                          const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+                          const fullUrl = item.url.startsWith('http') ? item.url : `${baseUrl}${item.url}`;
+                          if (audioUrl !== fullUrl) {
+                            audioRef.current?.play().catch(() => {});
+                            setAudioUrl(fullUrl);
+                          } else {
+                            audioRef.current?.play().catch(e => console.error(e));
+                          }
                           // Scroll to audio player
                           audioRef.current?.scrollIntoView({ behavior: 'smooth' });
                           audioRef.current?.focus();
@@ -615,7 +802,7 @@ function App() {
                     type="file"
                     className="file-input"
                     ref={docInputRef}
-                    accept="image/*,application/pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    accept="audio/*,image/*,application/pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                     multiple
                     onChange={(e) => handleMultimodalUpload(e)}
                   />
@@ -627,7 +814,7 @@ function App() {
       }
 
       {
-        view === 'home' && !transcript && !isProcessing && (
+        view === 'home' && !isProcessing && (
           <main className="glass-card">
             <div className="section-title">
               <PlayCircle size={24} className="icon-small" style={{ color: 'var(--accent-primary)' }} />
@@ -709,6 +896,7 @@ function App() {
                   className="file-input"
                   ref={fileInputRef}
                   accept="audio/*"
+                  multiple
                   onChange={handleFileUpload}
                 />
               </div>
@@ -750,7 +938,7 @@ function App() {
                   type="file"
                   className="file-input"
                   ref={docInputRef}
-                  accept="image/*,application/pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  accept="audio/*,image/*,application/pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                   multiple
                   onChange={(e) => handleMultimodalUpload(e)}
                 />
@@ -772,11 +960,38 @@ function App() {
             </div>
 
             {audioUrl && !isRecording && (
-              <div style={{ marginTop: '2rem', textAlign: 'center' }}>
+              <div ref={recordedPlayerRef} style={{ marginTop: '2rem', textAlign: 'center' }}>
                 <div className="audio-player-container">
                   <audio controls src={audioUrl}></audio>
                 </div>
                 <button className="btn btn-primary" onClick={processAudio}>
+                  <FileText size={20} />
+                  Generate Intake Record
+                </button>
+              </div>
+            )}
+            
+            {uploadFiles.length > 0 && !isRecording && (
+              <div ref={selectedFilesRef} className="glass-card selected-files-card" style={{ marginTop: '2.5rem', maxWidth: '600px', margin: '2.5rem auto 0', padding: '1.5rem', border: '1px solid rgba(59, 130, 246, 0.3)', background: 'rgba(30, 41, 59, 0.4)', boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.2)', borderRadius: '16px' }}>
+                <h4 style={{ marginBottom: '1.2rem', color: 'var(--accent-primary)', fontSize: '1.1rem', fontWeight: '600', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                  <FileText size={18} />
+                  Selected Audio Files ({uploadFiles.length})
+                </h4>
+                <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 1.5rem 0', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {uploadFiles.map((file, idx) => (
+                    <li key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1rem', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.05)', transition: 'background 0.2s' }}>
+                      <span style={{ fontSize: '0.95rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '350px', fontWeight: '500' }}>
+                         {idx + 1}. {file.name}
+                      </span>
+                      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                        <button onClick={() => moveFileUp(idx)} disabled={idx === 0} title="Move Up" style={{ background: 'rgba(255,255,255,0.05)', border: 'none', borderRadius: '4px', width: '28px', height: '28px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: idx === 0 ? 'var(--text-muted)' : 'var(--text-secondary)' }}>↑</button>
+                        <button onClick={() => moveFileDown(idx)} disabled={idx === uploadFiles.length - 1} title="Move Down" style={{ background: 'rgba(255,255,255,0.05)', border: 'none', borderRadius: '4px', width: '28px', height: '28px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: idx === uploadFiles.length - 1 ? 'var(--text-muted)' : 'var(--text-secondary)' }}>↓</button>
+                        <button onClick={() => removeFile(idx)} title="Remove" style={{ background: 'rgba(239, 68, 68, 0.1)', border: 'none', borderRadius: '4px', width: '28px', height: '28px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--danger)' }}>✕</button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <button className="btn btn-primary" onClick={processAudio} style={{ width: '100%', justifyContent: 'center', padding: '0.8rem' }}>
                   <FileText size={20} />
                   Generate Intake Record
                 </button>
@@ -788,10 +1003,26 @@ function App() {
 
       {
         isProcessing && (
-          <div className="glass-card processing-card">
-            <div className="spinner"></div>
-            <h3>Processing Consultation</h3>
-            <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>{processingStatus}</p>
+          <div className="loading-overlay">
+            <div className="glass-card loading-card" style={{ maxWidth: '480px', width: '90%', padding: '3rem 2rem', textAlign: 'center', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)' }}>
+              <div className="spinner" style={{ width: '48px', height: '48px', borderWidth: '5px' }}></div>
+              <h3 style={{ fontSize: '1.5rem', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '0.75rem' }}>Processing Consultation</h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', marginTop: '0.5rem', lineHeight: '1.5' }}>{processingStatus}</p>
+            </div>
+          </div>
+        )
+      }
+
+      {
+        isAnalyzingFiles && (
+          <div className="loading-overlay">
+            <div className="glass-card loading-card" style={{ maxWidth: '480px', width: '90%', padding: '3rem 2rem', textAlign: 'center', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)' }}>
+              <div className="spinner" style={{ width: '48px', height: '48px', borderWidth: '5px' }}></div>
+              <h3 style={{ fontSize: '1.5rem', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '0.75rem' }}>Analyzing Materials</h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', marginTop: '0.5rem', lineHeight: '1.5' }}>
+                Transcribing audio files and incorporating new insights into the intake summary... Please wait, this may take a moment.
+              </p>
+            </div>
           </div>
         )
       }

@@ -110,121 +110,207 @@ const deleteRecord = (id: string) => {
  * SHARED PIPELINE LOGIC
  */
 
-async function runConsultationPipeline(audioSource: string, selectedLanguage: string = 'en', isUrl: boolean = false, recordingSid?: string) {
-    const activeService = process.env.TRANSCRIPTION_SERVICE || 'assemblyai';
-    let transcript;
+async function transcribeWithDeepgram(audioSource: string, selectedLanguage: string, isUrl: boolean) {
+    if (!deepgram) throw new Error("Deepgram client not initialized");
 
-    // 1. Transcription Phase
-    if (activeService === 'deepgram') {
-        if (!deepgram) throw new Error("Deepgram client not initialized");
+    const nova3SupportedLanguages = ['en', 'es', 'fr', 'de', 'hi', 'ru', 'pt', 'ja', 'it', 'nl'];
+    const deepgramOptions: Record<string, any> = {
+        model: (selectedLanguage === 'auto' || !nova3SupportedLanguages.includes(selectedLanguage)) ? 'nova-2' : 'nova-3-general',
+        smart_format: true,
+        utterances: true,
+        redact: [
+            'pci', 'pii', 'phi', 'location', 'phone_number',
+            'email_address', 'bank_account', 'passport_number',
+            'driver_license', 'ssn'
+        ],
+    };
 
-        const nova3SupportedLanguages = ['en', 'es', 'fr', 'de', 'hi', 'ru', 'pt', 'ja', 'it', 'nl'];
-        const deepgramOptions: Record<string, any> = {
-            model: (selectedLanguage === 'auto' || !nova3SupportedLanguages.includes(selectedLanguage)) ? 'nova-2' : 'nova-3-general',
-            smart_format: true,
-            utterances: true,
-            redact: [
-                'pci', 'pii', 'phi', 'location', 'phone_number',
-                'email_address', 'bank_account', 'passport_number',
-                'driver_license', 'ssn'
-            ],
-        };
-
-        // For phone calls, use native multichannel instead of probabilistic diarization
-        if (isUrl) {
-            deepgramOptions.multichannel = true;
-        } else {
-            deepgramOptions.diarize = true;
-        }
-
-        if (selectedLanguage === 'auto') {
-            deepgramOptions.detect_language = true;
-        } else {
-            deepgramOptions.language = selectedLanguage;
-        }
-
-        let response;
-        if (isUrl) {
-            response = await deepgram.listen.prerecorded.transcribeUrl({ url: audioSource }, deepgramOptions);
-        } else {
-            const buffer = fs.readFileSync(audioSource);
-            response = await deepgram.listen.prerecorded.transcribeFile(buffer, deepgramOptions);
-        }
-
-        const { result, error } = response;
-        if (error) throw error;
-
-        const channels = result.results?.channels || [];
-        const utterances = result.results?.utterances || [];
-
-        // If multichannel, we might need to synthesize utterances if Deepgram didn't provide them globally
-        // but typically for phone calls, we want to see the sequence.
-        const transcriptText = channels[0]?.alternatives[0]?.transcript || '';
-
-        // Merging logic
-        const mergedUtterances: any[] = [];
-
-        // Use utterances if available (better for flow)
-        if (utterances.length > 0) {
-            utterances.forEach((u: any) => {
-                // If multichannel, channel 0 is usually the left speaker (Attorney), channel 1 is right (Client)
-                const channelId = u.channel !== undefined ? u.channel : (u.speaker !== undefined ? u.speaker : 0);
-                const speaker = String.fromCharCode(65 + channelId);
-                const last = mergedUtterances[mergedUtterances.length - 1];
-                const currentWords = (u.words || []).map((w: any) => ({
-                    text: w.punctuated_word || w.word,
-                    start: Math.floor(w.start * 1000),
-                    end: Math.floor(w.end * 1000),
-                    confidence: w.confidence,
-                    speaker: speaker
-                }));
-
-                if (last && last.speaker === speaker) {
-                    const needsSpace = last.text && !last.text.endsWith(' ') && u.transcript && !u.transcript.startsWith(' ');
-                    last.text += (needsSpace ? ' ' : '') + u.transcript;
-                    last.end = Math.floor(u.end * 1000);
-                    last.words.push(...currentWords);
-                } else {
-                    mergedUtterances.push({
-                        speaker: speaker,
-                        text: u.transcript,
-                        start: Math.floor(u.start * 1000),
-                        end: Math.floor(u.end * 1000),
-                        words: currentWords
-                    });
-                }
-            });
-        }
-
-        transcript = {
-            id: result?.metadata?.request_id || 'unknown',
-            status: 'completed',
-            text: transcriptText,
-            utterances: mergedUtterances
-        };
+    if (isUrl) {
+        deepgramOptions.multichannel = true;
     } else {
-        // AssemblyAI
-        const aaiOptions: any = {
-            audio: audioSource as string,
-            speaker_labels: !isUrl, // Use labels for mono uploads
-            multichannel: isUrl,    // Use native channels for phone calls
-            speech_models: ["universal-2" as any],
-            redact_pii: true,
-            redact_pii_policies: [
-                "email_address", "phone_number", "location", "drivers_license",
-                "passport_number", "us_social_security_number", "banking_information",
-                "account_number", "medical_condition"
-            ],
-            redact_pii_sub: "entity_name"
-        };
-
-        const aaiTranscript = await client.transcripts.transcribe(aaiOptions);
-        transcript = aaiTranscript;
+        deepgramOptions.diarize = true;
     }
 
-    if (!transcript?.text) throw new Error("No speech detected in audio.");
+    if (selectedLanguage === 'auto') {
+        deepgramOptions.detect_language = true;
+    } else {
+        deepgramOptions.language = selectedLanguage;
+    }
 
-    // 2. Summarization Phase
+    let response;
+    if (isUrl) {
+        response = await deepgram.listen.prerecorded.transcribeUrl({ url: audioSource }, deepgramOptions);
+    } else {
+        const buffer = fs.readFileSync(audioSource);
+        response = await deepgram.listen.prerecorded.transcribeFile(buffer, deepgramOptions);
+    }
+
+    const { result, error } = response;
+    if (error) throw error;
+
+    const channels = result.results?.channels || [];
+    const utterances = result.results?.utterances || [];
+    const transcriptText = channels[0]?.alternatives[0]?.transcript || '';
+
+    const mergedUtterances: any[] = [];
+    if (utterances.length > 0) {
+        utterances.forEach((u: any) => {
+            const channelId = u.channel !== undefined ? u.channel : (u.speaker !== undefined ? u.speaker : 0);
+            const speaker = String.fromCharCode(65 + channelId);
+            const last = mergedUtterances[mergedUtterances.length - 1];
+            const currentWords = (u.words || []).map((w: any) => ({
+                text: w.punctuated_word || w.word,
+                start: Math.floor(w.start * 1000),
+                end: Math.floor(w.end * 1000),
+                confidence: w.confidence,
+                speaker: speaker
+            }));
+
+            if (last && last.speaker === speaker) {
+                const needsSpace = last.text && !last.text.endsWith(' ') && u.transcript && !u.transcript.startsWith(' ');
+                last.text += (needsSpace ? ' ' : '') + u.transcript;
+                last.end = Math.floor(u.end * 1000);
+                last.words.push(...currentWords);
+            } else {
+                mergedUtterances.push({
+                    speaker: speaker,
+                    text: u.transcript,
+                    start: Math.floor(u.start * 1000),
+                    end: Math.floor(u.end * 1000),
+                    words: currentWords
+                });
+            }
+        });
+    }
+
+    return {
+        id: result?.metadata?.request_id || 'unknown',
+        status: 'completed',
+        text: transcriptText,
+        utterances: mergedUtterances
+    };
+}
+
+async function transcribeWithAssemblyAI(audioSource: string, isUrl: boolean) {
+    const aaiOptions: any = {
+        audio: audioSource as string,
+        speaker_labels: !isUrl, 
+        multichannel: isUrl,    
+        speech_models: ["universal-2" as any],
+        redact_pii: true,
+        redact_pii_policies: [
+            "email_address", "phone_number", "location", "drivers_license",
+            "passport_number", "us_social_security_number", "banking_information",
+            "account_number", "medical_condition"
+        ],
+        redact_pii_sub: "entity_name"
+    };
+
+    return await client.transcripts.transcribe(aaiOptions);
+}
+
+async function refineDiarizationWithGemini(transcript: any) {
+    if (!transcript.utterances || transcript.utterances.length === 0) return;
+
+    try {
+        console.log("Running Diarization Refinement with Gemini...");
+        const refineModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+        
+        const simplified = transcript.utterances.map((u: any, i: number) => ({
+            u_idx: i,
+            speaker: u.speaker,
+            words: (u.words || []).map((w: any, w_idx: number) => ({
+                w_idx: w_idx,
+                text: w.text
+            }))
+        }));
+
+        const prompt = `You are a legal transcription editor. The ASR model may have failed to separate speakers correctly in the following transcript. Sometimes a single utterance contains speech from two different speakers (e.g. Speaker A asks a question and Speaker B answers briefly, but they were merged into Speaker A's utterance).
+
+Analyze the following utterances. If an utterance contains a clear speaker change mid-utterance, identify the exact word index where the new speaker begins.
+
+Respond ONLY with a JSON array of the required splits. If no splits are needed, return an empty array [].
+Format exactly like this example:
+[
+  {
+    "u_idx": 0,
+    "splits": [
+      { "w_idx": 5, "newSpeaker": "B" },
+      { "w_idx": 7, "newSpeaker": "A" }
+    ]
+  }
+]
+
+Transcript Data:
+${JSON.stringify(simplified)}
+`;
+
+        const refineResult = await refineModel.generateContent(prompt);
+        const refineText = refineResult.response.text();
+        
+        const jsonMatch = refineText.match(/\[.*\]/s);
+        if (jsonMatch) {
+            const splits = JSON.parse(jsonMatch[0]);
+            if (splits.length > 0) {
+                console.log("Applying Diarization Splits:", splits);
+                
+                const newUtterances: any[] = [];
+                
+                for (let i = 0; i < transcript.utterances.length; i++) {
+                    const originalU = transcript.utterances[i];
+                    const splitInfo = splits.find((s: any) => s.u_idx === i);
+                    
+                    if (!splitInfo || !splitInfo.splits || splitInfo.splits.length === 0) {
+                        newUtterances.push(originalU);
+                        continue;
+                    }
+                    
+                    let currentSpeaker = originalU.speaker;
+                    let currentWords: any[] = [];
+                    let splitQueue = [...splitInfo.splits].sort((a: any, b: any) => a.w_idx - b.w_idx);
+                    
+                    for (let w = 0; w < originalU.words.length; w++) {
+                        const word = originalU.words[w];
+                        
+                        if (splitQueue.length > 0 && splitQueue[0].w_idx === w) {
+                            if (currentWords.length > 0) {
+                                newUtterances.push({
+                                    speaker: currentSpeaker,
+                                    text: currentWords.map(cw => cw.text).join(' '),
+                                    start: currentWords[0].start,
+                                    end: currentWords[currentWords.length - 1].end,
+                                    words: [...currentWords]
+                                });
+                            }
+                            currentSpeaker = splitQueue[0].newSpeaker;
+                            currentWords = [];
+                            splitQueue.shift();
+                        }
+                        
+                        word.speaker = currentSpeaker;
+                        currentWords.push(word);
+                    }
+                    
+                    if (currentWords.length > 0) {
+                        newUtterances.push({
+                            speaker: currentSpeaker,
+                            text: currentWords.map(cw => cw.text).join(' '),
+                            start: currentWords[0].start,
+                            end: currentWords[currentWords.length - 1].end,
+                            words: currentWords
+                        });
+                    }
+                }
+                
+                transcript.utterances = newUtterances;
+            }
+        }
+    } catch (e) {
+        console.error("Diarization refinement failed, proceeding with original transcript:", e);
+    }
+}
+
+async function summarizeConsultation(transcriptText: string) {
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const prompt = `You are a legal assistant summarizing a client consultation for a law firm.
       
@@ -236,20 +322,38 @@ Please provide a structured summary in Markdown including:
 5. Recommended Follow-up Actions for the law firm
 
 Consultation Transcript:
-${transcript.text}`;
+${transcriptText}`;
 
     const sumResult = await model.generateContent(prompt);
-    const summary = sumResult.response.text();
+    return sumResult.response.text();
+}
 
-    // Generate audio URL for the record
+async function runConsultationPipeline(audioSource: string, selectedLanguage: string = 'en', isUrl: boolean = false, recordingSid?: string) {
+    const activeService = process.env.TRANSCRIPTION_SERVICE || 'assemblyai';
+    let transcript;
+
+    // 1. Transcription Phase
+    if (activeService === 'deepgram') {
+        transcript = await transcribeWithDeepgram(audioSource, selectedLanguage, isUrl);
+    } else {
+        transcript = await transcribeWithAssemblyAI(audioSource, isUrl);
+    }
+
+    if (!transcript?.text) throw new Error("No speech detected in audio.");
+
+    // 1.5 Diarization Refinement Phase
+    await refineDiarizationWithGemini(transcript);
+
+    // 2. Summarization Phase
+    const summary = await summarizeConsultation(transcript.text);
+
+    // 3. Persistence Phase
     let recordAudioUrl = audioSource;
     if (!isUrl) {
-        // For local uploads, store the relative path
         const fileName = path.basename(audioSource);
         recordAudioUrl = `/uploads/${fileName}`;
     }
 
-    // 3. Persistence Phase
     const newRecord = {
         id: `rec_${Date.now()}`,
         timestamp: new Date().toISOString(),
@@ -264,7 +368,7 @@ ${transcript.text}`;
         transcript: transcript,
         summary: summary,
         source: isUrl ? 'phone_call' : 'upload',
-        audioUrl: recordAudioUrl, // Keeping legacy for safety, but UI prefers items
+        audioUrl: recordAudioUrl, 
         recordingSid: recordingSid
     };
     saveRecord(newRecord);
@@ -278,14 +382,87 @@ app.get('/api/health', (req, res) => {
 });
 
 // 1. Endpoint to handle audio upload and generate transcript
-app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
-    if (!req.file) return res.status(400).json({ error: 'No audio file provided' });
-    const filePath = req.file.path;
+app.post('/api/transcribe', upload.array('audios'), async (req, res) => {
+    const files = req.files as Express.Multer.File[];
+    if (!files || files.length === 0) return res.status(400).json({ error: 'No audio files provided' });
+
     try {
-        const record = await runConsultationPipeline(filePath, req.body.language || 'en', false);
-        res.json({ transcript: record.transcript, summary: record.summary, recordId: record.id });
+        const language = req.body.language || 'en';
+        const activeService = process.env.TRANSCRIPTION_SERVICE || 'assemblyai';
+        let combinedText = '';
+        let combinedUtterances: any[] = [];
+        const recordAudioUrls: string[] = [];
+        let idx = 0;
+        for (const file of files) {
+            const filePath = file.path;
+            const fileName = path.basename(filePath);
+            const originalName = file.originalname || `Recording ${idx + 1}`;
+            const audioUrl = `/uploads/${fileName}`;
+            recordAudioUrls.push(audioUrl);
+
+            let transcript;
+            if (activeService === 'deepgram') {
+                transcript = await transcribeWithDeepgram(filePath, language, false);
+            } else {
+                transcript = await transcribeWithAssemblyAI(filePath, false);
+            }
+
+            if (!transcript?.text) {
+                console.warn("No speech detected in audio:", file.originalname);
+                idx++;
+                continue;
+            }
+
+            await refineDiarizationWithGemini(transcript);
+
+            combinedText += (combinedText ? '\n\n' : '') + (files.length > 1 ? `=== Transcript for ${originalName} ===\n\n` : '') + transcript.text;
+
+            if (transcript.utterances) {
+                const adjustedUtterances = transcript.utterances.map((u: any) => ({
+                    ...u,
+                    fileIndex: idx,
+                    fileName: originalName,
+                    audioUrl: audioUrl
+                }));
+                combinedUtterances = combinedUtterances.concat(adjustedUtterances);
+            }
+            idx++;
+        }
+
+        if (!combinedText) throw new Error("No speech detected in any audio.");
+
+        const summary = await summarizeConsultation(combinedText);
+
+        const newRecord = {
+            id: `rec_${Date.now()}`,
+            timestamp: new Date().toISOString(),
+            type: 'matter',
+            items: files.map((file, idx) => ({
+                type: 'audio',
+                url: recordAudioUrls[idx],
+                name: file.originalname || `Recording ${idx + 1}`
+            })),
+            transcript: {
+                id: `combined_${Date.now()}`,
+                status: 'completed',
+                text: combinedText,
+                utterances: combinedUtterances
+            },
+            summary: summary,
+            source: 'upload',
+            audioUrl: recordAudioUrls[0],
+            recordingSid: undefined
+        };
+        saveRecord(newRecord);
+
+        res.json({ success: true, record: newRecord, transcript: newRecord.transcript, summary: newRecord.summary, recordId: newRecord.id });
     } catch (error: any) {
-        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        const files = req.files as Express.Multer.File[];
+        if (files) {
+            for (const file of files) {
+                if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+            }
+        }
         res.status(500).json({ error: error.message || 'Processing failed' });
     }
 });
@@ -538,8 +715,55 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
 
         const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-        // Prepare media for Gemini
-        const parts = await Promise.all(files.map(async (file) => {
+        const imagePdfFiles = files.filter(f => !f.mimetype.startsWith('audio/'));
+        const audioFiles = files.filter(f => f.mimetype.startsWith('audio/'));
+
+        let newAudioText = '';
+        let newAudioUtterances: any[] = [];
+        let existingRecord: any = null;
+
+        if (existingRecordId) {
+            const records = getRecords();
+            existingRecord = records.find(r => r.id === existingRecordId);
+        }
+
+        if (audioFiles.length > 0) {
+            const existingAudioCount = existingRecord ? existingRecord.items.filter((i:any) => i.type === 'audio').length : 0;
+            const activeService = process.env.TRANSCRIPTION_SERVICE || 'assemblyai';
+            let idx = 0;
+            for (const file of audioFiles) {
+                const filePath = file.path;
+                const fileName = path.basename(filePath);
+                const originalName = file.originalname || `Recording ${existingAudioCount + idx + 1}`;
+                const audioUrl = `/uploads/${fileName}`;
+
+                let transcript;
+                if (activeService === 'deepgram') {
+                    transcript = await transcribeWithDeepgram(filePath, 'en', false);
+                } else {
+                    transcript = await transcribeWithAssemblyAI(filePath, false);
+                }
+                
+                if (transcript?.text) {
+                    await refineDiarizationWithGemini(transcript);
+                    newAudioText += (newAudioText ? '\n\n' : '') + (audioFiles.length > 1 || existingAudioCount > 0 ? `=== Transcript for ${originalName} ===\n\n` : '') + transcript.text;
+                    
+                    if (transcript.utterances) {
+                        const adjustedUtterances = transcript.utterances.map((u: any) => ({
+                            ...u,
+                            fileIndex: existingAudioCount + idx,
+                            fileName: originalName,
+                            audioUrl: audioUrl
+                        }));
+                        newAudioUtterances = newAudioUtterances.concat(adjustedUtterances);
+                    }
+                }
+                idx++;
+            }
+        }
+
+        // Prepare media for Gemini (only non-audio files)
+        const parts = await Promise.all(imagePdfFiles.map(async (file) => {
             const data = fs.readFileSync(file.path);
             const mimeType = file.mimetype;
 
@@ -553,22 +777,20 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
 
         let contextPrompt = "";
         let existingSummary = "";
-        let existingRecord: any = null;
 
-        if (existingRecordId) {
-            const records = getRecords();
-            existingRecord = records.find(r => r.id === existingRecordId);
-            if (existingRecord) {
-                if (existingRecord.transcript) {
-                    contextPrompt = `\n\nExisting Consultation Transcript Context:\n${existingRecord.transcript.text}\n\n`;
-                }
-                if (existingRecord.summary) {
-                    existingSummary = `\n\nPREVIOUS SUMMARY (USE THIS AS THE BASELINE AND MAINTAIN ITS STYLE):\n${existingRecord.summary}\n\n`;
-                }
+        if (existingRecord) {
+            if (existingRecord.transcript || newAudioText) {
+                const oldText = existingRecord.transcript ? existingRecord.transcript.text : "";
+                contextPrompt = `\n\nExisting Consultation Transcript Context:\n${oldText}\n\nNew Transcripts:\n${newAudioText}\n\n`;
             }
+            if (existingRecord.summary) {
+                existingSummary = `\n\nPREVIOUS SUMMARY (USE THIS AS THE BASELINE AND MAINTAIN ITS STYLE):\n${existingRecord.summary}\n\n`;
+            }
+        } else if (newAudioText) {
+            contextPrompt = `\n\nConsultation Transcript Context:\n${newAudioText}\n\n`;
         }
 
-        const prompt = `You are a legal intake specialist. You have been provided with new documents/images for a "Matter Collection".
+        const prompt = `You are a legal intake specialist. You have been provided with new documents/images/audio transcripts for a "Matter Collection".
         
         ${contextPrompt}
         ${existingSummary}
@@ -578,10 +800,10 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
         
         CRITICAL INSTRUCTIONS FOR CONSISTENCY:
         1. Maintain the existing tone, structure, and Markdown formatting from the "PREVIOUS SUMMARY" if provided.
-        2. Integrate new facts from the documents into the relevant sections.
+        2. Integrate new facts from the documents/transcripts into the relevant sections.
         3. Do NOT rewrite or substantially change the "Next Steps & Required Documents" or "Recommended Follow-up Actions" from scratch. Only APPEND or modify them if the new documents strictly require it. Keep existing phrasing as much as possible.
         4. If the new material only adds a minor detail (e.g., a new co-plaintiff or a specific date), simply incorporate that detail without altering the surrounding text.
-        5. If there are multiple files, treat them as a single "Matter Collection".
+        5. If there are multiple files/transcripts, treat them as a single "Matter Collection".
         
         Deliver an updated, professional legal intake summary.`;
 
@@ -590,7 +812,7 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
 
         // Create item objects for the record
         const newItems = files.map(file => ({
-            type: file.mimetype.startsWith('image/') ? 'image' : 'pdf',
+            type: file.mimetype.startsWith('image/') ? 'image' : file.mimetype.startsWith('audio/') ? 'audio' : 'pdf',
             url: `/uploads/${path.basename(file.path)}`,
             name: file.originalname,
             metadata: { size: file.size, mimetype: file.mimetype }
@@ -605,6 +827,25 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
             if (idx !== -1) {
                 records[idx].items = [...(records[idx].items || []), ...newItems];
                 records[idx].summary = summary; // Update with holistic summary
+                
+                if (newAudioText) {
+                    if (!records[idx].transcript) {
+                        records[idx].transcript = {
+                            id: `combined_${Date.now()}`,
+                            status: 'completed',
+                            text: newAudioText,
+                            utterances: newAudioUtterances
+                        };
+                    } else {
+                        records[idx].transcript.text += '\n\n' + newAudioText;
+                        if (records[idx].transcript.utterances) {
+                            records[idx].transcript.utterances = records[idx].transcript.utterances.concat(newAudioUtterances);
+                        } else {
+                            records[idx].transcript.utterances = newAudioUtterances;
+                        }
+                    }
+                }
+                
                 fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
                 record = records[idx];
             } else {
@@ -614,7 +855,13 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
                     timestamp: new Date().toISOString(),
                     type: 'matter',
                     items: newItems,
-                    summary: summary
+                    summary: summary,
+                    transcript: newAudioText ? {
+                        id: `combined_${Date.now()}`,
+                        status: 'completed',
+                        text: newAudioText,
+                        utterances: newAudioUtterances
+                    } : undefined
                 };
                 saveRecord(record);
             }
@@ -625,7 +872,13 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
                 timestamp: new Date().toISOString(),
                 type: 'matter',
                 items: newItems,
-                summary: summary
+                summary: summary,
+                transcript: newAudioText ? {
+                    id: `combined_${Date.now()}`,
+                    status: 'completed',
+                    text: newAudioText,
+                    utterances: newAudioUtterances
+                } : undefined
             };
             saveRecord(record);
         }
