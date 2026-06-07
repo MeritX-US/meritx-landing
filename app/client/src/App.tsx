@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Upload, Mic, AlertCircle, FileText, PlayCircle, Square, History, ArrowLeft, Trash2, Calendar, RefreshCw, X, CheckCircle, Plus, PhoneCall, Copy, FileIcon, ImageIcon, Edit3, Save, Wand2, Send } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import './App.css';
@@ -357,30 +357,40 @@ function App() {
     }
   };
 
-  const handleSelection = () => {
+  const handleSelection = useCallback(() => {
     if (isEditing || isRefining || isRegenerating || isAnalyzingFiles) return;
     
-    // Slight delay to allow selection to register on mobile
     setTimeout(() => {
       const selection = window.getSelection();
       if (selection && selection.toString().trim().length > 0) {
-        const text = selection.toString().trim();
-        setSelectedText(text);
-        const range = selection.getRangeAt(0);
-        const rect = range.getBoundingClientRect();
-        
-        setSelectionRect({
-          top: rect.top - 50,
-          left: rect.left + (rect.width / 2)
-        });
+        // Only trigger if selection is inside the markdown body
+        const anchorNode = selection.anchorNode;
+        if (anchorNode && anchorNode.parentElement && anchorNode.parentElement.closest('.markdown-body')) {
+          const text = selection.toString().trim();
+          setSelectedText(text);
+          const range = selection.getRangeAt(0);
+          const rect = range.getBoundingClientRect();
+          
+          setSelectionRect({
+            top: rect.top - 50,
+            left: rect.left + (rect.width / 2)
+          });
+        }
       } else {
         if (!showRefineInput) {
           setSelectionRect(null);
           setSelectedText('');
         }
       }
-    }, 100);
-  };
+    }, 50);
+  }, [isEditing, isRefining, isRegenerating, isAnalyzingFiles, showRefineInput]);
+
+  useEffect(() => {
+    document.addEventListener('selectionchange', handleSelection);
+    return () => {
+      document.removeEventListener('selectionchange', handleSelection);
+    };
+  }, [handleSelection]);
 
   const handleInlineRefine = async () => {
     if (!selectedRecordId || !selectedText || !refinePrompt.trim()) return;
