@@ -1073,22 +1073,39 @@ And the user has provided this specific instruction for revision:
 
 CRITICAL INSTRUCTIONS:
 1. Revise the CURRENT SUMMARY to fulfill the user's instruction. You may modify the selected text AND any other parts of the summary that are affected by this instruction.
-2. Output your response as a valid JSON object containing exactly two fields:
-   - "explanation": A concise, user-facing explanation of what you changed (e.g. "Corrected the birthdate in the Client Information section and updated the timeline accordingly.").
-   - "updated_summary": The ENTIRE updated Markdown summary from top to bottom.
-3. Ensure the output is ONLY the JSON object, without any markdown code fences.
+2. Output your response in the following exact format:
+<explanation>
+A concise, user-facing explanation of what you changed (e.g. "Corrected the birthdate in the Client Information section and updated the timeline accordingly.").
+</explanation>
+<updated_summary>
+The ENTIRE updated Markdown summary from top to bottom.
+</updated_summary>
 
-Deliver the JSON object now.`;
+Deliver the response now.`;
 
         const result = await model.generateContent(prompt);
         let responseText = result.response.text();
         
-        // Remove markdown formatting if Gemini wrapped it
-        responseText = responseText.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
+        let explanation = "";
+        let updatedSummary = responseText;
 
-        const parsed = JSON.parse(responseText);
-        const updatedSummary = parsed.updated_summary;
-        const explanation = parsed.explanation;
+        const explMatch = responseText.match(/<explanation>([\s\S]*?)<\/explanation>/);
+        if (explMatch) {
+            explanation = explMatch[1].trim();
+        }
+
+        const sumMatch = responseText.match(/<updated_summary>([\s\S]*?)<\/updated_summary>/);
+        if (sumMatch) {
+            updatedSummary = sumMatch[1].trim();
+        } else {
+            // fallback
+            updatedSummary = responseText.replace(/<explanation>[\s\S]*?<\/explanation>/, '').trim();
+        }
+        
+        // Final safety cleanup of markdown fences if it wrapped it
+        if (updatedSummary.startsWith('```markdown')) {
+            updatedSummary = updatedSummary.replace(/^```markdown\n/, '').replace(/\n```$/, '');
+        }
 
         records[recordIndex].summary = updatedSummary;
         fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));

@@ -1328,9 +1328,10 @@ function App() {
           className="glass-card"
           style={{
             position: 'fixed',
-            top: selectionRect.top,
-            left: selectionRect.left,
-            transform: 'translate(-50%, -100%)',
+            top: window.innerWidth < 768 ? 'auto' : selectionRect.top,
+            bottom: window.innerWidth < 768 ? '80px' : 'auto',
+            left: window.innerWidth < 768 ? '50%' : selectionRect.left,
+            transform: window.innerWidth < 768 ? 'translate(-50%, 0)' : 'translate(-50%, -100%)',
             zIndex: 1000,
             padding: '0.5rem',
             display: 'flex',
@@ -1345,10 +1346,12 @@ function App() {
             <button 
               onClick={(e) => { e.stopPropagation(); setShowRefineInput(true); }}
               style={{
-                background: 'var(--primary)', border: 'none', borderRadius: '8px',
-                padding: '0.4rem 0.8rem', color: 'white', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.85rem',
-                fontWeight: 500
+                background: 'linear-gradient(135deg, #8b5cf6, #d946ef)', 
+                border: 'none', borderRadius: '20px',
+                padding: '0.6rem 1.2rem', color: 'white', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.9rem',
+                fontWeight: 600,
+                boxShadow: '0 4px 15px rgba(139, 92, 246, 0.4)'
               }}
             >
               <Wand2 size={14} /> Refine Selection
