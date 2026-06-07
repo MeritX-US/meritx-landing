@@ -514,6 +514,32 @@ app.delete('/api/records/:id', (req, res) => {
     }
 });
 
+app.put('/api/records/:id/summary', (req, res) => {
+    const { id } = req.params;
+    const { summary } = req.body;
+    
+    if (typeof summary !== 'string') {
+        return res.status(400).json({ error: 'Summary string is required' });
+    }
+
+    try {
+        const records = getRecords();
+        const recordIndex = records.findIndex(r => r.id === id);
+        
+        if (recordIndex === -1) {
+            return res.status(404).json({ error: 'Record not found' });
+        }
+
+        records[recordIndex].summary = summary;
+        fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
+
+        res.status(200).json({ success: true, record: records[recordIndex] });
+    } catch (error: any) {
+        console.error('Error updating summary:', error);
+        res.status(500).json({ error: 'Failed to update summary' });
+    }
+});
+
 /**
  * START SERVER
  */

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Mic, AlertCircle, FileText, PlayCircle, Square, History, ArrowLeft, Trash2, Calendar, RefreshCw, X, CheckCircle, Plus, PhoneCall, Copy, FileIcon, ImageIcon } from 'lucide-react';
+import { Upload, Mic, AlertCircle, FileText, PlayCircle, Square, History, ArrowLeft, Trash2, Calendar, RefreshCw, X, CheckCircle, Plus, PhoneCall, Copy, FileIcon, ImageIcon, Edit3, Save } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import './App.css';
 
@@ -63,6 +63,9 @@ function App() {
 
   const [isAnalyzingFiles, setIsAnalyzingFiles] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState('');
+  const [isSavingSummary, setIsSavingSummary] = useState(false);
   const docInputRef = useRef<HTMLInputElement>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -317,6 +320,34 @@ function App() {
       showNotification('Regeneration Failed', error.message, 'error');
     } finally {
       setIsRegenerating(false);
+    }
+  };
+
+  const handleSaveSummary = async () => {
+    if (!selectedRecordId) return;
+    
+    setIsSavingSummary(true);
+    
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/records/${selectedRecordId}/summary`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ summary: editContent }),
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        showNotification('Saved', 'Matter analysis updated successfully.', 'success');
+        setSummary(editContent);
+        setIsEditing(false);
+        await fetchRecords();
+      } else {
+        showNotification('Save Failed', data.error || 'Unknown error', 'error');
+      }
+    } catch (error: any) {
+      showNotification('Save Failed', error.message, 'error');
+    } finally {
+      setIsSavingSummary(false);
     }
   };
 
@@ -662,24 +693,90 @@ function App() {
                   {records.find(r => r.id === selectedRecordId)?.items ? 'Matter Analysis' : 'Structured Intake Record'}
                 </div>
                 {records.find(r => r.id === selectedRecordId)?.items && (
-                  <button 
-                    onClick={handleRegenerateSummary} 
-                    disabled={isRegenerating}
-                    title="Regenerate Full Summary"
-                    style={{
-                      background: 'none', border: '1px solid var(--border-color)', borderRadius: '8px',
-                      padding: '0.4rem 0.6rem', color: 'var(--text-secondary)', cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem',
-                      opacity: isRegenerating ? 0.5 : 1
-                    }}
-                  >
-                    <RefreshCw size={14} className={isRegenerating ? 'spin' : ''} />
-                    <span className="hide-mobile">Regenerate</span>
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    {isEditing ? (
+                      <>
+                        <button 
+                          onClick={() => setIsEditing(false)} 
+                          disabled={isSavingSummary}
+                          title="Cancel Editing"
+                          style={{
+                            background: 'none', border: '1px solid var(--border-color)', borderRadius: '8px',
+                            padding: '0.4rem 0.6rem', color: 'var(--text-secondary)', cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem'
+                          }}
+                        >
+                          <X size={14} />
+                          <span className="hide-mobile">Cancel</span>
+                        </button>
+                        <button 
+                          onClick={handleSaveSummary} 
+                          disabled={isSavingSummary}
+                          title="Save Summary"
+                          style={{
+                            background: 'var(--primary)', border: 'none', borderRadius: '8px',
+                            padding: '0.4rem 0.6rem', color: 'white', cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem',
+                            opacity: isSavingSummary ? 0.5 : 1
+                          }}
+                        >
+                          <Save size={14} className={isSavingSummary ? 'spin' : ''} />
+                          <span className="hide-mobile">Save</span>
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button 
+                          onClick={() => {
+                            setEditContent(summary || '');
+                            setIsEditing(true);
+                          }} 
+                          disabled={isRegenerating}
+                          title="Edit Summary"
+                          style={{
+                            background: 'none', border: '1px solid var(--border-color)', borderRadius: '8px',
+                            padding: '0.4rem 0.6rem', color: 'var(--text-secondary)', cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem'
+                          }}
+                        >
+                          <Edit3 size={14} />
+                          <span className="hide-mobile">Edit</span>
+                        </button>
+                        <button 
+                          onClick={handleRegenerateSummary} 
+                          disabled={isRegenerating}
+                          title="Regenerate Full Summary"
+                          style={{
+                            background: 'none', border: '1px solid var(--border-color)', borderRadius: '8px',
+                            padding: '0.4rem 0.6rem', color: 'var(--text-secondary)', cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem',
+                            opacity: isRegenerating ? 0.5 : 1
+                          }}
+                        >
+                          <RefreshCw size={14} className={isRegenerating ? 'spin' : ''} />
+                          <span className="hide-mobile">Regenerate</span>
+                        </button>
+                      </>
+                    )}
+                  </div>
                 )}
               </div>
               <div className="markdown-body">
-                <ReactMarkdown>{summary}</ReactMarkdown>
+                {isEditing ? (
+                  <textarea 
+                    value={editContent}
+                    onChange={(e) => setEditContent(e.target.value)}
+                    style={{
+                      width: '100%', minHeight: '400px', padding: '1rem', 
+                      borderRadius: '8px', border: '1px solid var(--border-color)',
+                      background: 'var(--card-bg)', color: 'var(--text-primary)',
+                      fontFamily: 'inherit', fontSize: '0.95rem', lineHeight: '1.6',
+                      resize: 'vertical', outline: 'none'
+                    }}
+                  />
+                ) : (
+                  <ReactMarkdown>{summary}</ReactMarkdown>
+                )}
               </div>
             </div>
 
