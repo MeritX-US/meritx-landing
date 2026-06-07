@@ -5,6 +5,7 @@ import { AssemblyAI } from 'assemblyai';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 import { createClient } from "@deepgram/sdk";
@@ -719,19 +720,57 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
     try {
         console.log(`Processing Multimodal Intake: ${files.length} files. Target Collection: ${existingRecordId || 'New'}`);
 
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
-        const imagePdfFiles = files.filter(f => !f.mimetype.startsWith('audio/'));
-        const audioFiles = files.filter(f => f.mimetype.startsWith('audio/'));
-
-        let newAudioText = '';
-        let newAudioUtterances: any[] = [];
         let existingRecord: any = null;
+
+        // Compute hash for all uploaded files
+        const filesWithHash = files.map(file => {
+            const fileBuffer = fs.readFileSync(file.path);
+            const hashSum = crypto.createHash('sha256');
+            hashSum.update(fileBuffer);
+            const hash = hashSum.digest('hex');
+            return { ...file, hash };
+        });
+
+        let validFiles: any[] = filesWithHash;
 
         if (existingRecordId) {
             const records = getRecords();
             existingRecord = records.find(r => r.id === existingRecordId);
+
+            if (existingRecord && existingRecord.items) {
+                // Filter out duplicates based on hash (or fallback to originalname and size)
+                validFiles = filesWithHash.filter(file => {
+                    const isDuplicate = existingRecord.items.some((item: any) => {
+                        if (item.metadata && item.metadata.hash) {
+                            return item.metadata.hash === file.hash;
+                        } else {
+                            const nameMatches = item.name === file.originalname;
+                            const sizeMatches = item.metadata ? item.metadata.size === file.size : true;
+                            return nameMatches && sizeMatches;
+                        }
+                    });
+
+                    if (isDuplicate) {
+                        console.log(`Skipping duplicate file: ${file.originalname}`);
+                        if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+                        return false;
+                    }
+                    return true;
+                });
+            }
         }
+
+        if (validFiles.length === 0) {
+            return res.status(400).json({ error: 'All uploaded files are exact duplicates of existing materials in this matter.' });
+        }
+
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+        const imagePdfFiles = validFiles.filter(f => !f.mimetype.startsWith('audio/'));
+        const audioFiles = validFiles.filter(f => f.mimetype.startsWith('audio/'));
+
+        let newAudioText = '';
+        let newAudioUtterances: any[] = [];
 
         if (audioFiles.length > 0) {
             const existingAudioCount = existingRecord ? existingRecord.items.filter((i:any) => i.type === 'audio').length : 0;
@@ -796,6 +835,12 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
             contextPrompt = `\n\nConsultation Transcript Context:\n${newAudioText}\n\n`;
         }
 
+        let updateInstructions = "";
+        if (existingRecord) {
+            const currentTime = new Date().toLocaleString('en-US', { timeZoneName: 'short' });
+            updateInstructions = `3. IMPORTANT: You MUST add a new section at the very top of your response called "### 🆕 Recent Updates / New Findings (${currentTime})" that explicitly lists what new information or context was just added from the latest upload. This helps the user see that their new materials were processed.`;
+        }
+
         const prompt = `You are a legal intake specialist. You have been provided with new documents/images/audio transcripts for a "Matter Collection".
         
         ${contextPrompt}
@@ -807,9 +852,10 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
         CRITICAL INSTRUCTIONS FOR CONSISTENCY:
         1. Maintain the existing tone, structure, and Markdown formatting from the "PREVIOUS SUMMARY" if provided.
         2. Integrate new facts from the documents/transcripts into the relevant sections.
-        3. Do NOT rewrite or substantially change the "Next Steps & Required Documents" or "Recommended Follow-up Actions" from scratch. Only APPEND or modify them if the new documents strictly require it. Keep existing phrasing as much as possible.
-        4. If the new material only adds a minor detail (e.g., a new co-plaintiff or a specific date), simply incorporate that detail without altering the surrounding text.
-        5. If there are multiple files/transcripts, treat them as a single "Matter Collection".
+        ${updateInstructions}
+        4. Do NOT rewrite or substantially change the "Next Steps & Required Documents" or "Recommended Follow-up Actions" from scratch. HOWEVER, if the newly provided materials satisfy any previously requested documents or information (e.g., ID, passport, proof of address), you MUST REMOVE those items from the "Next Steps & Required Documents" list to reflect they have been received.
+        5. If the new material only adds a minor detail (e.g., a new co-plaintiff or a specific date), simply incorporate that detail without altering the surrounding text.
+        6. If there are multiple files/transcripts, treat them as a single "Matter Collection".
         
         Deliver an updated, professional legal intake summary.`;
 
@@ -817,11 +863,11 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
         const summary = result.response.text();
 
         // Create item objects for the record
-        const newItems = files.map(file => ({
+        const newItems = validFiles.map(file => ({
             type: file.mimetype.startsWith('image/') ? 'image' : file.mimetype.startsWith('audio/') ? 'audio' : 'pdf',
             url: `/uploads/${path.basename(file.path)}`,
             name: file.originalname,
-            metadata: { size: file.size, mimetype: file.mimetype }
+            metadata: { size: file.size, mimetype: file.mimetype, hash: file.hash }
         }));
 
         const records = getRecords();
@@ -893,5 +939,73 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
     } catch (error: any) {
         console.error('❌ Multimodal processing failed:', error.message);
         res.status(500).json({ error: 'Failed to process materials', message: error.message });
+    }
+});
+
+// 6. Regenerate Analysis Endpoint (Option A)
+app.post('/api/intake/regenerate', async (req, res) => {
+    const { existingRecordId } = req.body;
+    if (!existingRecordId) return res.status(400).json({ error: 'Record ID is required' });
+
+    try {
+        console.log(`Regenerating Full Summary for Record: ${existingRecordId}`);
+        const records = getRecords();
+        const recordIndex = records.findIndex(r => r.id === existingRecordId);
+        
+        if (recordIndex === -1) {
+            return res.status(404).json({ error: 'Record not found' });
+        }
+
+        const existingRecord = records[recordIndex];
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+        // Gather all existing media parts
+        const parts = [];
+        if (existingRecord.items) {
+            for (const item of existingRecord.items) {
+                if (item.type === 'image' || item.type === 'pdf') {
+                    const filePath = path.join(__dirname, item.url.replace('/uploads', 'uploads'));
+                    if (fs.existsSync(filePath)) {
+                        const data = fs.readFileSync(filePath);
+                        parts.push({
+                            inlineData: {
+                                data: data.toString('base64'),
+                                mimeType: item.metadata?.mimetype || (item.type === 'image' ? 'image/jpeg' : 'application/pdf')
+                            }
+                        });
+                    }
+                }
+            }
+        }
+
+        const transcriptText = existingRecord.transcript ? existingRecord.transcript.text : "";
+        const contextPrompt = transcriptText ? `\n\nConsultation Transcript Context:\n${transcriptText}\n\n` : "";
+
+        const prompt = `You are an expert legal intake specialist. You have been provided with ALL the historical documents, images, and audio transcripts for a "Matter Collection".
+        
+        ${contextPrompt}
+        
+        Please synthesize and analyze all provided materials holistically.
+        Provide a clean, unified, and structural summary in Markdown.
+        
+        CRITICAL INSTRUCTIONS:
+        1. Write the summary from scratch based purely on the provided facts. Do NOT include patches like "Recent Updates".
+        2. Ensure the summary is highly cohesive and reads as a single, comprehensive report.
+        3. Include standard sections like "Client Information & Core Issue", "Key Facts & Timeline", "Next Steps & Required Documents for the client".
+        4. If a document or ID has been provided among the materials, DO NOT list it in the "Next Steps & Required Documents" since it has already been received.
+        5. Treat all files/transcripts as a single comprehensive case file.
+        
+        Deliver a professional, fresh legal intake summary.`;
+
+        const result = await model.generateContent([prompt, ...parts]);
+        const summary = result.response.text();
+
+        records[recordIndex].summary = summary;
+        fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
+
+        res.json({ success: true, record: records[recordIndex] });
+    } catch (error: any) {
+        console.error('❌ Regeneration failed:', error.message);
+        res.status(500).json({ error: 'Failed to regenerate analysis', message: error.message });
     }
 });

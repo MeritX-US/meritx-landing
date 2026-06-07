@@ -62,6 +62,7 @@ function App() {
   const [twilioNumber, setTwilioNumber] = useState('');
 
   const [isAnalyzingFiles, setIsAnalyzingFiles] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
   const docInputRef = useRef<HTMLInputElement>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -288,6 +289,34 @@ function App() {
     } finally {
       setIsAnalyzingFiles(false);
       if (docInputRef.current) docInputRef.current.value = '';
+    }
+  };
+
+  const handleRegenerateSummary = async () => {
+    if (!selectedRecordId) return;
+    
+    setIsRegenerating(true);
+    showNotification('Regenerating Analysis', 'Re-analyzing all materials to generate a clean summary...', 'info');
+    
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/intake/regenerate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ existingRecordId: selectedRecordId }),
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        showNotification('Analysis Complete', 'A fresh, clean summary has been generated.', 'success');
+        await fetchRecords();
+        loadRecord(data.record);
+      } else {
+        showNotification('Regeneration Failed', data.error || 'Unknown error', 'error');
+      }
+    } catch (error: any) {
+      showNotification('Regeneration Failed', error.message, 'error');
+    } finally {
+      setIsRegenerating(false);
     }
   };
 
@@ -627,9 +656,27 @@ function App() {
         view === 'results' && transcript && (summary || records.find(r => r.id === selectedRecordId)?.items?.length > 0) && (
           <div className="results-container">
             <div className="glass-card summary-card">
-              <div className="section-title">
-                <FileText size={24} style={{ color: 'var(--success)' }} />
-                {records.find(r => r.id === selectedRecordId)?.items ? 'Matter Analysis' : 'Structured Intake Record'}
+              <div className="section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <FileText size={24} style={{ color: 'var(--success)' }} />
+                  {records.find(r => r.id === selectedRecordId)?.items ? 'Matter Analysis' : 'Structured Intake Record'}
+                </div>
+                {records.find(r => r.id === selectedRecordId)?.items && (
+                  <button 
+                    onClick={handleRegenerateSummary} 
+                    disabled={isRegenerating}
+                    title="Regenerate Full Summary"
+                    style={{
+                      background: 'none', border: '1px solid var(--border-color)', borderRadius: '8px',
+                      padding: '0.4rem 0.6rem', color: 'var(--text-secondary)', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem',
+                      opacity: isRegenerating ? 0.5 : 1
+                    }}
+                  >
+                    <RefreshCw size={14} className={isRegenerating ? 'spin' : ''} />
+                    <span className="hide-mobile">Regenerate</span>
+                  </button>
+                )}
               </div>
               <div className="markdown-body">
                 <ReactMarkdown>{summary}</ReactMarkdown>
@@ -1031,6 +1078,20 @@ function App() {
               <h3 style={{ fontSize: '1.5rem', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '0.75rem' }}>Analyzing Materials</h3>
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', marginTop: '0.5rem', lineHeight: '1.5' }}>
                 Transcribing audio files and incorporating new insights into the intake summary... Please wait, this may take a moment.
+              </p>
+            </div>
+          </div>
+        )
+      }
+
+      {
+        isRegenerating && (
+          <div className="loading-overlay">
+            <div className="glass-card loading-card" style={{ maxWidth: '480px', width: '90%', padding: '3rem 2rem', textAlign: 'center', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)' }}>
+              <div className="spinner" style={{ width: '48px', height: '48px', borderWidth: '5px' }}></div>
+              <h3 style={{ fontSize: '1.5rem', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '0.75rem' }}>Regenerating Summary</h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', marginTop: '0.5rem', lineHeight: '1.5' }}>
+                Re-analyzing all transcripts and documents to build a fresh, cohesive report...
               </p>
             </div>
           </div>
