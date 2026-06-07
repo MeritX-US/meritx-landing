@@ -213,8 +213,8 @@ async function refineDiarizationWithGemini(transcript: any) {
     if (!transcript.utterances || transcript.utterances.length === 0) return;
 
     try {
-        console.log("Running Diarization Refinement with Gemini...");
-        const refineModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+        console.log("Running Diarization Refinement with Gemini Pro...");
+        const refineModel = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
         
         const simplified = transcript.utterances.map((u: any, i: number) => ({
             u_idx: i,
@@ -225,9 +225,13 @@ async function refineDiarizationWithGemini(transcript: any) {
             }))
         }));
 
-        const prompt = `You are a legal transcription editor. The ASR model may have failed to separate speakers correctly in the following transcript. Sometimes a single utterance contains speech from two different speakers (e.g. Speaker A asks a question and Speaker B answers briefly, but they were merged into Speaker A's utterance).
+        const prompt = `You are an expert legal transcription editor. The ASR model has failed to separate speakers correctly in the following transcript. Sometimes a single utterance contains speech from two different speakers.
 
-Analyze the following utterances. If an utterance contains a clear speaker change mid-utterance, identify the exact word index where the new speaker begins.
+CRITICAL PATTERN TO FIX:
+ASR models often hallucinate punctuation and merge short affirmations from the listener. For example, if Speaker A says "...expires on November 28?" and Speaker B replies "Correct.", the ASR might merge it into a single utterance for Speaker A as "...expired on November 28, correct?". 
+Look VERY closely for words like "correct?", "right?", "okay", "yes", "mhm" embedded in what looks like a continuous sentence. If the context implies it's actually an answer or acknowledgment from the other speaker, YOU MUST split it out!
+
+Analyze the following utterances. If an utterance contains a clear speaker change mid-utterance, identify the exact word index where the new speaker begins, and then the word index where it switches back (if applicable).
 
 Respond ONLY with a JSON array of the required splits. If no splits are needed, return an empty array [].
 Format exactly like this example:
@@ -236,7 +240,7 @@ Format exactly like this example:
     "u_idx": 0,
     "splits": [
       { "w_idx": 5, "newSpeaker": "B" },
-      { "w_idx": 7, "newSpeaker": "A" }
+      { "w_idx": 6, "newSpeaker": "A" }
     ]
   }
 ]
@@ -303,6 +307,8 @@ ${JSON.stringify(simplified)}
                 }
                 
                 transcript.utterances = newUtterances;
+                // Rebuild transcript.text from the new utterances so the summary gets the updated speaker labels
+                transcript.text = newUtterances.map(u => `Speaker ${u.speaker}: ${u.text}`).join('\n\n');
             }
         }
     } catch (e) {

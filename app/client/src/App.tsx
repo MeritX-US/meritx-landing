@@ -372,11 +372,15 @@ function App() {
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     if (files.length > 0) {
-      setUploadFiles(files);
+      setUploadFiles(prev => [...prev, ...files]);
       setAudioFile(null);
       setAudioUrl(null);
       setTranscript(null);
       setSummary(null);
+      
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -991,10 +995,16 @@ function App() {
                     </li>
                   ))}
                 </ul>
-                <button className="btn btn-primary" onClick={processAudio} style={{ width: '100%', justifyContent: 'center', padding: '0.8rem' }}>
-                  <FileText size={20} />
-                  Generate Intake Record
-                </button>
+                <div style={{ display: 'flex', gap: '1rem' }}>
+                  <button className="btn" onClick={() => fileInputRef.current?.click()} style={{ flex: 1, justifyContent: 'center', padding: '0.8rem', background: 'rgba(255, 255, 255, 0.05)', color: 'var(--text-primary)', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                    <Upload size={20} />
+                    Add MORE Materials
+                  </button>
+                  <button className="btn btn-primary" onClick={processAudio} style={{ flex: 2, justifyContent: 'center', padding: '0.8rem' }}>
+                    <FileText size={20} />
+                    Generate Intake Record
+                  </button>
+                </div>
               </div>
             )}
           </main>
