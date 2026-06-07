@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Mic, AlertCircle, FileText, PlayCircle, Square, History, ArrowLeft, Trash2, Calendar, RefreshCw, X, CheckCircle, Plus, PhoneCall, Copy, FileIcon, ImageIcon, Edit3, Save } from 'lucide-react';
+import { Upload, Mic, AlertCircle, FileText, PlayCircle, Square, History, ArrowLeft, Trash2, Calendar, RefreshCw, X, CheckCircle, Plus, PhoneCall, Copy, FileIcon, ImageIcon, Edit3, Save, Wand2, Send } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import './App.css';
 
@@ -66,6 +66,12 @@ function App() {
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState('');
   const [isSavingSummary, setIsSavingSummary] = useState(false);
+  const [selectedText, setSelectedText] = useState('');
+  const [selectionRect, setSelectionRect] = useState<{ top: number, left: number } | null>(null);
+  const [showRefineInput, setShowRefineInput] = useState(false);
+  const [refinePrompt, setRefinePrompt] = useState('');
+  const [isRefining, setIsRefining] = useState(false);
+  const [refinementFeedback, setRefinementFeedback] = useState<string | null>(null);
   const docInputRef = useRef<HTMLInputElement>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -348,6 +354,70 @@ function App() {
       showNotification('Save Failed', error.message, 'error');
     } finally {
       setIsSavingSummary(false);
+    }
+  };
+
+  const handleSelection = () => {
+    if (isEditing || isRefining || isRegenerating || isAnalyzingFiles) return;
+    
+    // Slight delay to allow selection to register
+    setTimeout(() => {
+      const selection = window.getSelection();
+      if (selection && selection.toString().trim().length > 0) {
+        const text = selection.toString().trim();
+        setSelectedText(text);
+        const range = selection.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+        
+        setSelectionRect({
+          top: rect.top - 50,
+          left: rect.left + (rect.width / 2)
+        });
+      } else {
+        if (!showRefineInput) {
+          setSelectionRect(null);
+          setSelectedText('');
+        }
+      }
+    }, 10);
+  };
+
+  const handleInlineRefine = async () => {
+    if (!selectedRecordId || !selectedText || !refinePrompt.trim()) return;
+    
+    setIsRefining(true);
+    setShowRefineInput(false);
+    setSelectionRect(null);
+    showNotification('Refining Selection', 'Applying your instructions to the selected text...', 'info');
+    
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/intake/refine-inline`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          existingRecordId: selectedRecordId,
+          selectedText,
+          userPrompt: refinePrompt
+        }),
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        showNotification('Refinement Complete', 'The summary has been updated inline.', 'success');
+        if (data.explanation) {
+          setRefinementFeedback(data.explanation);
+        }
+        await fetchRecords();
+        loadRecord(data.record);
+        setRefinePrompt('');
+      } else {
+        showNotification('Refinement Failed', data.error || 'Unknown error', 'error');
+      }
+    } catch (error: any) {
+      showNotification('Refinement Failed', error.message, 'error');
+    } finally {
+      setIsRefining(false);
+      setSelectedText('');
     }
   };
 
@@ -761,7 +831,31 @@ function App() {
                   </div>
                 )}
               </div>
-              <div className="markdown-body">
+              <div className="markdown-body" onMouseUp={handleSelection}>
+                {refinementFeedback && !isEditing && (
+                  <div style={{
+                    background: 'rgba(139, 92, 246, 0.15)',
+                    border: '1px solid var(--primary)',
+                    borderRadius: '8px',
+                    padding: '1rem',
+                    marginBottom: '1rem',
+                    display: 'flex',
+                    gap: '0.8rem',
+                    alignItems: 'flex-start'
+                  }}>
+                    <Wand2 size={20} color="var(--primary)" style={{ flexShrink: 0, marginTop: '2px' }} />
+                    <div style={{ flex: 1 }}>
+                      <h4 style={{ margin: '0 0 0.4rem 0', color: 'var(--text-primary)', fontSize: '0.95rem' }}>✨ AI Refinement Complete</h4>
+                      <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: '1.5' }}>{refinementFeedback}</p>
+                    </div>
+                    <button 
+                      onClick={() => setRefinementFeedback(null)}
+                      style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '0.2rem' }}
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                )}
                 {isEditing ? (
                   <textarea 
                     value={editContent}
@@ -1196,6 +1290,20 @@ function App() {
       }
 
       {
+        isRefining && (
+          <div className="loading-overlay">
+            <div className="glass-card loading-card" style={{ maxWidth: '480px', width: '90%', padding: '3rem 2rem', textAlign: 'center', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)' }}>
+              <div className="spinner" style={{ width: '48px', height: '48px', borderWidth: '5px' }}></div>
+              <h3 style={{ fontSize: '1.5rem', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '0.75rem' }}>Refining Selection</h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', marginTop: '0.5rem', lineHeight: '1.5' }}>
+                Applying your instructions to update the selected text...
+              </p>
+            </div>
+          </div>
+        )
+      }
+
+      {
         notification && (
           <div className="toast-container">
             <div className={`toast ${notification.type}`}>
@@ -1214,6 +1322,76 @@ function App() {
           </div>
         )
       }
+
+      {selectionRect && selectedText && !isEditing && (
+        <div 
+          className="glass-card"
+          style={{
+            position: 'fixed',
+            top: selectionRect.top,
+            left: selectionRect.left,
+            transform: 'translate(-50%, -100%)',
+            zIndex: 1000,
+            padding: '0.5rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.5rem',
+            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.3)',
+            minWidth: showRefineInput ? '300px' : 'auto',
+            border: '1px solid var(--border-color)',
+          }}
+        >
+          {!showRefineInput ? (
+            <button 
+              onClick={(e) => { e.stopPropagation(); setShowRefineInput(true); }}
+              style={{
+                background: 'var(--primary)', border: 'none', borderRadius: '8px',
+                padding: '0.4rem 0.8rem', color: 'white', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.85rem',
+                fontWeight: 500
+              }}
+            >
+              <Wand2 size={14} /> Refine Selection
+            </button>
+          ) : (
+            <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }} onClick={e => e.stopPropagation()}>
+              <input 
+                autoFocus
+                type="text"
+                value={refinePrompt}
+                onChange={(e) => setRefinePrompt(e.target.value)}
+                placeholder="e.g. Make this more formal..."
+                onKeyDown={(e) => { if (e.key === 'Enter') handleInlineRefine(); }}
+                style={{
+                  flex: 1, padding: '0.5rem', borderRadius: '6px',
+                  border: '1px solid var(--border-color)', background: 'var(--card-bg)',
+                  color: 'var(--text-primary)', outline: 'none', fontSize: '0.85rem'
+                }}
+              />
+              <button 
+                onClick={handleInlineRefine}
+                style={{
+                  background: 'var(--primary)', border: 'none', borderRadius: '6px',
+                  padding: '0.5rem', color: 'white', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}
+              >
+                <Send size={14} />
+              </button>
+              <button 
+                onClick={() => { setShowRefineInput(false); setSelectionRect(null); }}
+                style={{
+                  background: 'none', border: '1px solid var(--border-color)', borderRadius: '6px',
+                  padding: '0.5rem', color: 'var(--text-secondary)', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div >
   );
 }

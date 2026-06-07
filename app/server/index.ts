@@ -1035,3 +1035,69 @@ app.post('/api/intake/regenerate', async (req, res) => {
         res.status(500).json({ error: 'Failed to regenerate analysis', message: error.message });
     }
 });
+
+// 7. Inline Selected Refinement Endpoint (Option C)
+app.post('/api/intake/refine-inline', async (req, res) => {
+    const { existingRecordId, selectedText, userPrompt } = req.body;
+    if (!existingRecordId || !selectedText || !userPrompt) {
+        return res.status(400).json({ error: 'Missing required parameters (existingRecordId, selectedText, userPrompt)' });
+    }
+
+    try {
+        console.log(`Inline Refinement for Record: ${existingRecordId}`);
+        const records = getRecords();
+        const recordIndex = records.findIndex(r => r.id === existingRecordId);
+        
+        if (recordIndex === -1) {
+            return res.status(404).json({ error: 'Record not found' });
+        }
+
+        const existingRecord = records[recordIndex];
+        if (!existingRecord.summary) {
+             return res.status(400).json({ error: 'No summary exists to refine' });
+        }
+
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+        const prompt = `You are an expert legal intake specialist. Below is the CURRENT full Markdown summary of a "Matter Collection".
+        
+=== CURRENT SUMMARY ===
+${existingRecord.summary}
+=======================
+
+The user has selected the following text from the summary as context/anchor:
+"${selectedText}"
+
+And the user has provided this specific instruction for revision:
+"${userPrompt}"
+
+CRITICAL INSTRUCTIONS:
+1. Revise the CURRENT SUMMARY to fulfill the user's instruction. You may modify the selected text AND any other parts of the summary that are affected by this instruction.
+2. Output your response as a valid JSON object containing exactly two fields:
+   - "explanation": A concise, user-facing explanation of what you changed (e.g. "Corrected the birthdate in the Client Information section and updated the timeline accordingly.").
+   - "updated_summary": The ENTIRE updated Markdown summary from top to bottom.
+3. Ensure the output is ONLY the JSON object, without any markdown code fences.
+
+Deliver the JSON object now.`;
+
+        const result = await model.generateContent(prompt);
+        let responseText = result.response.text();
+        
+        // Remove markdown formatting if Gemini wrapped it
+        responseText = responseText.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
+
+        const parsed = JSON.parse(responseText);
+        const updatedSummary = parsed.updated_summary;
+        const explanation = parsed.explanation;
+
+        records[recordIndex].summary = updatedSummary;
+        fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
+
+        res.json({ success: true, record: records[recordIndex], explanation });
+    } catch (error: any) {
+        console.error('❌ Inline refinement failed:', error.message);
+        res.status(500).json({ error: 'Failed to refine analysis inline', message: error.message });
+    }
+});
+
+
