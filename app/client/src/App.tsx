@@ -360,7 +360,7 @@ function App() {
   const handleSelection = () => {
     if (isEditing || isRefining || isRegenerating || isAnalyzingFiles) return;
     
-    // Slight delay to allow selection to register
+    // Slight delay to allow selection to register on mobile
     setTimeout(() => {
       const selection = window.getSelection();
       if (selection && selection.toString().trim().length > 0) {
@@ -379,7 +379,7 @@ function App() {
           setSelectedText('');
         }
       }
-    }, 10);
+    }, 100);
   };
 
   const handleInlineRefine = async () => {
@@ -831,7 +831,7 @@ function App() {
                   </div>
                 )}
               </div>
-              <div className="markdown-body" onMouseUp={handleSelection}>
+              <div className="markdown-body" onMouseUp={handleSelection} onTouchEnd={handleSelection} onKeyUp={handleSelection}>
                 {refinementFeedback && !isEditing && (
                   <div style={{
                     background: 'rgba(139, 92, 246, 0.15)',
