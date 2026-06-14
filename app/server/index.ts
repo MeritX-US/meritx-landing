@@ -7,6 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { runPlaybookAnalysis } from './playbookEngine';
 
 import { createClient } from "@deepgram/sdk";
 import twilio from 'twilio';
@@ -897,7 +898,8 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
         }));
 
         const records = getRecords();
-        let record;
+        let record: any;
+        let isNewRecord = false;
 
         if (existingRecordId) {
             // Find and update the existing record IN the same array we'll write back
@@ -923,27 +925,15 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
                         }
                     }
                 }
-                
-                fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
                 record = records[idx];
             } else {
-                // Fallback: record not found, create new
-                record = {
-                    id: `matter_${Date.now()}`,
-                    timestamp: new Date().toISOString(),
-                    type: 'matter',
-                    items: newItems,
-                    summary: summary,
-                    transcript: newAudioText ? {
-                        id: `combined_${Date.now()}`,
-                        status: 'completed',
-                        text: newAudioText,
-                        utterances: newAudioUtterances
-                    } : undefined
-                };
-                saveRecord(record);
+                isNewRecord = true;
             }
         } else {
+            isNewRecord = true;
+        }
+
+        if (isNewRecord) {
             // Create new Matter record
             record = {
                 id: `matter_${Date.now()}`,
@@ -958,9 +948,43 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
                     utterances: newAudioUtterances
                 } : undefined
             };
-            saveRecord(record);
         }
 
+        // Run Playbook Analysis
+        try {
+            console.log(`Running Playbook Analysis for record: ${record.id}`);
+            const recordText = record.transcript ? record.transcript.text : "";
+            
+            // Collect all image/pdf files currently in the record for analysis
+            const allMediaParts = [];
+            if (record.items) {
+                for (const item of record.items) {
+                    if (item.type === 'image' || item.type === 'pdf') {
+                        const filePath = path.join(__dirname, item.url.replace('/uploads', 'uploads'));
+                        if (fs.existsSync(filePath)) {
+                            const data = fs.readFileSync(filePath);
+                            allMediaParts.push({
+                                inlineData: {
+                                    data: data.toString('base64'),
+                                    mimeType: item.metadata?.mimetype || (item.type === 'image' ? 'image/jpeg' : 'application/pdf')
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+
+            const analysisResult = await runPlaybookAnalysis(recordText, allMediaParts, record.items || []);
+            record.analysis = analysisResult;
+        } catch (err: any) {
+            console.error('⚠️ Playbook analysis failed:', err.message);
+        }
+
+        if (isNewRecord) {
+            records.unshift(record);
+        }
+
+        fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
         res.json({ success: true, record });
     } catch (error: any) {
         console.error('❌ Multimodal processing failed:', error.message);
@@ -1027,6 +1051,15 @@ app.post('/api/intake/regenerate', async (req, res) => {
         const summary = result.response.text();
 
         records[recordIndex].summary = summary;
+
+        try {
+            console.log(`Running Playbook Analysis (Regenerate) for record: ${existingRecordId}`);
+            const analysisResult = await runPlaybookAnalysis(transcriptText, parts, existingRecord.items || []);
+            records[recordIndex].analysis = analysisResult;
+        } catch (err: any) {
+            console.error('⚠️ Playbook analysis regeneration failed:', err.message);
+        }
+
         fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
 
         res.json({ success: true, record: records[recordIndex] });

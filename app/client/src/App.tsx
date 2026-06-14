@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Upload, Mic, AlertCircle, FileText, PlayCircle, Square, History, ArrowLeft, Trash2, Calendar, RefreshCw, X, CheckCircle, Plus, PhoneCall, Copy, FileIcon, ImageIcon, Edit3, Save, Wand2, Send } from 'lucide-react';
+import { Upload, Mic, AlertCircle, FileText, PlayCircle, Square, History, ArrowLeft, Trash2, Calendar, RefreshCw, X, CheckCircle, Plus, PhoneCall, Copy, FileIcon, ImageIcon, Edit3, Save, Wand2, Send, HelpCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import './App.css';
 
@@ -56,12 +56,14 @@ function App() {
   const [records, setRecords] = useState<any[]>([]);
   const [view, setView] = useState<'home' | 'history' | 'results'>('history');
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
+  const [activeResultTab, setActiveResultTab] = useState<'package' | 'completeness' | 'evidence' | 'transcript'>('package');
 
   const [clientPhone, setClientPhone] = useState('');
   const [isCallingOut, setIsCallingOut] = useState(false);
   const [twilioNumber, setTwilioNumber] = useState('');
 
   const [isAnalyzingFiles, setIsAnalyzingFiles] = useState(false);
+  const [analyzingStatus, setAnalyzingStatus] = useState<string>('Processing files and incorporating new insights...');
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState('');
@@ -265,6 +267,13 @@ function App() {
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
+    // Check if any audio files are uploaded
+    const hasAudio = Array.from(files).some(f => f.type.startsWith('audio/'));
+    const message = hasAudio 
+      ? "Transcribing audio files and incorporating new insights into the case analysis... Please wait, this may take a moment."
+      : "Analyzing documents and images, extracting facts, and mapping evidence under your playbook rules... Please wait.";
+    
+    setAnalyzingStatus(message);
     setIsAnalyzingFiles(true);
     showNotification('Analyzing Materials', `Processing ${files.length} file(s) with Gemini...`, 'info');
 
@@ -437,6 +446,7 @@ function App() {
   };
 
   const loadRecord = (record: any) => {
+    setActiveResultTab('package');
     // For matter collections without audio, create a placeholder transcript
     if (record.transcript) {
       setTranscript(record.transcript);
@@ -466,6 +476,95 @@ function App() {
 
     setSelectedRecordId(record.id);
     setView('results');
+  };
+
+  const renderLinkedMaterials = () => {
+    const record = records.find(r => r.id === selectedRecordId);
+    if (!record?.items || record.items.length === 0) return null;
+    
+    return (
+      <div className="linked-items-section" style={{ borderTop: 'none', paddingTop: 0, marginTop: 0 }}>
+        <div className="section-title-small" style={{ marginBottom: '1rem' }}>Linked Materials</div>
+        <div className="items-grid" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem' }}>
+          {record.items.map((item: any, idx: number) => (
+            <div 
+              key={idx} 
+              className="linked-item-card" 
+              onClick={() => {
+                if (item.type === 'audio') {
+                  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+                  const fullUrl = item.url.startsWith('http') ? item.url : `${baseUrl}${item.url}`;
+                  if (audioUrl !== fullUrl) {
+                    setAudioUrl(fullUrl);
+                    if (audioRef.current) {
+                      audioRef.current.src = fullUrl;
+                      audioRef.current.load();
+                    }
+                  }
+                  setActiveResultTab('transcript');
+                  setTimeout(() => {
+                    audioRef.current?.play().catch(e => console.error(e));
+                  }, 100);
+                } else {
+                  // Open images and PDFs in a new tab
+                  const base = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+                  window.open(`${base}${item.url}`, '_blank');
+                }
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                padding: '0.75rem',
+                borderRadius: '8px',
+                background: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid var(--border-color)',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+            >
+              {item.type === 'image' ? <ImageIcon size={20} style={{ color: 'var(--accent-primary)' }} /> : item.type === 'audio' ? <PlayCircle size={20} style={{ color: 'var(--accent-primary)' }} /> : <FileIcon size={20} style={{ color: 'var(--accent-primary)' }} />}
+              <div className="item-meta" style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                <span className="item-name" style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name || `Item ${idx + 1}`}</span>
+                <span className="item-type" style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{item.type.toUpperCase()}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <button 
+          className="btn-add-more" 
+          onClick={() => docInputRef.current?.click()} 
+          disabled={isAnalyzingFiles}
+          style={{
+            marginTop: '1.25rem',
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.5rem',
+            padding: '0.6rem',
+            background: 'none',
+            border: '1px dashed var(--border-color)',
+            borderRadius: '8px',
+            color: 'var(--text-primary)',
+            fontSize: '0.85rem',
+            cursor: 'pointer',
+            transition: 'all 0.2s'
+          }}
+        >
+          <Plus size={16} /> {isAnalyzingFiles ? 'Analyzing...' : 'Add More Materials'}
+        </button>
+        <input
+          type="file"
+          className="file-input"
+          ref={docInputRef}
+          accept="audio/*,image/*,application/pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          multiple
+          onChange={(e) => handleMultimodalUpload(e)}
+          style={{ display: 'none' }}
+        />
+      </div>
+    );
   };
 
   const startRecording = async () => {
@@ -764,305 +863,780 @@ function App() {
       }
 
       {
-        view === 'results' && transcript && (summary || records.find(r => r.id === selectedRecordId)?.items?.length > 0) && (
-          <div className="results-container">
-            <div className="glass-card summary-card">
-              <div className="section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <FileText size={24} style={{ color: 'var(--success)' }} />
-                  {records.find(r => r.id === selectedRecordId)?.items ? 'Matter Analysis' : 'Structured Intake Record'}
-                </div>
-                {records.find(r => r.id === selectedRecordId)?.items && (
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    {isEditing ? (
-                      <>
-                        <button 
-                          onClick={() => setIsEditing(false)} 
-                          disabled={isSavingSummary}
-                          title="Cancel Editing"
-                          style={{
-                            background: 'none', border: '1px solid var(--border-color)', borderRadius: '8px',
-                            padding: '0.4rem 0.6rem', color: 'var(--text-secondary)', cursor: 'pointer',
-                            display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem'
-                          }}
-                        >
-                          <X size={14} />
-                          <span className="hide-mobile">Cancel</span>
-                        </button>
-                        <button 
-                          onClick={handleSaveSummary} 
-                          disabled={isSavingSummary}
-                          title="Save Summary"
-                          style={{
-                            background: 'var(--primary)', border: 'none', borderRadius: '8px',
-                            padding: '0.4rem 0.6rem', color: 'white', cursor: 'pointer',
-                            display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem',
-                            opacity: isSavingSummary ? 0.5 : 1
-                          }}
-                        >
-                          <Save size={14} className={isSavingSummary ? 'spin' : ''} />
-                          <span className="hide-mobile">Save</span>
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button 
-                          onClick={() => {
-                            setEditContent(summary || '');
-                            setIsEditing(true);
-                          }} 
-                          disabled={isRegenerating}
-                          title="Edit Summary"
-                          style={{
-                            background: 'none', border: '1px solid var(--border-color)', borderRadius: '8px',
-                            padding: '0.4rem 0.6rem', color: 'var(--text-secondary)', cursor: 'pointer',
-                            display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem'
-                          }}
-                        >
-                          <Edit3 size={14} />
-                          <span className="hide-mobile">Edit</span>
-                        </button>
-                        <button 
-                          onClick={handleRegenerateSummary} 
-                          disabled={isRegenerating}
-                          title="Regenerate Full Summary"
-                          style={{
-                            background: 'none', border: '1px solid var(--border-color)', borderRadius: '8px',
-                            padding: '0.4rem 0.6rem', color: 'var(--text-secondary)', cursor: 'pointer',
-                            display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem',
-                            opacity: isRegenerating ? 0.5 : 1
-                          }}
-                        >
-                          <RefreshCw size={14} className={isRegenerating ? 'spin' : ''} />
-                          <span className="hide-mobile">Regenerate</span>
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-              <div className="markdown-body" onMouseUp={handleSelection} onTouchEnd={handleSelection} onKeyUp={handleSelection}>
-                {refinementFeedback && !isEditing && (
-                  <div style={{
-                    background: 'rgba(139, 92, 246, 0.15)',
-                    border: '1px solid var(--primary)',
-                    borderRadius: '8px',
-                    padding: '1rem',
-                    marginBottom: '1rem',
-                    display: 'flex',
-                    gap: '0.8rem',
-                    alignItems: 'flex-start'
-                  }}>
-                    <Wand2 size={20} color="var(--primary)" style={{ flexShrink: 0, marginTop: '2px' }} />
-                    <div style={{ flex: 1 }}>
-                      <h4 style={{ margin: '0 0 0.4rem 0', color: 'var(--text-primary)', fontSize: '0.95rem' }}>✨ AI Refinement Complete</h4>
-                      <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: '1.5' }}>{refinementFeedback}</p>
-                    </div>
-                    <button 
-                      onClick={() => setRefinementFeedback(null)}
-                      style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '0.2rem' }}
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-                )}
-                {isEditing ? (
-                  <textarea 
-                    value={editContent}
-                    onChange={(e) => setEditContent(e.target.value)}
+        view === 'results' && transcript && (summary || records.find(r => r.id === selectedRecordId)?.items?.length > 0) && (() => {
+          const record = records.find(r => r.id === selectedRecordId);
+          const analysis = record?.analysis;
+          
+          return (
+            <div className="results-container">
+              {/* Tabs Nav bar */}
+              <div className="results-tab-bar" style={{
+                gridColumn: '1 / -1',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                borderBottom: '1px solid var(--border-color)',
+                paddingBottom: '0.75rem',
+                marginBottom: '1rem',
+                gap: '1rem',
+                flexWrap: 'wrap'
+              }}>
+                <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto' }}>
+                  <button
+                    className={`btn-tab ${activeResultTab === 'package' ? 'active' : ''}`}
+                    onClick={() => setActiveResultTab('package')}
                     style={{
-                      width: '100%', minHeight: '400px', padding: '1rem', 
-                      borderRadius: '8px', border: '1px solid var(--border-color)',
-                      background: 'var(--card-bg)', color: 'var(--text-primary)',
-                      fontFamily: 'inherit', fontSize: '0.95rem', lineHeight: '1.6',
-                      resize: 'vertical', outline: 'none'
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      padding: '0.5rem 1rem',
+                      background: activeResultTab === 'package' ? 'rgba(59, 130, 246, 0.15)' : 'none',
+                      border: activeResultTab === 'package' ? '1px solid var(--accent-primary)' : '1px solid transparent',
+                      color: activeResultTab === 'package' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontSize: '0.9rem',
+                      transition: 'all 0.2s',
+                      whiteSpace: 'nowrap'
                     }}
-                  />
-                ) : (
-                  <ReactMarkdown>{summary}</ReactMarkdown>
-                )}
-              </div>
-            </div>
-
-            <div className="glass-card transcript-card-wrapper">
-              <div className="section-title">
-                Transcript
-              </div>
-
-              {audioUrl && (
-                <div className="audio-player-container">
-                  <audio 
-                    ref={audioRef} 
-                    controls 
-                    src={audioUrl} 
-                    onLoadedMetadata={() => {
-                      if (pendingSeek !== null && audioRef.current) {
-                        const seekTime = pendingSeek;
-                        setPendingSeek(null);
-                        setTimeout(() => {
-                          if (audioRef.current) {
-                            audioRef.current.currentTime = seekTime;
-                            audioRef.current.play().catch(() => {});
-                          }
-                        }, 50);
-                      }
+                  >
+                    <FileText size={16} /> Intake Package
+                  </button>
+                  <button
+                    className={`btn-tab ${activeResultTab === 'completeness' ? 'active' : ''}`}
+                    onClick={() => setActiveResultTab('completeness')}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      padding: '0.5rem 1rem',
+                      background: activeResultTab === 'completeness' ? 'rgba(59, 130, 246, 0.15)' : 'none',
+                      border: activeResultTab === 'completeness' ? '1px solid var(--accent-primary)' : '1px solid transparent',
+                      color: activeResultTab === 'completeness' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontSize: '0.9rem',
+                      transition: 'all 0.2s',
+                      whiteSpace: 'nowrap'
                     }}
-                  />
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.5rem', textAlign: 'center' }}>
-                    Click any word to jump to that timestamp
-                  </p>
+                  >
+                    <AlertCircle size={16} /> Completeness & Risk Flags
+                  </button>
+                  <button
+                    className={`btn-tab ${activeResultTab === 'evidence' ? 'active' : ''}`}
+                    onClick={() => setActiveResultTab('evidence')}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      padding: '0.5rem 1rem',
+                      background: activeResultTab === 'evidence' ? 'rgba(59, 130, 246, 0.15)' : 'none',
+                      border: activeResultTab === 'evidence' ? '1px solid var(--accent-primary)' : '1px solid transparent',
+                      color: activeResultTab === 'evidence' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontSize: '0.9rem',
+                      transition: 'all 0.2s',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    <Upload size={16} /> Evidence Mapping
+                  </button>
+                  <button
+                    className={`btn-tab ${activeResultTab === 'transcript' ? 'active' : ''}`}
+                    onClick={() => setActiveResultTab('transcript')}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      padding: '0.5rem 1rem',
+                      background: activeResultTab === 'transcript' ? 'rgba(59, 130, 246, 0.15)' : 'none',
+                      border: activeResultTab === 'transcript' ? '1px solid var(--accent-primary)' : '1px solid transparent',
+                      color: activeResultTab === 'transcript' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontSize: '0.9rem',
+                      transition: 'all 0.2s',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    <PlayCircle size={16} /> Audio Transcript
+                  </button>
                 </div>
+
+                {/* Global Add Materials Button */}
+                <button
+                  className="btn-add-more"
+                  onClick={() => docInputRef.current?.click()}
+                  disabled={isAnalyzingFiles}
+                  style={{
+                    padding: '0.5rem 1rem',
+                    background: 'var(--accent-primary)',
+                    border: 'none',
+                    borderRadius: '8px',
+                    color: 'white',
+                    fontSize: '0.85rem',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    transition: 'all 0.2s',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  <Plus size={16} /> {isAnalyzingFiles ? 'Analyzing...' : 'Add Materials'}
+                </button>
+              </div>
+
+              {/* 1. Intake Package Tab */}
+              {activeResultTab === 'package' && (
+                <>
+                  <div className="glass-card summary-card">
+                    <div className="section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <FileText size={24} style={{ color: 'var(--success)' }} />
+                        {record?.items ? 'Intake Summary Package' : 'Structured Intake Record'}
+                      </div>
+                      {record?.items && (
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          {isEditing ? (
+                            <>
+                              <button 
+                                onClick={() => setIsEditing(false)} 
+                                disabled={isSavingSummary}
+                                title="Cancel Editing"
+                                style={{
+                                  background: 'none', border: '1px solid var(--border-color)', borderRadius: '8px',
+                                  padding: '0.4rem 0.6rem', color: 'var(--text-secondary)', cursor: 'pointer',
+                                  display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem'
+                                }}
+                              >
+                                <X size={14} />
+                                <span className="hide-mobile">Cancel</span>
+                              </button>
+                              <button 
+                                onClick={handleSaveSummary} 
+                                disabled={isSavingSummary}
+                                title="Save Summary"
+                                style={{
+                                  background: 'var(--primary)', border: 'none', borderRadius: '8px',
+                                  padding: '0.4rem 0.6rem', color: 'white', cursor: 'pointer',
+                                  display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem',
+                                  opacity: isSavingSummary ? 0.5 : 1
+                                }}
+                              >
+                                <Save size={14} className={isSavingSummary ? 'spin' : ''} />
+                                <span className="hide-mobile">Save</span>
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button 
+                                onClick={() => {
+                                  setEditContent(summary || '');
+                                  setIsEditing(true);
+                                }} 
+                                disabled={isRegenerating}
+                                title="Edit Summary"
+                                style={{
+                                  background: 'none', border: '1px solid var(--border-color)', borderRadius: '8px',
+                                  padding: '0.4rem 0.6rem', color: 'var(--text-secondary)', cursor: 'pointer',
+                                  display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem'
+                                }}
+                              >
+                                <Edit3 size={14} />
+                                <span className="hide-mobile">Edit</span>
+                              </button>
+                              <button 
+                                onClick={handleRegenerateSummary} 
+                                disabled={isRegenerating}
+                                title="Regenerate Full Summary"
+                                style={{
+                                  background: 'none', border: '1px solid var(--border-color)', borderRadius: '8px',
+                                  padding: '0.4rem 0.6rem', color: 'var(--text-secondary)', cursor: 'pointer',
+                                  display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem',
+                                  opacity: isRegenerating ? 0.5 : 1
+                                }}
+                              >
+                                <RefreshCw size={14} className={isRegenerating ? 'spin' : ''} />
+                                <span className="hide-mobile">Regenerate</span>
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div className="markdown-body" onMouseUp={handleSelection} onTouchEnd={handleSelection} onKeyUp={handleSelection}>
+                      {refinementFeedback && !isEditing && (
+                        <div style={{
+                          background: 'rgba(139, 92, 246, 0.15)',
+                          border: '1px solid var(--primary)',
+                          borderRadius: '8px',
+                          padding: '1rem',
+                          marginBottom: '1rem',
+                          display: 'flex',
+                          gap: '0.8rem',
+                          alignItems: 'flex-start'
+                        }}>
+                          <Wand2 size={20} color="var(--primary)" style={{ flexShrink: 0, marginTop: '2px' }} />
+                          <div style={{ flex: 1 }}>
+                            <h4 style={{ margin: '0 0 0.4rem 0', color: 'var(--text-primary)', fontSize: '0.95rem' }}>✨ AI Refinement Complete</h4>
+                            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: '1.5' }}>{refinementFeedback}</p>
+                          </div>
+                          <button 
+                            onClick={() => setRefinementFeedback(null)}
+                            style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '0.2rem' }}
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      )}
+                      {isEditing ? (
+                        <textarea 
+                          value={editContent}
+                          onChange={(e) => setEditContent(e.target.value)}
+                          style={{
+                            width: '100%', minHeight: '400px', padding: '1rem', 
+                            borderRadius: '8px', border: '1px solid var(--border-color)',
+                            background: 'var(--card-bg)', color: 'var(--text-primary)',
+                            fontFamily: 'inherit', fontSize: '0.95rem', lineHeight: '1.6',
+                            resize: 'vertical', outline: 'none'
+                          }}
+                        />
+                      ) : (
+                        <ReactMarkdown>{summary}</ReactMarkdown>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Checklist sidebar */}
+                  <div className="glass-card checklist-sidebar-card" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    <div>
+                      <div className="section-title-small" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '1rem' }}>
+                        <CheckCircle size={18} style={{ color: 'var(--accent-primary)' }} />
+                        Required Documents Checklist
+                      </div>
+                      {analysis ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '320px', overflowY: 'auto', paddingRight: '0.25rem' }}>
+                          {analysis.documents.map((doc: any) => {
+                            const isProvided = doc.status === 'provided';
+                            return (
+                              <div key={doc.id} style={{
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                gap: '0.6rem',
+                                padding: '0.6rem',
+                                borderRadius: '6px',
+                                background: isProvided ? 'rgba(34, 197, 94, 0.05)' : 'rgba(239, 68, 68, 0.05)',
+                                border: `1px solid ${isProvided ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)'}`
+                              }}>
+                                <span style={{
+                                  color: isProvided ? 'var(--success)' : 'var(--danger)',
+                                  fontWeight: 'bold',
+                                  marginTop: '1px',
+                                  fontSize: '0.85rem'
+                                }}>
+                                  {isProvided ? '✓' : '⚠️'}
+                                </span>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.label}</div>
+                                  <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {isProvided ? `File: ${doc.fileName}` : 'Missing / Required'}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div style={{ padding: '1rem', borderRadius: '8px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', textAlign: 'center' }}>
+                          <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '0.75rem' }}>No Playbook analysis found.</p>
+                          <button className="btn-history" onClick={handleRegenerateSummary} disabled={isRegenerating} style={{ fontSize: '0.75rem', padding: '0.4rem 0.6rem' }}>
+                            <RefreshCw size={12} className={isRegenerating ? 'spin' : ''} /> Run Analysis
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <div className="section-title-small" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '1rem' }}>
+                        <HelpCircle size={18} style={{ color: 'var(--accent-primary)' }} />
+                        Follow-up Questions
+                      </div>
+                      {analysis ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', maxHeight: '250px', overflowY: 'auto', paddingRight: '0.25rem' }}>
+                          {analysis.followUpQuestions.length === 0 ? (
+                            <p style={{ color: 'var(--success)', fontSize: '0.8rem' }}>✓ All required facts extracted successfully!</p>
+                          ) : (
+                            analysis.followUpQuestions.map((q: any) => (
+                              <div key={q.id} style={{
+                                padding: '0.6rem',
+                                borderRadius: '6px',
+                                background: 'rgba(255, 255, 255, 0.02)',
+                                border: '1px solid var(--border-color)',
+                                fontSize: '0.75rem',
+                                color: 'var(--text-secondary)'
+                              }}>
+                                <strong>Q:</strong> {q.label}
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      ) : (
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>Run Playbook Analysis to extract questions.</p>
+                      )}
+                    </div>
+
+                    {/* Linked Materials inside Checklist Sidebar Card */}
+                    <div style={{ borderTop: '1px solid var(--border-color)', marginTop: '0.5rem', paddingTop: '1.5rem' }}>
+                      {renderLinkedMaterials()}
+                    </div>
+                  </div>
+                </>
               )}
 
-              <div className="transcript-card">
-                {records.find(r => r.id === selectedRecordId)?.items?.filter((i: any) => i.type === 'audio').length > 0 || transcript.utterances ? (
-                  transcript.utterances ? (
-                    (() => {
-                      const record = records.find(r => r.id === selectedRecordId);
-                      const audioItems = record?.items?.filter((i: any) => i.type === 'audio') || [];
-                      const hasAudioUrls = transcript.utterances.some((u: any) => u.audioUrl || u.fileUrl);
-                      
-                      const activeUtterances = (hasAudioUrls && audioUrl)
-                        ? transcript.utterances.filter((utt: any) => {
-                            const targetUrl = utt.audioUrl || utt.fileUrl || audioItems[0]?.url;
-                            return targetUrl && audioUrl.endsWith(targetUrl);
-                          })
-                        : transcript.utterances;
-
-                      return (
-                        <>
-                          {audioItems.length > 1 && (
-                            <div className="audio-tabs" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem', flexWrap: 'wrap' }}>
-                              {audioItems.map((item: any, idx: number) => {
-                                const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-                                const fullUrl = item.url.startsWith('http') ? item.url : `${baseUrl}${item.url}`;
-                                const isActive = audioUrl === fullUrl;
-                                return (
-                                  <button
-                                    key={idx}
-                                    className={`btn-tab ${isActive ? 'active' : ''}`}
-                                    onClick={() => {
-                                      setAudioUrl(fullUrl);
-                                      if (audioRef.current) {
-                                        audioRef.current.src = fullUrl;
-                                        audioRef.current.load();
-                                        audioRef.current.play().catch(e => console.error(e));
-                                      }
-                                    }}
-                                    style={{
-                                      padding: '0.4rem 0.8rem',
-                                      borderRadius: '16px',
-                                      border: '1px solid',
-                                      borderColor: isActive ? 'var(--accent-primary)' : 'var(--border-color)',
-                                      background: isActive ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.05)',
-                                      color: isActive ? 'var(--accent-primary)' : 'var(--text-secondary)',
-                                      fontWeight: isActive ? '600' : 'normal',
-                                      cursor: 'pointer',
-                                      fontSize: '0.8rem',
-                                      transition: 'all 0.2s',
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: '0.3rem'
-                                    }}
-                                  >
-                                    <PhoneCall size={12} />
-                                    {item.name || `Recording ${idx + 1}`}
-                                  </button>
-                                );
-                              })}
+              {/* 2. Completeness & Risk Flags Tab */}
+              {activeResultTab === 'completeness' && (
+                <>
+                  <div className="glass-card completeness-dashboard-card" style={{ gridColumn: analysis?.coverLetterDraft ? 'auto' : '1 / -1' }}>
+                    <div className="section-title">Case Completeness Dashboard</div>
+                    {analysis ? (
+                      <div>
+                        {/* Overall Score Section */}
+                        <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '2rem' }}>
+                          <div className="completeness-ring-container" style={{ position: 'relative', width: '120px', height: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <svg width="120" height="120" viewBox="0 0 120 120">
+                              <circle cx="60" cy="60" r="50" stroke="rgba(255,255,255,0.05)" strokeWidth="8" fill="transparent" />
+                              <circle cx="60" cy="60" r="50" stroke="var(--success)" strokeWidth="8" fill="transparent"
+                                strokeDasharray={2 * Math.PI * 50}
+                                strokeDashoffset={2 * Math.PI * 50 * (1 - analysis.completeness.overall / 100)}
+                                strokeLinecap="round"
+                                transform="rotate(-90 60 60)"
+                                style={{ transition: 'stroke-dashoffset 0.5s ease-in-out' }}
+                              />
+                            </svg>
+                            <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                              <span style={{ fontSize: '1.75rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>{analysis.completeness.overall}%</span>
+                              <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Score</span>
                             </div>
-                          )}
+                          </div>
 
-                          {activeUtterances.length === 0 ? (
-                            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                              No transcript text for this clip.
+                          <div style={{ flex: 1, minWidth: '220px', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                            <div style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                              Scenario: <span style={{ color: 'var(--accent-primary)' }}>{analysis.scenarioLabel}</span>
+                            </div>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                              Applied rules: <strong>Marriage-Based Green Card Playbook (v1.0)</strong>
+                            </div>
+                            {analysis.completeness.penaltiesApplied > 0 && (
+                              <div style={{ fontSize: '0.8rem', color: 'var(--danger)', background: 'rgba(239, 68, 68, 0.05)', padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid rgba(239, 68, 68, 0.15)', display: 'inline-block', width: 'fit-content' }}>
+                                ⚠️ Penalty Deductions: <strong>-{analysis.completeness.penaltiesApplied}%</strong> (from active risk flags)
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Dimension Progress Bars */}
+                        <h3 style={{ fontSize: '0.95rem', color: 'var(--text-primary)', marginBottom: '0.8rem', fontWeight: 600 }}>Dimension Breakdown</h3>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '2rem' }}>
+                          {[
+                            { label: 'Identity & Relationship', score: analysis.completeness.dimensions.identity, color: 'var(--accent-primary)' },
+                            { label: 'Bona Fide Marriage', score: analysis.completeness.dimensions.bona_fide, color: 'var(--success)' },
+                            { label: 'Financial Support', score: analysis.completeness.dimensions.financial, color: '#F59E0B' }, // Amber
+                            { label: 'Admissibility & Status', score: analysis.completeness.dimensions.admissibility, color: '#EF4444' } // Red
+                          ].map((dim, idx) => (
+                            <div key={idx} style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '0.4rem' }}>
+                                <span style={{ color: 'var(--text-primary)', fontWeight: 550 }}>{dim.label}</span>
+                                <span style={{ color: dim.color, fontWeight: 'bold' }}>{dim.score}%</span>
+                              </div>
+                              <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden' }}>
+                                <div style={{ width: `${dim.score}%`, height: '100%', background: dim.color, borderRadius: '3px', transition: 'width 0.5s ease-in-out' }} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Active Warning / Critical Banners */}
+                        <h3 style={{ fontSize: '0.95rem', color: 'var(--text-primary)', marginBottom: '0.8rem', fontWeight: 600 }}>Active Risk Flags ({analysis.riskFlags.length})</h3>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                          {analysis.riskFlags.length === 0 ? (
+                            <div style={{ padding: '1rem', textAlign: 'center', background: 'rgba(34, 197, 94, 0.05)', border: '1px solid rgba(34, 197, 94, 0.15)', borderRadius: '8px', color: 'var(--success)', fontSize: '0.85rem' }}>
+                              ✓ No risk flags or escalation conditions detected in this matter.
                             </div>
                           ) : (
-                            activeUtterances.map((utt: any, i: number) => {
+                            analysis.riskFlags.map((flag: any) => {
+                              const isCritical = flag.severity === 'critical';
+                              const isHigh = flag.severity === 'high';
+                              const severityColor = isCritical ? 'var(--danger)' : isHigh ? '#F59E0B' : 'var(--accent-primary)';
+                              const severityBg = isCritical ? 'rgba(239, 68, 68, 0.08)' : isHigh ? 'rgba(245, 158, 11, 0.08)' : 'rgba(59, 130, 246, 0.08)';
+                              const severityBorder = isCritical ? 'rgba(239, 68, 68, 0.2)' : isHigh ? 'rgba(245, 158, 11, 0.2)' : 'rgba(59, 130, 246, 0.2)';
+
                               return (
-                                <div className="utterance" key={i}>
-                                  <div className={`speaker-tag speaker-${utt.speaker}`}>
-                                    Speaker {utt.speaker} <span className="timestamp">{formatTime(utt.start)}</span>
-                                  </div>
-                                  <p>
-                                    {utt.words.map((word: any, wordIndex: number) => (
-                                      <span
-                                        key={wordIndex}
-                                        className={`transcript-word ${isActiveWord(utt, word) ? 'active' : ''}`}
-                                        onClick={() => handleWordClick(utt, word.start)}
-                                      >
-                                        {word.text}{' '}
+                                <div key={flag.id} style={{
+                                  background: severityBg,
+                                  border: `1px solid ${severityBorder}`,
+                                  borderRadius: '8px',
+                                  padding: '0.75rem 1rem',
+                                  display: 'flex',
+                                  gap: '0.75rem',
+                                  alignItems: 'flex-start'
+                                }}>
+                                  <AlertCircle size={18} color={severityColor} style={{ flexShrink: 0, marginTop: '2px' }} />
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.25rem', alignItems: 'center' }}>
+                                      <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>{flag.label}</h4>
+                                      <span style={{ fontSize: '0.65rem', fontWeight: 'bold', textTransform: 'uppercase', color: severityColor, background: `rgba(255,255,255,0.05)`, padding: '0.1rem 0.3rem', borderRadius: '4px' }}>
+                                        {flag.severity}
                                       </span>
-                                    ))}
-                                  </p>
+                                    </div>
+                                    <p style={{ margin: '0 0 0.4rem 0', fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: '1.4' }}>{flag.message}</p>
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.3rem', marginTop: '0.3rem' }}>
+                                      <strong>Source Trace:</strong> {flag.source}
+                                    </div>
+                                    {flag.action && (
+                                      <div style={{ fontSize: '0.75rem', color: 'var(--text-primary)', marginTop: '0.3rem' }}>
+                                        <strong>Action Required:</strong> {flag.action}
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
                               );
                             })
                           )}
-                        </>
-                      );
-                    })()
-                  ) : (
-                    <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                      No detailed transcript available for this audio.
-                    </div>
-                  )
-                ) : (
-                  <div className="no-transcript-placeholder">
-                    <FileText size={48} style={{ opacity: 0.1, marginBottom: '1rem' }} />
-                    <p>This matter collection focuses on document/image analysis.</p>
-                  </div>
-                )}
-              </div>
-
-              {records.find(r => r.id === selectedRecordId)?.items && records.find(r => r.id === selectedRecordId)?.items.length > 0 && (
-                <div className="linked-items-section">
-                  <div className="section-title-small">Linked Materials</div>
-                  <div className="items-grid">
-                    {records.find(r => r.id === selectedRecordId).items.map((item: any, idx: number) => (
-                      <div key={idx} className="linked-item-card" onClick={() => {
-                        if (item.type === 'audio') {
-                          const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-                          const fullUrl = item.url.startsWith('http') ? item.url : `${baseUrl}${item.url}`;
-                          if (audioUrl !== fullUrl) {
-                            audioRef.current?.play().catch(() => {});
-                            setAudioUrl(fullUrl);
-                          } else {
-                            audioRef.current?.play().catch(e => console.error(e));
-                          }
-                          // Scroll to audio player
-                          audioRef.current?.scrollIntoView({ behavior: 'smooth' });
-                          audioRef.current?.focus();
-                        } else {
-                          // Open images and PDFs in a new tab
-                          const base = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-                          window.open(`${base}${item.url}`, '_blank');
-                        }
-                      }}>
-                        {item.type === 'image' ? <ImageIcon size={20} /> : item.type === 'audio' ? <PlayCircle size={20} /> : <FileIcon size={20} />}
-                        <div className="item-meta">
-                          <span className="item-name">{item.name || `Item ${idx + 1}`}</span>
-                          <span className="item-type">{item.type.toUpperCase()}</span>
                         </div>
                       </div>
-                    ))}
+                    ) : (
+                      <div style={{ padding: '2rem', textAlign: 'center', background: 'rgba(255, 255, 255, 0.01)', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
+                        <AlertCircle size={36} style={{ opacity: 0.2, marginBottom: '0.75rem' }} />
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>No Playbook Analysis has been run for this case yet.</p>
+                        <button className="btn-history" onClick={handleRegenerateSummary} disabled={isRegenerating}>
+                          <RefreshCw size={12} className={isRegenerating ? 'spin' : ''} /> Run Playbook Analysis
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <button className="btn-add-more" onClick={() => docInputRef.current?.click()} disabled={isAnalyzingFiles}>
-                    <Plus size={16} /> {isAnalyzingFiles ? 'Analyzing...' : 'Add More Materials'}
-                  </button>
-                  <input
-                    type="file"
-                    className="file-input"
-                    ref={docInputRef}
-                    accept="audio/*,image/*,application/pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    multiple
-                    onChange={(e) => handleMultimodalUpload(e)}
-                  />
-                </div>
+
+                  {/* Right Column: Draft Cover Letter if available */}
+                  {analysis?.coverLetterDraft && (
+                    <div className="glass-card cover-letter-card" style={{ display: 'flex', flexDirection: 'column' }}>
+                      <div className="section-title-small" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                          <FileText size={18} style={{ color: 'var(--accent-primary)' }} />
+                          Draft Cover Letter Review
+                        </div>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(analysis.coverLetterDraft);
+                            showNotification('Copied', 'Cover letter copied to clipboard', 'success');
+                          }}
+                          style={{
+                            background: 'none', border: '1px solid var(--border-color)', borderRadius: '6px',
+                            padding: '0.3rem 0.6rem', fontSize: '0.75rem', color: 'var(--text-secondary)', cursor: 'pointer'
+                          }}
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      <div className="cover-letter-letterhead" style={{
+                        maxHeight: '480px', overflowY: 'auto', padding: '1.5rem',
+                        background: '#ffffff', color: '#1e293b', fontFamily: '"Georgia", serif',
+                        fontSize: '0.85rem', lineHeight: '1.6', borderRadius: '6px', border: '1px solid var(--border-color)',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), inset 0 2px 4px rgba(0,0,0,0.06)'
+                      }}>
+                        <ReactMarkdown>{analysis.coverLetterDraft}</ReactMarkdown>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
+
+              {/* 3. Evidence Mapping Tab */}
+              {activeResultTab === 'evidence' && (
+                <>
+                  <div className="glass-card evidence-mapping-card">
+                    <div className="section-title">Evidence & Document Mapping</div>
+                    {analysis ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                        
+                        {/* Core Documents */}
+                        <div>
+                          <h3 style={{ fontSize: '0.95rem', color: 'var(--text-primary)', marginBottom: '0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600 }}>
+                            <CheckCircle size={16} style={{ color: 'var(--success)' }} />
+                            Core Filing Checklists
+                          </h3>
+                          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '0 0 1rem 0' }}>
+                            Mandatory immigration items mapped directly to scenario guidelines.
+                          </p>
+                          <div style={{ overflowX: 'auto' }}>
+                            <table className="evidence-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                              <thead>
+                                <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
+                                  <th style={{ padding: '0.5rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Requirement</th>
+                                  <th style={{ padding: '0.5rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Category</th>
+                                  <th style={{ padding: '0.5rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Status</th>
+                                  <th style={{ padding: '0.5rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Matched Source File</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {analysis.documents.map((doc: any) => {
+                                  const isProvided = doc.status === 'provided';
+                                  const statusColor = isProvided ? 'var(--success)' : doc.status === 'needs_supplementation' ? '#F59E0B' : 'var(--danger)';
+                                  const statusLabel = doc.status.toUpperCase().replace(/_/g, ' ');
+
+                                  return (
+                                    <tr key={doc.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                      <td style={{ padding: '0.6rem 0.5rem', color: 'var(--text-primary)', fontWeight: 550 }}>{doc.label}</td>
+                                      <td style={{ padding: '0.6rem 0.5rem', color: 'var(--text-secondary)', textTransform: 'capitalize' }}>{doc.category.replace(/_/g, ' ')}</td>
+                                      <td style={{ padding: '0.6rem 0.5rem', color: statusColor, fontWeight: 'bold', fontSize: '0.75rem' }}>{statusLabel}</td>
+                                      <td style={{ padding: '0.6rem 0.5rem', color: isProvided ? 'var(--text-primary)' : 'var(--text-secondary)', fontStyle: isProvided ? 'normal' : 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }}>
+                                        {isProvided ? doc.fileName : 'Not Provided'}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        {/* Bona Fide Supporting Evidence */}
+                        <div>
+                          <h3 style={{ fontSize: '0.95rem', color: 'var(--text-primary)', marginBottom: '0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600 }}>
+                            <FileText size={16} style={{ color: 'var(--accent-primary)' }} />
+                            Relationship Evidence & Strength Map
+                          </h3>
+                          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '0 0 1rem 0' }}>
+                            Bona fide relationship files classified and graded by weight strength.
+                          </p>
+                          {analysis.evidence.length === 0 ? (
+                            <div style={{ padding: '1.5rem', textAlign: 'center', background: 'rgba(255, 255, 255, 0.01)', border: '1px dashed var(--border-color)', borderRadius: '8px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                              No relationship evidence found in case files yet.
+                            </div>
+                          ) : (
+                            <div style={{ overflowX: 'auto' }}>
+                              <table className="evidence-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                                <thead>
+                                  <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
+                                    <th style={{ padding: '0.5rem', color: 'var(--text-secondary)', fontWeight: 600 }}>File Name</th>
+                                    <th style={{ padding: '0.5rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Evidence Sub-type</th>
+                                    <th style={{ padding: '0.5rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Category</th>
+                                    <th style={{ padding: '0.5rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Strength</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {analysis.evidence.map((ev: any, idx: number) => {
+                                    const strengthColor = ev.strength === 'high' ? 'var(--success)' : ev.strength === 'medium' ? '#F59E0B' : 'var(--danger)';
+                                    
+                                    return (
+                                      <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                        <td style={{ padding: '0.6rem 0.5rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }}>{ev.fileName}</td>
+                                        <td style={{ padding: '0.6rem 0.5rem', color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
+                                          {ev.type.replace(/_/g, ' ')}
+                                        </td>
+                                        <td style={{ padding: '0.6rem 0.5rem', color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
+                                          {ev.category.replace(/_/g, ' ')}
+                                        </td>
+                                        <td style={{ padding: '0.6rem 0.5rem' }}>
+                                          <span style={{
+                                            color: strengthColor,
+                                            background: `${strengthColor}15`,
+                                            border: `1px solid ${strengthColor}25`,
+                                            padding: '0.1rem 0.3rem',
+                                            borderRadius: '4px',
+                                            fontSize: '0.7rem',
+                                            fontWeight: 'bold',
+                                            textTransform: 'uppercase'
+                                          }}>
+                                            {ev.strength}
+                                          </span>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+
+                      </div>
+                    ) : (
+                      <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '2rem', fontSize: '0.85rem' }}>No Playbook Analysis. Run analysis to display evidence mapping.</p>
+                    )}
+                  </div>
+
+                  {/* Right Column: Linked Materials */}
+                  <div className="glass-card linked-materials-sidebar">
+                    {renderLinkedMaterials()}
+                  </div>
+                </>
+              )}
+
+              {/* 4. Audio Transcript Tab */}
+              {activeResultTab === 'transcript' && (
+                <>
+                  <div className="glass-card transcript-left-card" style={{ gridColumn: record?.items?.some((i: any) => i.type === 'audio') || transcript.utterances ? 'auto' : '1 / -1' }}>
+                    <div className="section-title">
+                      Consultation Audio Transcript
+                    </div>
+
+                    {audioUrl && (
+                      <div className="audio-player-container" style={{ margin: '1rem 0', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                        <audio 
+                          ref={audioRef} 
+                          controls 
+                          src={audioUrl} 
+                          style={{ width: '100%' }}
+                          onLoadedMetadata={() => {
+                            if (pendingSeek !== null && audioRef.current) {
+                              const seekTime = pendingSeek;
+                              setPendingSeek(null);
+                              setTimeout(() => {
+                                if (audioRef.current) {
+                                  audioRef.current.currentTime = seekTime;
+                                  audioRef.current.play().catch(() => {});
+                                }
+                              }, 50);
+                            }
+                          }}
+                        />
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.5rem', textAlign: 'center' }}>
+                          Click any word to jump to that timestamp in the recording
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="transcript-card" style={{ maxHeight: '420px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '1rem', background: 'rgba(0,0,0,0.1)' }}>
+                      {record?.items?.filter((i: any) => i.type === 'audio').length > 0 || transcript.utterances ? (
+                        transcript.utterances ? (
+                          (() => {
+                            const audioItems = record?.items?.filter((i: any) => i.type === 'audio') || [];
+                            const hasAudioUrls = transcript.utterances.some((u: any) => u.audioUrl || u.fileUrl);
+                            
+                            const activeUtterances = (hasAudioUrls && audioUrl)
+                              ? transcript.utterances.filter((utt: any) => {
+                                  const targetUrl = utt.audioUrl || utt.fileUrl || audioItems[0]?.url;
+                                  return targetUrl && audioUrl.endsWith(targetUrl);
+                                })
+                              : transcript.utterances;
+
+                            return (
+                              <>
+                                {audioItems.length > 1 && (
+                                  <div className="audio-tabs" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem', flexWrap: 'wrap' }}>
+                                    {audioItems.map((item: any, idx: number) => {
+                                      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+                                      const fullUrl = item.url.startsWith('http') ? item.url : `${baseUrl}${item.url}`;
+                                      const isActive = audioUrl === fullUrl;
+                                      return (
+                                        <button
+                                          key={idx}
+                                          className={`btn-tab ${isActive ? 'active' : ''}`}
+                                          onClick={() => {
+                                            setAudioUrl(fullUrl);
+                                            if (audioRef.current) {
+                                              audioRef.current.src = fullUrl;
+                                              audioRef.current.load();
+                                              audioRef.current.play().catch(e => console.error(e));
+                                            }
+                                          }}
+                                          style={{
+                                            padding: '0.4rem 0.8rem',
+                                            borderRadius: '16px',
+                                            border: '1px solid',
+                                            borderColor: isActive ? 'var(--accent-primary)' : 'var(--border-color)',
+                                            background: isActive ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                                            color: isActive ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                                            fontWeight: isActive ? '600' : 'normal',
+                                            cursor: 'pointer',
+                                            fontSize: '0.8rem',
+                                            transition: 'all 0.2s',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '0.3rem'
+                                          }}
+                                        >
+                                          <PhoneCall size={12} />
+                                          {item.name || `Recording ${idx + 1}`}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+
+                                {activeUtterances.length === 0 ? (
+                                  <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                                    No transcript text for this clip.
+                                  </div>
+                                ) : (
+                                  activeUtterances.map((utt: any, i: number) => {
+                                    return (
+                                      <div className="utterance" key={i} style={{ marginBottom: '1.25rem' }}>
+                                        <div className={`speaker-tag speaker-${utt.speaker}`} style={{
+                                          fontSize: '0.75rem',
+                                          fontWeight: 'bold',
+                                          color: utt.speaker === '1' ? 'var(--accent-primary)' : 'var(--accent-secondary)',
+                                          marginBottom: '0.25rem',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '0.5rem'
+                                        }}>
+                                          Speaker {utt.speaker} <span className="timestamp" style={{ fontWeight: 'normal', color: 'var(--text-secondary)' }}>{formatTime(utt.start)}</span>
+                                        </div>
+                                        <p style={{ margin: 0, fontSize: '0.85rem', lineHeight: '1.5' }}>
+                                          {utt.words.map((word: any, wordIndex: number) => (
+                                            <span
+                                              key={wordIndex}
+                                              className={`transcript-word ${isActiveWord(utt, word) ? 'active' : ''}`}
+                                              onClick={() => handleWordClick(utt, word.start)}
+                                              style={{
+                                                cursor: 'pointer',
+                                                borderRadius: '2px',
+                                                padding: '0 2px',
+                                                background: isActiveWord(utt, word) ? 'rgba(59, 130, 246, 0.3)' : 'transparent',
+                                                color: isActiveWord(utt, word) ? 'var(--text-primary)' : 'inherit',
+                                                transition: 'background 0.1s'
+                                              }}
+                                            >
+                                              {word.text}{' '}
+                                            </span>
+                                          ))}
+                                        </p>
+                                      </div>
+                                    );
+                                  })
+                                )}
+                              </>
+                            );
+                          })()
+                        ) : (
+                          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                            No detailed transcript available for this audio.
+                          </div>
+                        )
+                      ) : (
+                        <div className="no-transcript-placeholder" style={{ textAlign: 'center', padding: '2rem' }}>
+                          <FileText size={48} style={{ opacity: 0.1, marginBottom: '1rem' }} />
+                          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>This matter collection focuses on document/image analysis.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Right Column: Linked Materials */}
+                  {record?.items && record.items.length > 0 && (
+                    <div className="glass-card linked-materials-sidebar">
+                      {renderLinkedMaterials()}
+                    </div>
+                  )}
+                </>
+              )}
+
             </div>
-          </div>
-        )
+          );
+        })()
       }
 
       {
@@ -1278,7 +1852,7 @@ function App() {
               <div className="spinner" style={{ width: '48px', height: '48px', borderWidth: '5px' }}></div>
               <h3 style={{ fontSize: '1.5rem', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '0.75rem' }}>Analyzing Materials</h3>
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', marginTop: '0.5rem', lineHeight: '1.5' }}>
-                Transcribing audio files and incorporating new insights into the intake summary... Please wait, this may take a moment.
+                {analyzingStatus}
               </p>
             </div>
           </div>
