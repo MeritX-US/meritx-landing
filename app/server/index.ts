@@ -32,14 +32,18 @@ const genAI = new GoogleGenerativeAI(geminiApiKey);
 const app = express();
 const port = process.env.PORT || 3001;
 
+const serverRootDir = fs.existsSync(path.join(__dirname, 'package.json'))
+    ? __dirname
+    : path.join(__dirname, '..');
+
 // Use CORS to allow frontend to communicate with backend
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false })); // To parse Twilio's form-encoded body
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', express.static(path.join(serverRootDir, 'uploads')));
 
 // Set up Multer for handling file uploads
-const uploadDirectory = path.join(__dirname, 'uploads');
+const uploadDirectory = path.join(serverRootDir, 'uploads');
 if (!fs.existsSync(uploadDirectory)) {
     fs.mkdirSync(uploadDirectory);
 }
@@ -69,7 +73,7 @@ const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
 const twilioClient = (twilioAccountSid && twilioAuthToken) ? twilio(twilioAccountSid, twilioAuthToken) : null;
 
 // Persistence Utility for Consultation History
-const recordsPath = path.join(__dirname, 'records.json');
+const recordsPath = path.join(serverRootDir, 'records.json');
 
 const getRecords = (): any[] => {
     try {
@@ -960,7 +964,7 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
             if (record.items) {
                 for (const item of record.items) {
                     if (item.type === 'image' || item.type === 'pdf') {
-                        const filePath = path.join(__dirname, item.url.replace('/uploads', 'uploads'));
+                        const filePath = path.join(serverRootDir, item.url.replace('/uploads', 'uploads'));
                         if (fs.existsSync(filePath)) {
                             const data = fs.readFileSync(filePath);
                             allMediaParts.push({
@@ -1014,7 +1018,7 @@ app.post('/api/intake/regenerate', async (req, res) => {
         if (existingRecord.items) {
             for (const item of existingRecord.items) {
                 if (item.type === 'image' || item.type === 'pdf') {
-                    const filePath = path.join(__dirname, item.url.replace('/uploads', 'uploads'));
+                    const filePath = path.join(serverRootDir, item.url.replace('/uploads', 'uploads'));
                     if (fs.existsSync(filePath)) {
                         const data = fs.readFileSync(filePath);
                         parts.push({

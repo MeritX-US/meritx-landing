@@ -3,12 +3,19 @@ import path from 'path';
 import fs from 'fs';
 import { runPlaybookAnalysis } from './playbookEngine';
 
-dotenv.config({ path: path.join(__dirname, '.env') });
+let envPath = path.join(__dirname, '.env');
+if (!fs.existsSync(envPath)) {
+  envPath = path.join(__dirname, '../.env');
+}
+dotenv.config({ path: envPath });
 
 async function test() {
-  const recordsPath = path.join(__dirname, 'records.json');
+  let recordsPath = path.join(__dirname, 'records.json');
   if (!fs.existsSync(recordsPath)) {
-    console.error('records.json not found!');
+    recordsPath = path.join(__dirname, '../records.json');
+  }
+  if (!fs.existsSync(recordsPath)) {
+    console.error('records.json not found at:', recordsPath);
     return;
   }
   
@@ -28,7 +35,10 @@ async function test() {
   if (record.items) {
     for (const item of record.items) {
       if (item.type === 'image' || item.type === 'pdf') {
-        const filePath = path.join(__dirname, item.url.replace('/uploads', 'uploads'));
+        let filePath = path.join(__dirname, item.url.replace('/uploads', 'uploads'));
+        if (!fs.existsSync(filePath)) {
+          filePath = path.join(__dirname, '../', item.url.replace('/uploads', 'uploads'));
+        }
         if (fs.existsSync(filePath)) {
           const data = fs.readFileSync(filePath);
           allMediaParts.push({
