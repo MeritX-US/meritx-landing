@@ -1004,3 +1004,26 @@ audio::-webkit-media-controls-time-remaining-display {
   background: rgba(59, 130, 246, 0.05);
   border-style: solid;
 }
+
+/* Petition Package Assembly Styling */
+.assembly-index-card {
+  grid-column: 2;
+}
+
+.assembly-preview-card {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+@media (max-width: 992px) {
+  .assembly-index-card {
+    grid-column: auto;
+    order: 1;
+  }
+  .assembly-preview-card {
+    grid-column: auto;
+    grid-row: auto;
+    order: 2;
+  }
+}
+
