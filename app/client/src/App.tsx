@@ -1183,15 +1183,20 @@ function App() {
           return (
             <div className="results-container">
               {/* Tabs Nav bar */}
-              <div className="results-tab-bar" style={{
+              <div className="results-tab-bar-container" style={{
                 gridColumn: '1 / -1',
-                display: 'flex',
-                alignItems: 'center',
-                borderBottom: '1px solid var(--border-color)',
-                paddingBottom: '0.75rem',
-                marginBottom: '1rem'
+                width: '100%',
+                marginBottom: '1.25rem',
+                borderBottom: '1px solid var(--border-color)'
               }}>
-                <div className="no-scrollbar" style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', width: '100%' }}>
+                <div className="results-tab-bar" style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '0.5rem',
+                  width: '100%',
+                  paddingBottom: '0.75rem',
+                  marginBottom: '-1px'
+                }}>
                   <button
                     className={`btn-tab ${activeResultTab === 'package' ? 'active' : ''}`}
                     onClick={() => setActiveResultTab('package')}
@@ -1210,7 +1215,9 @@ function App() {
                       whiteSpace: 'nowrap'
                     }}
                   >
-                    <FileText size={16} /> Intake Package
+                    <FileText size={16} />
+                    <span className="hide-mobile">Intake Package</span>
+                    <span className="show-mobile-inline">Intake</span>
                   </button>
                   <button
                     className={`btn-tab ${activeResultTab === 'completeness' ? 'active' : ''}`}
@@ -1230,7 +1237,9 @@ function App() {
                       whiteSpace: 'nowrap'
                     }}
                   >
-                    <AlertCircle size={16} /> Completeness & Risk Flags
+                    <AlertCircle size={16} />
+                    <span className="hide-mobile">Completeness & Risk Flags</span>
+                    <span className="show-mobile-inline">Completeness</span>
                   </button>
                   <button
                     className={`btn-tab ${activeResultTab === 'evidence' ? 'active' : ''}`}
@@ -1250,7 +1259,9 @@ function App() {
                       whiteSpace: 'nowrap'
                     }}
                   >
-                    <Upload size={16} /> Evidence Mapping
+                    <Upload size={16} />
+                    <span className="hide-mobile">Evidence Mapping</span>
+                    <span className="show-mobile-inline">Evidence</span>
                   </button>
                   <button
                     className={`btn-tab ${activeResultTab === 'transcript' ? 'active' : ''}`}
@@ -1270,7 +1281,9 @@ function App() {
                       whiteSpace: 'nowrap'
                     }}
                   >
-                    <PlayCircle size={16} /> Audio Transcript
+                    <PlayCircle size={16} />
+                    <span className="hide-mobile">Audio Transcript</span>
+                    <span className="show-mobile-inline">Transcript</span>
                   </button>
                   <button
                     className={`btn-tab ${activeResultTab === 'assembly' ? 'active' : ''}`}
@@ -1290,7 +1303,9 @@ function App() {
                       whiteSpace: 'nowrap'
                     }}
                   >
-                    <CheckCircle size={16} /> Petition Package
+                    <CheckCircle size={16} />
+                    <span className="hide-mobile">Petition Package</span>
+                    <span className="show-mobile-inline">Package</span>
                   </button>
                 </div>
               </div>
@@ -1627,23 +1642,9 @@ function App() {
                   {/* Right Column: Draft Cover Letter if available */}
                   {analysis?.coverLetterDraft && (
                     <div className="glass-card cover-letter-card" style={{ display: 'flex', flexDirection: 'column' }}>
-                      <div className="section-title-small" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                          <FileText size={18} style={{ color: 'var(--accent-primary)' }} />
-                          Draft Cover Letter Review
-                        </div>
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(analysis.coverLetterDraft);
-                            showNotification('Copied', 'Cover letter copied to clipboard', 'success');
-                          }}
-                          style={{
-                            background: 'none', border: '1px solid var(--border-color)', borderRadius: '6px',
-                            padding: '0.3rem 0.6rem', fontSize: '0.75rem', color: 'var(--text-secondary)', cursor: 'pointer'
-                          }}
-                        >
-                          Copy
-                        </button>
+                      <div className="section-title-small" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
+                        <FileText size={18} style={{ color: 'var(--accent-primary)' }} />
+                        Draft Cover Letter Review
                       </div>
                       <div className="cover-letter-letterhead" style={{
                         maxHeight: '480px', overflowY: 'auto', padding: '1.5rem',
@@ -1676,7 +1677,7 @@ function App() {
                             Mandatory immigration items mapped directly to scenario guidelines.
                           </p>
                           <div style={{ overflowX: 'auto' }}>
-                            <table className="evidence-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                            <table className="evidence-table" style={{ width: '100%', minWidth: '600px', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
                               <thead>
                                 <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
                                   <th style={{ padding: '0.5rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Requirement</th>
@@ -1722,7 +1723,7 @@ function App() {
                             </div>
                           ) : (
                             <div style={{ overflowX: 'auto' }}>
-                              <table className="evidence-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                              <table className="evidence-table" style={{ width: '100%', minWidth: '600px', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
                                 <thead>
                                   <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
                                     <th style={{ padding: '0.5rem', color: 'var(--text-secondary)', fontWeight: 600 }}>File Name</th>
@@ -1968,28 +1969,6 @@ function App() {
                               Format: <strong style={{ color: 'var(--text-primary)' }}>Georgia / Legal Letterhead</strong>
                             </span>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                              {selectedAssemblyDocId === 'cover-letter' && analysis.coverLetterDraft && (
-                                <button 
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(analysis.coverLetterDraft);
-                                    showNotification('Copied', 'Cover letter copied to clipboard', 'success');
-                                  }}
-                                  style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '0.4rem',
-                                    padding: '0.4rem 0.75rem',
-                                    background: 'rgba(255,255,255,0.05)',
-                                    border: '1px solid var(--border-color)',
-                                    borderRadius: '6px',
-                                    color: 'var(--text-primary)',
-                                    fontSize: '0.75rem',
-                                    cursor: 'pointer'
-                                  }}
-                                >
-                                  <Copy size={12} /> Copy Text
-                                </button>
-                              )}
                               <button 
                                 onClick={handleAssemblePackage}
                                 disabled={isAssembling}
@@ -2022,23 +2001,47 @@ function App() {
                             </div>
                           </div>
 
+                          {/* Mobile Document Selector */}
+                          <div className="assembly-mobile-selector">
+                            <div className="assembly-index-list">
+                              {[
+                                { id: 'cover-sheet', label: '1. Cover Sheet', icon: <FileText size={14} /> },
+                                { id: 'cover-letter', label: '2. Cover Letter', icon: <FileText size={14} /> },
+                                { id: 'form-mapping', label: '3. Forms Map', icon: <FileText size={14} /> },
+                                { id: 'exhibit-index', label: '4. Exhibits', icon: <FileText size={14} /> },
+                                { id: 'checklist', label: '5. Sign-off', icon: <CheckCircle size={14} /> },
+                              ].map((doc) => {
+                                const isSelected = selectedAssemblyDocId === doc.id;
+                                return (
+                                  <button
+                                    key={doc.id}
+                                    onClick={() => setSelectedAssemblyDocId(doc.id)}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '0.4rem',
+                                      padding: '0.5rem 0.8rem',
+                                      background: isSelected ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.02)',
+                                      border: `1px solid ${isSelected ? 'var(--accent-primary)' : 'var(--border-color)'}`,
+                                      color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)',
+                                      borderRadius: '8px',
+                                      cursor: 'pointer',
+                                      fontSize: '0.75rem',
+                                      fontWeight: isSelected ? 600 : 500,
+                                      transition: 'all 0.2s',
+                                      whiteSpace: 'nowrap'
+                                    }}
+                                  >
+                                    {doc.icon}
+                                    {doc.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+
                           {/* Paper Sheet Document Preview */}
-                          <div 
-                            className="assembly-paper-sheet" 
-                            style={{
-                              background: '#ffffff',
-                              color: '#1e293b',
-                              borderRadius: '8px',
-                              padding: '2rem',
-                              boxShadow: '0 4px 25px rgba(0, 0, 0, 0.25)',
-                              flex: 1,
-                              overflowY: 'auto',
-                              maxHeight: '560px',
-                              fontFamily: 'Georgia, serif',
-                              lineHeight: '1.6',
-                              fontSize: '0.9rem'
-                            }}
-                          >
+                          <div className="assembly-paper-sheet">
                             {/* Page 1: Filing Cover Sheet */}
                             {selectedAssemblyDocId === 'cover-sheet' && (
                               <div>
@@ -2108,30 +2111,32 @@ function App() {
                                         <h4 style={{ color: '#0f172a', borderBottom: '1px solid #cbd5e1', paddingBottom: '0.25rem', marginBottom: '0.75rem', fontSize: '1rem', fontWeight: 'bold' }}>
                                           Form {formName} Field Data
                                         </h4>
-                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
-                                          <thead>
-                                            <tr style={{ borderBottom: '1px solid #94a3b8', textAlign: 'left' }}>
-                                              <th style={{ padding: '0.4rem', fontWeight: 'bold' }}>Field Name</th>
-                                              <th style={{ padding: '0.4rem', fontWeight: 'bold' }}>Mapped Value</th>
-                                              <th style={{ padding: '0.4rem', fontWeight: 'bold' }}>Source Record</th>
-                                            </tr>
-                                          </thead>
-                                          <tbody>
-                                            {Object.keys(fields).map((fieldName) => {
-                                              const matchingFactKey = Object.keys(analysis.facts).find(k => k === fieldName || fieldName.includes(k));
-                                              const sourceText = matchingFactKey ? analysis.facts[matchingFactKey]?.source : 'Extracted from intake';
-                                              return (
-                                                <tr key={fieldName} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                                                  <td style={{ padding: '0.4rem', fontWeight: 600, color: '#334155' }}>
-                                                    {fieldName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
-                                                  </td>
-                                                  <td style={{ padding: '0.4rem', color: '#0f172a' }}>{fields[fieldName]}</td>
-                                                  <td style={{ padding: '0.4rem', color: '#64748b', fontStyle: 'italic', fontSize: '0.75rem' }}>{sourceText}</td>
-                                                </tr>
-                                              );
-                                            })}
-                                          </tbody>
-                                        </table>
+                                        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                                          <table style={{ width: '100%', minWidth: '500px', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                                            <thead>
+                                              <tr style={{ borderBottom: '1px solid #94a3b8', textAlign: 'left' }}>
+                                                <th style={{ padding: '0.4rem', fontWeight: 'bold' }}>Field Name</th>
+                                                <th style={{ padding: '0.4rem', fontWeight: 'bold' }}>Mapped Value</th>
+                                                <th style={{ padding: '0.4rem', fontWeight: 'bold' }}>Source Record</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody>
+                                              {Object.keys(fields).map((fieldName) => {
+                                                const matchingFactKey = Object.keys(analysis.facts).find(k => k === fieldName || fieldName.includes(k));
+                                                const sourceText = matchingFactKey ? analysis.facts[matchingFactKey]?.source : 'Extracted from intake';
+                                                return (
+                                                  <tr key={fieldName} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                                                    <td style={{ padding: '0.4rem', fontWeight: 600, color: '#334155' }}>
+                                                      {fieldName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                                                    </td>
+                                                    <td style={{ padding: '0.4rem', color: '#0f172a' }}>{fields[fieldName]}</td>
+                                                    <td style={{ padding: '0.4rem', color: '#64748b', fontStyle: 'italic', fontSize: '0.75rem' }}>{sourceText}</td>
+                                                  </tr>
+                                                );
+                                              })}
+                                            </tbody>
+                                          </table>
+                                        </div>
                                       </div>
                                     );
                                   })
@@ -2148,44 +2153,46 @@ function App() {
                                 <p style={{ fontSize: '0.8rem', color: '#64748b', textAlign: 'center', marginBottom: '2rem' }}>
                                   In Support of Concurrent Filing of Form I-130 and Form I-485
                                 </p>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
-                                  <thead>
-                                    <tr style={{ borderBottom: '2px solid #475569', textAlign: 'left' }}>
-                                      <th style={{ padding: '0.5rem', fontWeight: 'bold', width: '90px' }}>Exhibit</th>
-                                      <th style={{ padding: '0.5rem', fontWeight: 'bold' }}>Document Description</th>
-                                      <th style={{ padding: '0.5rem', fontWeight: 'bold', width: '120px' }}>Status</th>
-                                      <th style={{ padding: '0.5rem', fontWeight: 'bold' }}>Linked File</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {analysis.documents.map((doc: any, index: number) => {
-                                      const isProvided = doc.status === 'provided';
-                                      const letter = String.fromCharCode(65 + index);
-                                      return (
-                                        <tr key={doc.id} style={{ borderBottom: '1px solid #cbd5e1' }}>
-                                          <td style={{ padding: '0.6rem 0.5rem', fontWeight: 'bold', color: '#0f172a' }}>Exhibit {letter}</td>
-                                          <td style={{ padding: '0.6rem 0.5rem', color: '#334155', fontWeight: 550 }}>{doc.label}</td>
-                                          <td style={{ padding: '0.6rem 0.5rem' }}>
-                                            <span style={{
-                                              display: 'inline-block',
-                                              padding: '0.1rem 0.35rem',
-                                              borderRadius: '4px',
-                                              fontSize: '0.7rem',
-                                              fontWeight: 'bold',
-                                              background: isProvided ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                                              color: isProvided ? '#16a34a' : '#dc2626'
-                                            }}>
-                                              {isProvided ? '✓ MATCHED' : '⚠️ MISSING'}
-                                            </span>
-                                          </td>
-                                          <td style={{ padding: '0.6rem 0.5rem', color: isProvided ? '#0f172a' : '#94a3b8', fontStyle: isProvided ? 'normal' : 'italic', fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' }}>
-                                            {isProvided ? doc.fileName : 'Not Provided'}
-                                          </td>
-                                        </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                </table>
+                                <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                                  <table style={{ width: '100%', minWidth: '600px', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                                    <thead>
+                                      <tr style={{ borderBottom: '2px solid #475569', textAlign: 'left' }}>
+                                        <th style={{ padding: '0.5rem', fontWeight: 'bold', width: '90px' }}>Exhibit</th>
+                                        <th style={{ padding: '0.5rem', fontWeight: 'bold' }}>Document Description</th>
+                                        <th style={{ padding: '0.5rem', fontWeight: 'bold', width: '120px' }}>Status</th>
+                                        <th style={{ padding: '0.5rem', fontWeight: 'bold' }}>Linked File</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {analysis.documents.map((doc: any, index: number) => {
+                                        const isProvided = doc.status === 'provided';
+                                        const letter = String.fromCharCode(65 + index);
+                                        return (
+                                          <tr key={doc.id} style={{ borderBottom: '1px solid #cbd5e1' }}>
+                                            <td style={{ padding: '0.6rem 0.5rem', fontWeight: 'bold', color: '#0f172a' }}>Exhibit {letter}</td>
+                                            <td style={{ padding: '0.6rem 0.5rem', color: '#334155', fontWeight: 550 }}>{doc.label}</td>
+                                            <td style={{ padding: '0.6rem 0.5rem' }}>
+                                              <span style={{
+                                                display: 'inline-block',
+                                                padding: '0.1rem 0.35rem',
+                                                borderRadius: '4px',
+                                                fontSize: '0.7rem',
+                                                fontWeight: 'bold',
+                                                background: isProvided ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                                                color: isProvided ? '#16a34a' : '#dc2626'
+                                              }}>
+                                                {isProvided ? '✓ MATCHED' : '⚠️ MISSING'}
+                                              </span>
+                                            </td>
+                                            <td style={{ padding: '0.6rem 0.5rem', color: isProvided ? '#0f172a' : '#94a3b8', fontStyle: isProvided ? 'normal' : 'italic', fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' }}>
+                                              {isProvided ? doc.fileName : 'Not Provided'}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
                               </div>
                             )}
 
@@ -2270,7 +2277,7 @@ function App() {
                   {/* Right Column: Index of Documents */}
                   <div className="glass-card assembly-index-card">
                     <div className="section-title-small" style={{ marginBottom: '1.25rem' }}>Index of Documents</div>
-                    <div className="assembly-index-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <div className="assembly-index-list">
                       {[
                         { id: 'cover-sheet', label: '1. Filing Cover Sheet', icon: <FileText size={16} /> },
                         { id: 'cover-letter', label: '2. Attorney Cover Letter', icon: <FileText size={16} /> },
@@ -2287,7 +2294,6 @@ function App() {
                               display: 'flex',
                               alignItems: 'center',
                               gap: '0.6rem',
-                              width: '100%',
                               padding: '0.75rem 1rem',
                               background: isSelected ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.02)',
                               border: `1px solid ${isSelected ? 'var(--accent-primary)' : 'var(--border-color)'}`,

@@ -1016,13 +1016,11 @@ audio::-webkit-media-controls-time-remaining-display {
 
 @media (max-width: 992px) {
   .assembly-index-card {
-    grid-column: auto;
-    order: 1;
+    display: none !important;
   }
   .assembly-preview-card {
     grid-column: auto;
     grid-row: auto;
-    order: 2;
   }
 }
 
@@ -1063,5 +1061,126 @@ audio::-webkit-media-controls-time-remaining-display {
 }
 .legal-markdown-preview strong {
   color: #0f172a !important;
+}
+
+.assembly-paper-sheet {
+  background: #ffffff;
+  color: #1e293b;
+  border-radius: 8px;
+  padding: 2rem;
+  box-shadow: 0 4px 25px rgba(0, 0, 0, 0.25);
+  flex: 1;
+  overflow-y: auto;
+  max-height: 560px;
+  font-family: Georgia, serif;
+  line-height: 1.6;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 600px) {
+  .assembly-paper-sheet {
+    padding: 1rem;
+  }
+}
+
+.assembly-index-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.assembly-index-list button {
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .assembly-index-list {
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    overflow-x: visible !important;
+    padding-bottom: 0 !important;
+    mask-image: none !important;
+    -webkit-mask-image: none !important;
+  }
+  .assembly-index-list::-webkit-scrollbar {
+    display: none !important;
+  }
+  .assembly-index-list::before,
+  .assembly-index-list::after {
+    display: none !important;
+  }
+  .assembly-index-list button {
+    flex: 1 1 calc(50% - 0.5rem) !important;
+    justify-content: center !important;
+    font-size: 0.75rem !important;
+    padding: 0.45rem 0.6rem !important;
+    width: auto !important;
+  }
+}
+
+/* Tab navigation responsiveness */
+.show-mobile-inline {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .show-mobile-inline {
+    display: inline-block !important;
+  }
+  .hide-mobile {
+    display: none !important;
+  }
+}
+
+/* Header subtitle & layout responsiveness on mobile */
+@media (max-width: 600px) {
+  .header {
+    padding: 0.5rem 0 !important;
+    margin-bottom: 0.5rem !important;
+  }
+  .header h1 {
+    font-size: 1.25rem !important;
+    margin-bottom: 0 !important;
+  }
+  .header p {
+    display: none !important;
+  }
+}
+
+/* Integrated Document Page Selector for mobile */
+.assembly-mobile-selector {
+  display: none;
+}
+
+@media (max-width: 992px) {
+  .assembly-mobile-selector {
+    display: block;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.75rem;
+  }
+}
+
+/* Tab navigation container */
+.results-tab-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  width: 100%;
+  padding-bottom: 0.75rem;
+  margin-bottom: -1px;
+}
+
+@media (max-width: 768px) {
+  .results-tab-bar {
+    padding-bottom: 0 !important;
+    margin-bottom: 0 !important;
+  }
+  .results-tab-bar .btn-tab {
+    flex: 1 1 calc(33.33% - 0.5rem) !important;
+    justify-content: center !important;
+    font-size: 0.75rem !important;
+    padding: 0.45rem 0.6rem !important;
+  }
 }
 
