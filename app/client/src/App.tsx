@@ -4,6 +4,67 @@ import { Upload, Mic, AlertCircle, FileText, PlayCircle, Square, History, ArrowL
 import ReactMarkdown from 'react-markdown';
 import './App.css';
 
+const convertToWordHtml = (title: string, markdown: string) => {
+  if (!markdown) return '';
+  let htmlBody = markdown
+    .replace(/\r\n/g, '\n')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/^# (.*?)$/gm, '<h1>$1</h1>')
+    .replace(/^## (.*?)$/gm, '<h2>$1</h2>')
+    .replace(/^### (.*?)$/gm, '<h3>$1</h3>')
+    .replace(/^#### (.*?)$/gm, '<h4>$1</h4>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/^- (.*?)$/gm, '<li>$1</li>')
+    .replace(/^\* (.*?)$/gm, '<li>$1</li>')
+    .split(/\n\n+/)
+    .map(para => {
+      para = para.trim();
+      if (!para) return '';
+      if (para.startsWith('<h') || para.startsWith('<li>') || para.startsWith('<ul>')) {
+        return para;
+      }
+      return `<p>${para.replace(/\n/g, '<br />')}</p>`;
+    })
+    .join('\n');
+
+  htmlBody = htmlBody.replace(/(<li>.*?<\/li>)+/gs, (match) => `<ul>${match}</ul>`);
+  
+  htmlBody = htmlBody
+    .replace(/&lt;h1&gt;/g, '<h1>').replace(/&lt;\/h1&gt;/g, '</h1>')
+    .replace(/&lt;h2&gt;/g, '<h2>').replace(/&lt;\/h2&gt;/g, '</h2>')
+    .replace(/&lt;h3&gt;/g, '<h3>').replace(/&lt;\/h3&gt;/g, '</h3>')
+    .replace(/&lt;h4&gt;/g, '<h4>').replace(/&lt;\/h4&gt;/g, '</h4>')
+    .replace(/&lt;strong&gt;/g, '<strong>').replace(/&lt;\/strong&gt;/g, '</strong>')
+    .replace(/&lt;em&gt;/g, '<em>').replace(/&lt;\/em&gt;/g, '</em>')
+    .replace(/&lt;li&gt;/g, '<li>').replace(/&lt;\/li&gt;/g, '</li>')
+    .replace(/&lt;ul&gt;/g, '<ul>').replace(/&lt;\/ul&gt;/g, '</ul>')
+    .replace(/&lt;p&gt;/g, '<p>').replace(/&lt;\/p&gt;/g, '</p>')
+    .replace(/&lt;br \/&gt;/g, '<br />');
+
+  return `
+<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+<head>
+  <meta charset="utf-8">
+  <title>${title}</title>
+  <style>
+    body { font-family: 'Georgia', serif; line-height: 1.6; font-size: 11pt; color: #1e293b; }
+    h1 { font-size: 16pt; color: #0f172a; margin-top: 24px; margin-bottom: 12px; font-weight: bold; }
+    h2 { font-size: 13pt; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; color: #0f172a; margin-top: 20px; margin-bottom: 10px; font-weight: bold; }
+    h3 { font-size: 11pt; color: #334155; margin-top: 16px; margin-bottom: 8px; font-weight: bold; }
+    p { margin-top: 0; margin-bottom: 12px; }
+    ul { margin-top: 0; margin-bottom: 12px; padding-left: 20px; }
+    li { margin-bottom: 6px; }
+  </style>
+</head>
+<body>
+  ${htmlBody}
+</body>
+</html>`;
+};
+
 // Types for AssemblyAI responses
 interface TranscriptWord {
   text: string;
@@ -353,9 +414,11 @@ function App() {
       const zip = new JSZip();
       
       // 1. Add Cover Letter
-      zip.file("01_Cover_Letter.md", record.analysis.coverLetterDraft);
+      const coverLetterDoc = convertToWordHtml("Cover Letter", record.analysis.coverLetterDraft);
+      zip.file("01_Cover_Letter.doc", coverLetterDoc);
+      zip.file("internal/01_Cover_Letter.md", record.analysis.coverLetterDraft);
       
-      // 2. Add Exhibit Index as markdown
+      // 2. Add Exhibit Index
       let exhibitIndexContent = "# Exhibit Index\n\n";
       record.analysis.documents.forEach((doc: any, idx: number) => {
         const isProvided = doc.status === 'provided';
@@ -367,7 +430,9 @@ function App() {
         }
         exhibitIndexContent += `\n`;
       });
-      zip.file("02_Exhibit_Index.md", exhibitIndexContent);
+      const exhibitIndexDoc = convertToWordHtml("Exhibit Index", exhibitIndexContent);
+      zip.file("02_Exhibit_Index.doc", exhibitIndexDoc);
+      zip.file("internal/02_Exhibit_Index.md", exhibitIndexContent);
       
       // 3. Add USCIS Form Field Mappings
       let formMappingContent = "# USCIS Form Field Mappings\n\n";
@@ -380,7 +445,9 @@ function App() {
         });
         formMappingContent += `\n`;
       });
-      zip.file("03_Form_Field_Mappings.md", formMappingContent);
+      const formMappingDoc = convertToWordHtml("Form Field Mappings", formMappingContent);
+      zip.file("03_Form_Field_Mappings.doc", formMappingDoc);
+      zip.file("internal/03_Form_Field_Mappings.md", formMappingContent);
       
       // 4. Download and add uploaded files to exhibits/ folder
       const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -963,15 +1030,12 @@ function App() {
               <div className="results-tab-bar" style={{
                 gridColumn: '1 / -1',
                 display: 'flex',
-                justifyContent: 'space-between',
                 alignItems: 'center',
                 borderBottom: '1px solid var(--border-color)',
                 paddingBottom: '0.75rem',
-                marginBottom: '1rem',
-                gap: '1rem',
-                flexWrap: 'wrap'
+                marginBottom: '1rem'
               }}>
-                <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto' }}>
+                <div className="no-scrollbar" style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', width: '100%' }}>
                   <button
                     className={`btn-tab ${activeResultTab === 'package' ? 'active' : ''}`}
                     onClick={() => setActiveResultTab('package')}
@@ -1073,30 +1137,6 @@ function App() {
                     <CheckCircle size={16} /> Petition Package
                   </button>
                 </div>
-
-                {/* Global Add Materials Button */}
-                <button
-                  className="btn-add-more"
-                  onClick={() => docInputRef.current?.click()}
-                  disabled={isAnalyzingFiles}
-                  style={{
-                    padding: '0.5rem 1rem',
-                    background: 'var(--accent-primary)',
-                    border: 'none',
-                    borderRadius: '8px',
-                    color: 'white',
-                    fontSize: '0.85rem',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.4rem',
-                    transition: 'all 0.2s',
-                    whiteSpace: 'nowrap'
-                  }}
-                >
-                  <Plus size={16} /> {isAnalyzingFiles ? 'Analyzing...' : 'Add Materials'}
-                </button>
               </div>
 
               {/* 1. Intake Package Tab */}
@@ -1819,7 +1859,7 @@ function App() {
                                   </>
                                 ) : (
                                   <>
-                                    <Download size={12} /> 一键下载 ZIP 包
+                                    <Download size={12} /> Download ZIP
                                   </>
                                 )}
                               </button>
@@ -2401,16 +2441,19 @@ function App() {
                       ARCHIVE CONTENTS:
                     </div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      📄 <strong>01_Cover_Letter.md</strong> - Drafted Attorney Letter
+                      📄 <strong>01_Cover_Letter.doc</strong> - Drafted Attorney Letter
                     </div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      📑 <strong>02_Exhibit_Index.md</strong> - Mapped Exhibit List
+                      📑 <strong>02_Exhibit_Index.doc</strong> - Mapped Exhibit List
                     </div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      📝 <strong>03_Form_Field_Mappings.md</strong> - USCIS Mapped Fields
+                      📝 <strong>03_Form_Field_Mappings.doc</strong> - USCIS Mapped Fields
                     </div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                       📁 <strong>exhibits/</strong> - folder containing {documentCount} matched files
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      📁 <strong>internal/</strong> - folder containing raw Markdown (.md) drafts
                     </div>
                   </div>
                 );
