@@ -1033,3 +1033,35 @@ audio::-webkit-media-controls-time-remaining-display {
   -ms-overflow-style: none;  /* IE and Edge */
   scrollbar-width: none;  /* Firefox */
 }
+
+/* Legal Document Markdown Preview overrides (for white paper sheet) */
+.legal-markdown-preview h1,
+.legal-markdown-preview h2,
+.legal-markdown-preview h3,
+.legal-markdown-preview h4 {
+  color: #0f172a !important;
+  font-family: Georgia, serif;
+  font-weight: bold;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+.legal-markdown-preview h1 { font-size: 1.4rem; }
+.legal-markdown-preview h2 { font-size: 1.2rem; border-bottom: 1px solid #cbd5e1; padding-bottom: 0.25rem; }
+.legal-markdown-preview h3 { font-size: 1.05rem; }
+.legal-markdown-preview p {
+  color: #1e293b !important;
+  margin-bottom: 1rem;
+}
+.legal-markdown-preview ul,
+.legal-markdown-preview ol {
+  color: #1e293b !important;
+  padding-left: 1.5rem;
+  margin-bottom: 1rem;
+}
+.legal-markdown-preview li {
+  margin-bottom: 0.25rem;
+}
+.legal-markdown-preview strong {
+  color: #0f172a !important;
+}
+

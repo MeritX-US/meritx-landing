@@ -2086,8 +2086,12 @@ function App() {
 
                             {/* Page 2: Attorney Cover Letter */}
                             {selectedAssemblyDocId === 'cover-letter' && (
-                              <div style={{ whiteSpace: 'pre-wrap' }}>
-                                {analysis.coverLetterDraft || 'No cover letter draft generated.'}
+                              <div className="legal-markdown-preview">
+                                {analysis.coverLetterDraft ? (
+                                  <ReactMarkdown>{analysis.coverLetterDraft}</ReactMarkdown>
+                                ) : (
+                                  'No cover letter draft generated.'
+                                )}
                               </div>
                             )}
 
