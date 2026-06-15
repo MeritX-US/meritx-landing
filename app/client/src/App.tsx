@@ -2045,19 +2045,28 @@ function App() {
                             {/* Page 1: Filing Cover Sheet */}
                             {selectedAssemblyDocId === 'cover-sheet' && (() => {
                               const docs = analysis?.documents || [];
-                              const missingDocs = docs.filter((d: any) => d.status === 'missing' || d.status === 'needs_supplementation');
+                              const missingDocs = docs.filter((d: any) => d && (d.status === 'missing' || d.status === 'needs_supplementation'));
                               const isComplete = missingDocs.length === 0;
 
                               const hasCoverLetter = !!analysis?.coverLetterDraft && analysis.coverLetterDraft.trim().length > 0;
-                              const hasFormMapping = !!analysis?.uscisFormMapping && Object.keys(analysis.uscisFormMapping).length > 0;
+                              const hasFormMapping = !!analysis?.uscisFormMapping && typeof analysis.uscisFormMapping === 'object' && Object.keys(analysis.uscisFormMapping).length > 0;
 
-                              const civilDocs = docs.filter((d: any) => ['identity', 'marriage', 'entry_status', 'medical', 'civil_documents_consular'].includes(d.category));
-                              const missingCivilDocs = civilDocs.filter((d: any) => d.status === 'missing' || d.status === 'needs_supplementation');
+                              const civilDocs = docs.filter((d: any) => d && d.category && ['identity', 'marriage', 'entry_status', 'medical', 'civil_documents_consular'].includes(d.category));
+                              const missingCivilDocs = civilDocs.filter((d: any) => d && (d.status === 'missing' || d.status === 'needs_supplementation'));
                               const isCivilComplete = missingCivilDocs.length === 0;
 
-                              const finDocs = docs.filter((d: any) => d.category === 'financial_support');
-                              const missingFinDocs = finDocs.filter((d: any) => d.status === 'missing' || d.status === 'needs_supplementation');
+                              const finDocs = docs.filter((d: any) => d && d.category === 'financial_support');
+                              const missingFinDocs = finDocs.filter((d: any) => d && (d.status === 'missing' || d.status === 'needs_supplementation'));
                               const isFinComplete = missingFinDocs.length === 0;
+
+                              const getDisplayName = (val: any, fallback: string): string => {
+                                if (!val) return fallback;
+                                if (typeof val === 'string') return val;
+                                if (typeof val === 'object') {
+                                  return val.full_name || val.name || JSON.stringify(val);
+                                }
+                                return String(val);
+                              };
 
                               return (
                                 <div>
@@ -2073,10 +2082,10 @@ function App() {
                                     <div>Marriage-Based Permanent Residence (AOS concurrent filing)</div>
                                     
                                     <div style={{ fontWeight: 'bold', color: '#475569' }}>PETITIONER:</div>
-                                    <div>{analysis?.facts?.petitioner_identity?.value || 'Michael David Johnson'} (U.S. Citizen)</div>
+                                    <div>{getDisplayName(analysis?.facts?.petitioner_identity?.value, 'Michael David Johnson')} (U.S. Citizen)</div>
                                     
                                     <div style={{ fontWeight: 'bold', color: '#475569' }}>BENEFICIARY:</div>
-                                    <div>{analysis?.facts?.beneficiary_identity?.value || 'Li Ying Chen Martinez'} (China/PRC)</div>
+                                    <div>{getDisplayName(analysis?.facts?.beneficiary_identity?.value, 'Li Ying Chen Martinez')} (China/PRC)</div>
 
                                     <div style={{ fontWeight: 'bold', color: '#475569' }}>FORMS INCLUDED:</div>
                                     <div>Form I-130, I-130A, I-485, I-864, I-693</div>
@@ -2157,8 +2166,8 @@ function App() {
                                             </thead>
                                             <tbody>
                                               {Object.keys(fields).map((fieldName) => {
-                                                const matchingFactKey = Object.keys(analysis.facts).find(k => k === fieldName || fieldName.includes(k));
-                                                const sourceText = matchingFactKey ? analysis.facts[matchingFactKey]?.source : 'Extracted from intake';
+                                                const matchingFactKey = Object.keys(analysis?.facts || {}).find(k => k === fieldName || fieldName.includes(k));
+                                                const sourceText = matchingFactKey ? (analysis?.facts || {})[matchingFactKey]?.source : 'Extracted from intake';
                                                 return (
                                                   <tr key={fieldName} style={{ borderBottom: '1px solid #e2e8f0' }}>
                                                     <td style={{ padding: '0.4rem', fontWeight: 600, color: '#334155' }}>
