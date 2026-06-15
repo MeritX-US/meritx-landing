@@ -3,6 +3,7 @@ import JSZip from 'jszip';
 import { Upload, Mic, AlertCircle, FileText, PlayCircle, Square, History, ArrowLeft, Trash2, Calendar, RefreshCw, X, CheckCircle, Plus, PhoneCall, Copy, FileIcon, ImageIcon, Edit3, Save, Wand2, Send, HelpCircle, Download } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import './App.css';
 
 const generatePDFBlob = (textContent: string): Blob => {
@@ -86,6 +87,159 @@ const generatePDFBlob = (textContent: string): Blob => {
     if (isHeading) {
       cursorY += 0.1;
     }
+  });
+  
+  return doc.output('blob');
+};
+
+const generateExhibitIndexPDF = (documents: any[]): Blob => {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'in',
+    format: 'letter'
+  });
+  
+  doc.setFont('times', 'bold');
+  doc.setFontSize(16);
+  doc.text("EXHIBIT INDEX", 4.25, 1.0, { align: 'center' });
+  
+  doc.setFont('times', 'normal');
+  doc.setFontSize(10);
+  doc.text("In Support of Concurrent Filing of Form I-130 and Form I-485", 4.25, 1.3, { align: 'center' });
+  
+  const head = [['Exhibit', 'Document Description', 'Status', 'Linked File']];
+  const body = documents.map((docItem: any, idx: number) => {
+    const letter = String.fromCharCode(65 + idx);
+    const isProvided = docItem.status === 'provided';
+    return [
+      `Exhibit ${letter}`,
+      docItem.label,
+      isProvided ? 'MATCHED' : 'MISSING',
+      isProvided ? (docItem.fileName || 'Provided') : 'Not Provided'
+    ];
+  });
+  
+  autoTable(doc, {
+    startY: 1.6,
+    margin: { left: 1.0, right: 1.0 },
+    head: head,
+    body: body,
+    theme: 'striped',
+    headStyles: {
+      fillColor: [71, 85, 105],
+      textColor: 255,
+      font: 'times',
+      fontStyle: 'bold',
+      fontSize: 10
+    },
+    bodyStyles: {
+      font: 'times',
+      fontSize: 9,
+      textColor: [15, 23, 42]
+    },
+    columnStyles: {
+      0: { cellWidth: 1.0, fontStyle: 'bold' },
+      1: { cellWidth: 3.0 },
+      2: { cellWidth: 1.0 },
+      3: { cellWidth: 1.5 }
+    },
+    didParseCell: (data) => {
+      if (data.column.index === 2 && data.section === 'body') {
+        const statusText = data.cell.text[0];
+        if (statusText === 'MATCHED') {
+          data.cell.styles.textColor = [22, 163, 74];
+          data.cell.styles.fontStyle = 'bold';
+        } else if (statusText === 'MISSING') {
+          data.cell.styles.textColor = [220, 38, 38];
+          data.cell.styles.fontStyle = 'bold';
+        }
+      }
+    }
+  });
+  
+  return doc.output('blob');
+};
+
+const generateFormMappingPDF = (uscisFormMapping: any, facts: any): Blob => {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'in',
+    format: 'letter'
+  });
+  
+  doc.setFont('times', 'bold');
+  doc.setFontSize(16);
+  doc.text("USCIS FORM FIELD MAPPINGS", 4.25, 1.0, { align: 'center' });
+  
+  let currentY = 1.3;
+  
+  const forms = Object.keys(uscisFormMapping || {});
+  if (forms.length === 0) {
+    doc.setFont('times', 'normal');
+    doc.setFontSize(11);
+    doc.text("No Form Mappings found in the analysis payload.", 1.0, currentY);
+    return doc.output('blob');
+  }
+  
+  forms.forEach((formName, formIdx) => {
+    const fields = uscisFormMapping[formName] || {};
+    const fieldKeys = Object.keys(fields);
+    
+    if (fieldKeys.length === 0) return;
+    
+    if (formIdx > 0) {
+      currentY += 0.3;
+    }
+    
+    if (currentY > 9.5) {
+      doc.addPage();
+      currentY = 1.0;
+    }
+    
+    doc.setFont('times', 'bold');
+    doc.setFontSize(12);
+    doc.text(`Form ${formName} Mappings`, 1.0, currentY);
+    currentY += 0.15;
+    
+    const head = [['Field Name', 'Mapped Value', 'Source Audit Trail']];
+    const body = fieldKeys.map((fieldName) => {
+      const matchingFactKey = Object.keys(facts || {}).find(k => k === fieldName || fieldName.includes(k));
+      const sourceText = matchingFactKey ? facts[matchingFactKey]?.source : 'Extracted from intake';
+      const cleanFieldName = fieldName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      return [
+        cleanFieldName,
+        String(fields[fieldName] || ''),
+        sourceText
+      ];
+    });
+    
+    autoTable(doc, {
+      startY: currentY,
+      margin: { left: 1.0, right: 1.0 },
+      head: head,
+      body: body,
+      theme: 'striped',
+      headStyles: {
+        fillColor: [71, 85, 105],
+        textColor: 255,
+        font: 'times',
+        fontStyle: 'bold',
+        fontSize: 9
+      },
+      bodyStyles: {
+        font: 'times',
+        fontSize: 8.5,
+        textColor: [15, 23, 42]
+      },
+      columnStyles: {
+        0: { cellWidth: 1.8, fontStyle: 'bold' },
+        1: { cellWidth: 2.0 },
+        2: { cellWidth: 2.7 }
+      },
+      didDrawPage: (data) => {
+        currentY = data.cursor ? data.cursor.y + 0.3 : 1.0;
+      }
+    });
   });
   
   return doc.output('blob');
@@ -444,32 +598,11 @@ function App() {
       zip.file("01_Cover_Letter.pdf", coverLetterPdf);
       
       // 2. Add Exhibit Index
-      let exhibitIndexContent = "# Exhibit Index\n\n";
-      record.analysis.documents.forEach((doc: any, idx: number) => {
-        const isProvided = doc.status === 'provided';
-        const letter = String.fromCharCode(65 + idx); // Exhibit A, B, C...
-        exhibitIndexContent += `## Exhibit ${letter}: ${doc.label}\n`;
-        exhibitIndexContent += `*   Status: ${isProvided ? 'Provided' : 'Missing'}\n`;
-        if (isProvided && doc.fileName) {
-          exhibitIndexContent += `*   Source File: ${doc.fileName}\n`;
-        }
-        exhibitIndexContent += `\n`;
-      });
-      const exhibitIndexPdf = generatePDFBlob(exhibitIndexContent);
+      const exhibitIndexPdf = generateExhibitIndexPDF(record.analysis.documents);
       zip.file("02_Exhibit_Index.pdf", exhibitIndexPdf);
       
       // 3. Add USCIS Form Field Mappings
-      let formMappingContent = "# USCIS Form Field Mappings\n\n";
-      const mapping = record.analysis.uscisFormMapping || {};
-      Object.keys(mapping).forEach((formName) => {
-        formMappingContent += `## Form ${formName}\n\n`;
-        const fields = mapping[formName] || {};
-        Object.keys(fields).forEach((fieldName) => {
-          formMappingContent += `*   ${fieldName.replace(/_/g, ' ')}: ${fields[fieldName]}\n`;
-        });
-        formMappingContent += `\n`;
-      });
-      const formMappingPdf = generatePDFBlob(formMappingContent);
+      const formMappingPdf = generateFormMappingPDF(record.analysis.uscisFormMapping, record.analysis.facts);
       zip.file("03_Form_Field_Mappings.pdf", formMappingPdf);
       
       // 4. Download and add uploaded files to exhibits/ folder
