@@ -1012,7 +1012,6 @@ audio::-webkit-media-controls-time-remaining-display {
 
 .assembly-preview-card {
   grid-column: 1;
-  grid-row: 1;
 }
 
 @media (max-width: 992px) {
