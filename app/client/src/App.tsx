@@ -2043,49 +2043,84 @@ function App() {
                           {/* Paper Sheet Document Preview */}
                           <div className="assembly-paper-sheet">
                             {/* Page 1: Filing Cover Sheet */}
-                            {selectedAssemblyDocId === 'cover-sheet' && (
-                              <div>
-                                <div style={{ textAlign: 'center', borderBottom: '3px double #1e293b', paddingBottom: '1.5rem', marginBottom: '2rem' }}>
-                                  <h2 style={{ margin: 0, fontSize: '1.5rem', letterSpacing: '0.05em', color: '#0f172a' }}>USCIS IMMIGRATION FILING PACKAGE</h2>
-                                  <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: '#64748b', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-                                    PREPARED FOR ATTORNEY REVIEW & SIGN-OFF
+                            {selectedAssemblyDocId === 'cover-sheet' && (() => {
+                              const docs = analysis?.documents || [];
+                              const missingDocs = docs.filter((d: any) => d.status === 'missing' || d.status === 'needs_supplementation');
+                              const isComplete = missingDocs.length === 0;
+
+                              const hasCoverLetter = !!analysis?.coverLetterDraft && analysis.coverLetterDraft.trim().length > 0;
+                              const hasFormMapping = !!analysis?.uscisFormMapping && Object.keys(analysis.uscisFormMapping).length > 0;
+
+                              const civilDocs = docs.filter((d: any) => ['identity', 'marriage', 'entry_status', 'medical', 'civil_documents_consular'].includes(d.category));
+                              const missingCivilDocs = civilDocs.filter((d: any) => d.status === 'missing' || d.status === 'needs_supplementation');
+                              const isCivilComplete = missingCivilDocs.length === 0;
+
+                              const finDocs = docs.filter((d: any) => d.category === 'financial_support');
+                              const missingFinDocs = finDocs.filter((d: any) => d.status === 'missing' || d.status === 'needs_supplementation');
+                              const isFinComplete = missingFinDocs.length === 0;
+
+                              return (
+                                <div>
+                                  <div style={{ textAlign: 'center', borderBottom: '3px double #1e293b', paddingBottom: '1.5rem', marginBottom: '2rem' }}>
+                                    <h2 style={{ margin: 0, fontSize: '1.5rem', letterSpacing: '0.05em', color: '#0f172a' }}>USCIS IMMIGRATION FILING PACKAGE</h2>
+                                    <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: '#64748b', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+                                      PREPARED FOR ATTORNEY REVIEW & SIGN-OFF
+                                    </div>
                                   </div>
-                                </div>
 
-                                <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: '0.75rem 1rem', marginBottom: '2rem', fontSize: '0.85rem' }}>
-                                  <div style={{ fontWeight: 'bold', color: '#475569' }}>CASE TYPE:</div>
-                                  <div>Marriage-Based Permanent Residence (AOS concurrent filing)</div>
-                                  
-                                  <div style={{ fontWeight: 'bold', color: '#475569' }}>PETITIONER:</div>
-                                  <div>{analysis.facts.petitioner_identity?.value || 'Michael David Johnson'} (U.S. Citizen)</div>
-                                  
-                                  <div style={{ fontWeight: 'bold', color: '#475569' }}>BENEFICIARY:</div>
-                                  <div>{analysis.facts.beneficiary_identity?.value || 'Li Ying Chen Martinez'} (China/PRC)</div>
+                                  <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: '0.75rem 1rem', marginBottom: '2rem', fontSize: '0.85rem' }}>
+                                    <div style={{ fontWeight: 'bold', color: '#475569' }}>CASE TYPE:</div>
+                                    <div>Marriage-Based Permanent Residence (AOS concurrent filing)</div>
+                                    
+                                    <div style={{ fontWeight: 'bold', color: '#475569' }}>PETITIONER:</div>
+                                    <div>{analysis?.facts?.petitioner_identity?.value || 'Michael David Johnson'} (U.S. Citizen)</div>
+                                    
+                                    <div style={{ fontWeight: 'bold', color: '#475569' }}>BENEFICIARY:</div>
+                                    <div>{analysis?.facts?.beneficiary_identity?.value || 'Li Ying Chen Martinez'} (China/PRC)</div>
 
-                                  <div style={{ fontWeight: 'bold', color: '#475569' }}>FORMS INCLUDED:</div>
-                                  <div>Form I-130, I-130A, I-485, I-864, I-693</div>
+                                    <div style={{ fontWeight: 'bold', color: '#475569' }}>FORMS INCLUDED:</div>
+                                    <div>Form I-130, I-130A, I-485, I-864, I-693</div>
 
-                                  <div style={{ fontWeight: 'bold', color: '#475569' }}>PREPARED BY:</div>
-                                  <div>MeritX Legal Petition Assembly Engine</div>
+                                    <div style={{ fontWeight: 'bold', color: '#475569' }}>PREPARED BY:</div>
+                                    <div>MeritX Legal Petition Assembly Engine</div>
 
-                                  <div style={{ fontWeight: 'bold', color: '#475569' }}>STATUS:</div>
-                                  <div>
-                                    <span style={{ display: 'inline-block', padding: '0.15rem 0.4rem', borderRadius: '4px', background: 'rgba(34, 197, 94, 0.1)', color: '#16a34a', fontSize: '0.75rem', fontWeight: 600 }}>
-                                      READY FOR ASSEMBLY
-                                    </span>
+                                    <div style={{ fontWeight: 'bold', color: '#475569' }}>STATUS:</div>
+                                    <div>
+                                      {isComplete ? (
+                                        <span style={{ display: 'inline-block', padding: '0.15rem 0.4rem', borderRadius: '4px', background: 'rgba(34, 197, 94, 0.1)', color: '#16a34a', fontSize: '0.75rem', fontWeight: 600 }}>
+                                          READY FOR ASSEMBLY (COMPLETE)
+                                        </span>
+                                      ) : (
+                                        <span style={{ display: 'inline-block', padding: '0.15rem 0.4rem', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.1)', color: '#dc2626', fontSize: '0.75rem', fontWeight: 600 }}>
+                                          INCOMPLETE ({missingDocs.length} MISSING MATERIAL{missingDocs.length > 1 ? 'S' : ''})
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
 
-                                <h3 style={{ borderBottom: '1px solid #cbd5e1', paddingBottom: '0.4rem', fontSize: '1.05rem', color: '#0f172a', marginTop: '2rem' }}>Package Checklist Summary</h3>
-                                <ul style={{ paddingLeft: '1.25rem', margin: '0.75rem 0 0 0', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                  <li><strong>Filing Cover Letter:</strong> Drafted and matching case facts (✓)</li>
-                                  <li><strong>USCIS Forms Mapping:</strong> Mapped and ready for field entry (✓)</li>
-                                  <li><strong>Primary Civil Documents:</strong> Passport, Green Card, and Marriage Certificate uploaded & verified (✓)</li>
-                                  <li><strong>Financial Sponsorship:</strong> Petitioner W-2 paystubs matched (✓)</li>
-                                  <li><strong>Escalation Risk Check:</strong> Checked against playbook criteria ({analysis.riskFlags.length} active flag(s))</li>
-                                </ul>
-                              </div>
-                            )}
+                                  <h3 style={{ borderBottom: '1px solid #cbd5e1', paddingBottom: '0.4rem', fontSize: '1.05rem', color: '#0f172a', marginTop: '2rem' }}>Package Checklist Summary</h3>
+                                  <ul style={{ paddingLeft: '1.25rem', margin: '0.75rem 0 0 0', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                    <li><strong>Filing Cover Letter:</strong> {hasCoverLetter ? 'Drafted and matching case facts (✓)' : <span style={{ color: '#dc2626' }}>Pending draft generation (⚠️)</span>}</li>
+                                    <li><strong>USCIS Forms Mapping:</strong> {hasFormMapping ? 'Mapped and ready for field entry (✓)' : <span style={{ color: '#dc2626' }}>Pending USCIS mapping (⚠️)</span>}</li>
+                                    <li><strong>Primary Civil Documents:</strong> {isCivilComplete ? (
+                                      'All required primary civil documents uploaded & verified (✓)'
+                                    ) : (
+                                      <span style={{ color: '#dc2626' }}>
+                                        Missing: {missingCivilDocs.map((d: any) => d.label).join(', ')} (⚠️)
+                                      </span>
+                                    )}</li>
+                                    <li><strong>Financial Sponsorship:</strong> {isFinComplete ? (
+                                      'Petitioner W-2 paystubs and tax returns matched (✓)'
+                                    ) : (
+                                      <span style={{ color: '#dc2626' }}>
+                                        Missing: {missingFinDocs.map((d: any) => d.label).join(', ')} (⚠️)
+                                      </span>
+                                    )}</li>
+                                    <li><strong>Escalation Risk Check:</strong> Checked against playbook criteria ({analysis?.riskFlags?.length || 0} active flag(s) {analysis?.riskFlags?.length > 0 ? '⚠️' : '✓'})</li>
+                                  </ul>
+                                </div>
+                              );
+                            })()}
 
                             {/* Page 2: Attorney Cover Letter */}
                             {selectedAssemblyDocId === 'cover-letter' && (
@@ -2103,9 +2138,9 @@ function App() {
                               <div>
                                 <h3 style={{ margin: '0 0 1.5rem 0', fontSize: '1.2rem', borderBottom: '2px solid #1e293b', paddingBottom: '0.5rem' }}>USCIS Form Field Mappings</h3>
                                 
-                                {Object.keys(analysis.uscisFormMapping).length > 0 ? (
-                                  Object.keys(analysis.uscisFormMapping).map((formName) => {
-                                    const fields = analysis.uscisFormMapping[formName];
+                                {Object.keys(analysis.uscisFormMapping || {}).length > 0 ? (
+                                  Object.keys(analysis.uscisFormMapping || {}).map((formName) => {
+                                    const fields = (analysis.uscisFormMapping || {})[formName] || {};
                                     return (
                                       <div key={formName} style={{ marginBottom: '2rem' }}>
                                         <h4 style={{ color: '#0f172a', borderBottom: '1px solid #cbd5e1', paddingBottom: '0.25rem', marginBottom: '0.75rem', fontSize: '1rem', fontWeight: 'bold' }}>
