@@ -1548,7 +1548,7 @@ function App() {
                               Scenario: <span style={{ color: 'var(--accent-primary)' }}>{analysis.scenarioLabel}</span>
                             </div>
                             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                              Applied rules: <strong>Marriage-Based Green Card Playbook (v1.0)</strong>
+                              Applied rules: <strong>{analysis.playbookName || 'Intake Playbook'}</strong>
                             </div>
                             {analysis.completeness.penaltiesApplied > 0 && (
                               <div style={{ fontSize: '0.8rem', color: 'var(--danger)', background: 'rgba(239, 68, 68, 0.05)', padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid rgba(239, 68, 68, 0.15)', display: 'inline-block', width: 'fit-content' }}>
@@ -1561,22 +1561,22 @@ function App() {
                         {/* Dimension Progress Bars */}
                         <h3 style={{ fontSize: '0.95rem', color: 'var(--text-primary)', marginBottom: '0.8rem', fontWeight: 600 }}>Dimension Breakdown</h3>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '2rem' }}>
-                          {[
-                            { label: 'Identity & Relationship', score: analysis.completeness.dimensions.identity, color: 'var(--accent-primary)' },
-                            { label: 'Bona Fide Marriage', score: analysis.completeness.dimensions.bona_fide, color: 'var(--success)' },
-                            { label: 'Financial Support', score: analysis.completeness.dimensions.financial, color: '#F59E0B' }, // Amber
-                            { label: 'Admissibility & Status', score: analysis.completeness.dimensions.admissibility, color: '#EF4444' } // Red
-                          ].map((dim, idx) => (
+                          {Object.entries(analysis.completeness.dimensions).map(([key, score], idx) => {
+                            const colors = ['var(--accent-primary)', 'var(--success)', '#F59E0B', '#EF4444', '#8B5CF6'];
+                            const color = colors[idx % colors.length];
+                            const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                            return (
                             <div key={idx} style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '0.4rem' }}>
-                                <span style={{ color: 'var(--text-primary)', fontWeight: 550 }}>{dim.label}</span>
-                                <span style={{ color: dim.color, fontWeight: 'bold' }}>{dim.score}%</span>
+                                <span style={{ color: 'var(--text-primary)', fontWeight: 550 }}>{label}</span>
+                                <span style={{ color: color, fontWeight: 'bold' }}>{score as number}%</span>
                               </div>
                               <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden' }}>
-                                <div style={{ width: `${dim.score}%`, height: '100%', background: dim.color, borderRadius: '3px', transition: 'width 0.5s ease-in-out' }} />
+                                <div style={{ width: `${score}%`, height: '100%', background: color, borderRadius: '3px', transition: 'width 0.5s ease-in-out' }} />
                               </div>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
 
                         {/* Active Warning / Critical Banners */}

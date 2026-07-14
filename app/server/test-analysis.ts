@@ -57,7 +57,7 @@ async function test() {
 
   try {
     console.log('Running analysis...');
-    const result = await runPlaybookAnalysis(recordText, allMediaParts, record.items || []);
+    const { analysis: result } = await runPlaybookAnalysis(recordText, allMediaParts, record.items || []);
     console.log('Analysis completed successfully!');
     console.log('Scenario:', result.scenarioLabel);
     console.log('Completeness score:', result.completeness.overall);

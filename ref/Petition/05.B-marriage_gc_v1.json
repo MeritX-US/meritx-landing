@@ -1,0 +1,292 @@
+{
+  "playbook_id": "marriage_gc_v1",
+  "version": "1.0.0",
+  "case_type": "marriage_green_card",
+  "jurisdiction": "US-Federal",
+  "language_variants": ["en", "zh"],
+  "audience": "law_firm_internal",
+  "description": "Marriage-based green card intake playbook. Covers three scenarios: USC petitioner with adjustment of status (AOS), LPR petitioner, and consular processing (DS-260). Engine reads this spec to drive fact extraction prompts, deterministic gap/evidence/escalation checks, and completeness scoring.",
+
+  "_comment_scenarios": "scenario is resolved EARLY from two facts: petitioner_immigration_status (USC vs LPR) and beneficiary_location (inside_us vs abroad). The resolved scenario decides which forms, required_facts, and required_documents apply. Fields tagged with applies_to are only enforced for matching scenarios.",
+
+  "scenarios": {
+    "USC_AOS": {
+      "label": "U.S. Citizen petitioner, beneficiary in U.S., Adjustment of Status",
+      "resolve_when": {
+        "petitioner_immigration_status": "USC",
+        "beneficiary_location": "inside_us",
+        "beneficiary_lawful_entry": true
+      },
+      "forms": ["I-130", "I-130A", "I-485", "I-864", "I-693", "I-765", "I-131"],
+      "notes": "Concurrent filing of I-130 + I-485 permitted. Immediate relative, no visa wait."
+    },
+    "LPR_petitioner": {
+      "label": "Lawful Permanent Resident petitioner (F2A preference)",
+      "resolve_when": {
+        "petitioner_immigration_status": "LPR"
+      },
+      "forms": ["I-130", "I-130A", "I-864", "I-485_or_DS260_by_location"],
+      "notes": "F2A preference category. Visa availability subject to Visa Bulletin; AOS only when priority date current. If beneficiary abroad, route to consular processing."
+    },
+    "consular_DS260": {
+      "label": "Beneficiary abroad, consular processing",
+      "resolve_when": {
+        "beneficiary_location": "abroad"
+      },
+      "forms": ["I-130", "I-130A", "DS-260", "I-864", "civil_documents_package"],
+      "notes": "After I-130 approval, case goes to NVC then consulate. Medical exam done abroad by panel physician."
+    }
+  },
+
+  "_comment_facts": "required_facts drive (a) the extraction prompt sent to the model and (b) the follow_up_questions output when missing. priority controls intake question ordering. confirm_by_human=true means even if the model extracts it, it must be human-verified before it counts toward completeness.",
+
+  "required_facts": [
+    { "id": "petitioner_identity", "label": "Petitioner full legal name & DOB", "type": "entity", "required": true, "priority": 1, "confirm_by_human": false, "applies_to": ["USC_AOS", "LPR_petitioner", "consular_DS260"] },
+    { "id": "petitioner_immigration_status", "label": "Petitioner status (USC / LPR)", "type": "enum", "values": ["USC", "LPR"], "required": true, "priority": 1, "confirm_by_human": true, "scenario_resolver": true, "applies_to": ["USC_AOS", "LPR_petitioner", "consular_DS260"] },
+    { "id": "beneficiary_identity", "label": "Beneficiary full legal name & DOB", "type": "entity", "required": true, "priority": 1, "confirm_by_human": false, "applies_to": ["USC_AOS", "LPR_petitioner", "consular_DS260"] },
+    { "id": "beneficiary_location", "label": "Beneficiary currently inside U.S. or abroad", "type": "enum", "values": ["inside_us", "abroad"], "required": true, "priority": 1, "confirm_by_human": true, "scenario_resolver": true, "applies_to": ["USC_AOS", "LPR_petitioner", "consular_DS260"] },
+    { "id": "marriage_date", "label": "Date of marriage", "type": "date", "required": true, "priority": 1, "confirm_by_human": false, "derives": ["conditional_residence_check"], "applies_to": ["USC_AOS", "LPR_petitioner", "consular_DS260"] },
+    { "id": "marriage_location", "label": "Place of marriage", "type": "string", "required": true, "priority": 2, "confirm_by_human": false, "applies_to": ["USC_AOS", "LPR_petitioner", "consular_DS260"] },
+    { "id": "cohabitation_status", "label": "Do the spouses live together; since when", "type": "structured", "required": true, "priority": 2, "confirm_by_human": false, "applies_to": ["USC_AOS", "LPR_petitioner", "consular_DS260"] },
+    { "id": "address_history", "label": "Address timeline for both spouses (5 yrs)", "type": "timeline", "required": true, "priority": 3, "confirm_by_human": false, "checked_for": ["timeline_conflict"], "applies_to": ["USC_AOS", "LPR_petitioner", "consular_DS260"] },
+    { "id": "prior_marriages", "label": "Prior marriages of either spouse (count + termination)", "type": "structured", "required": true, "priority": 3, "confirm_by_human": false, "triggers_documents_when_present": ["prior_divorce_or_death_certs"], "applies_to": ["USC_AOS", "LPR_petitioner", "consular_DS260"] },
+    { "id": "beneficiary_entry_record", "label": "Beneficiary most recent entry: date, place, manner (I-94 / inspection)", "type": "structured", "required": true, "priority": 2, "confirm_by_human": true, "applies_to": ["USC_AOS", "LPR_petitioner"], "_note": "Lawful entry/inspection is a precondition for AOS. Not required for consular." },
+    { "id": "beneficiary_lawful_entry", "label": "Was last entry lawful / inspected", "type": "boolean", "required": true, "priority": 2, "confirm_by_human": true, "scenario_resolver": true, "applies_to": ["USC_AOS", "LPR_petitioner"] },
+    { "id": "immigration_history", "label": "Overstay, prior denials, removal/deportation, unlawful presence", "type": "structured", "required": true, "priority": 2, "confirm_by_human": true, "checked_for": ["immigration_risk"], "applies_to": ["USC_AOS", "LPR_petitioner", "consular_DS260"] },
+    { "id": "criminal_history", "label": "Any arrests or convictions (either spouse)", "type": "structured", "required": true, "priority": 2, "confirm_by_human": true, "checked_for": ["criminal_risk"], "applies_to": ["USC_AOS", "LPR_petitioner", "consular_DS260"] },
+    { "id": "petitioner_income", "label": "Petitioner income & household size (I-864 sufficiency)", "type": "structured", "required": true, "priority": 3, "confirm_by_human": false, "checked_for": ["income_below_guideline"], "applies_to": ["USC_AOS", "LPR_petitioner", "consular_DS260"] },
+    { "id": "children_dependents", "label": "Children / dependents of the marriage", "type": "structured", "required": false, "priority": 4, "confirm_by_human": false, "applies_to": ["USC_AOS", "LPR_petitioner", "consular_DS260"] },
+    { "id": "priority_date_current", "label": "Is F2A priority date current (LPR only)", "type": "boolean", "required": false, "priority": 3, "confirm_by_human": true, "applies_to": ["LPR_petitioner"] }
+  ],
+
+  "_comment_docs": "required_documents are checked against uploaded/classified document objects. status per doc: provided | missing | needs_supplementation. conditional docs only become required when their condition_fact is satisfied.",
+
+  "required_documents": {
+    "identity": [
+      { "id": "beneficiary_passport", "label": "Beneficiary passport biographic page", "required": true, "applies_to": ["USC_AOS", "LPR_petitioner", "consular_DS260"] },
+      { "id": "beneficiary_birth_certificate", "label": "Beneficiary birth certificate (translated if needed)", "required": true, "applies_to": ["USC_AOS", "LPR_petitioner", "consular_DS260"] },
+      { "id": "petitioner_status_proof", "label": "Petitioner USC proof (passport/naturalization cert) or LPR green card", "required": true, "applies_to": ["USC_AOS", "LPR_petitioner", "consular_DS260"] }
+    ],
+    "marriage": [
+      { "id": "marriage_certificate", "label": "Marriage certificate", "required": true, "applies_to": ["USC_AOS", "LPR_petitioner", "consular_DS260"] },
+      { "id": "prior_divorce_or_death_certs", "label": "Divorce decrees / death certificates for prior marriages", "required": false, "conditional": true, "condition_fact": "prior_marriages.count_gt_0", "applies_to": ["USC_AOS", "LPR_petitioner", "consular_DS260"] }
+    ],
+    "entry_status": [
+      { "id": "i94_record", "label": "I-94 / entry record", "required": true, "applies_to": ["USC_AOS", "LPR_petitioner"] },
+      { "id": "current_visa_or_status_doc", "label": "Current visa / status document", "required": false, "applies_to": ["USC_AOS", "LPR_petitioner"] }
+    ],
+    "financial_support": [
+      { "id": "petitioner_tax_return_recent", "label": "Most recent federal tax return / transcript", "required": true, "applies_to": ["USC_AOS", "LPR_petitioner", "consular_DS260"] },
+      { "id": "petitioner_w2_or_paystub", "label": "W-2 or recent pay stubs", "required": true, "applies_to": ["USC_AOS", "LPR_petitioner", "consular_DS260"] },
+      { "id": "petitioner_employment_letter", "label": "Employment verification letter", "required": false, "applies_to": ["USC_AOS", "LPR_petitioner", "consular_DS260"] },
+      { "id": "joint_sponsor_i864", "label": "Joint sponsor I-864 + financials", "required": false, "conditional": true, "condition_fact": "income_below_guideline", "applies_to": ["USC_AOS", "LPR_petitioner", "consular_DS260"] }
+    ],
+    "medical": [
+      { "id": "i693_medical", "label": "I-693 medical exam (civil surgeon)", "required": true, "applies_to": ["USC_AOS", "LPR_petitioner"] },
+      { "id": "panel_physician_medical", "label": "Panel physician medical exam (abroad)", "required": true, "applies_to": ["consular_DS260"] }
+    ],
+    "civil_documents_consular": [
+      { "id": "police_certificates", "label": "Police certificates from countries of residence", "required": true, "applies_to": ["consular_DS260"] }
+    ]
+  },
+
+  "_comment_evidence": "evidence_map is the heart of the magic moment. Each category has a min_items threshold. The deterministic check layer counts matched evidence items per category and compares to min_items. bona_fide_marriage is the most important category for adjudication.",
+
+  "evidence_map": {
+    "bona_fide_marriage": {
+      "label": "Bona fide marriage evidence",
+      "min_items": 3,
+      "weight": "critical",
+      "preferred": [
+        { "id": "joint_lease_or_mortgage", "strength": "high" },
+        { "id": "joint_bank_statement", "strength": "high" },
+        { "id": "joint_tax_return", "strength": "high" },
+        { "id": "joint_insurance_policy", "strength": "medium" },
+        { "id": "beneficiary_designation_docs", "strength": "medium" },
+        { "id": "shared_photos_over_time", "strength": "medium" },
+        { "id": "affidavits_from_friends_family", "strength": "medium" },
+        { "id": "joint_travel_records", "strength": "low" },
+        { "id": "joint_utility_bills", "strength": "low" },
+        { "id": "communication_records", "strength": "low" }
+      ],
+      "applies_to": ["USC_AOS", "LPR_petitioner", "consular_DS260"]
+    },
+    "cohabitation": {
+      "label": "Cohabitation evidence",
+      "min_items": 2,
+      "weight": "high",
+      "preferred": [
+        { "id": "joint_lease_or_mortgage", "strength": "high" },
+        { "id": "joint_utility_bills", "strength": "medium" },
+        { "id": "mail_to_shared_address", "strength": "medium" },
+        { "id": "drivers_license_shared_address", "strength": "medium" }
+      ],
+      "applies_to": ["USC_AOS", "LPR_petitioner", "consular_DS260"]
+    },
+    "identity": {
+      "label": "Identity evidence",
+      "requires_all": ["beneficiary_passport", "petitioner_status_proof"],
+      "weight": "critical",
+      "applies_to": ["USC_AOS", "LPR_petitioner", "consular_DS260"]
+    },
+    "financial_support": {
+      "label": "I-864 financial support evidence",
+      "requires_all": ["petitioner_tax_return_recent", "petitioner_w2_or_paystub"],
+      "weight": "high",
+      "applies_to": ["USC_AOS", "LPR_petitioner", "consular_DS260"]
+    }
+  },
+
+  "_comment_flags": "escalation_flags run as deterministic rules in the check layer. trigger is evaluated against extracted facts + evidence counts. action drives workflow: notify_attorney (info banner), attorney_review_required (gate before finalize), block_petition_assembly (hard stop until resolved). Each fired flag MUST carry a source reference.",
+
+  "escalation_flags": [
+    {
+      "id": "conditional_residence",
+      "label": "Conditional residence (marriage < 2 years at approval)",
+      "trigger": { "fact": "marriage_date", "condition": "duration_lt_2yr" },
+      "severity": "info",
+      "action": "notify_attorney",
+      "message": "Marriage under 2 years: beneficiary will receive conditional residence (CR1/CR6). Plan for I-751 within 90 days before the 2-year anniversary."
+    },
+    {
+      "id": "bona_fide_weak",
+      "label": "Bona fide marriage evidence below threshold",
+      "trigger": { "evidence_category": "bona_fide_marriage", "condition": "count_lt_min_items" },
+      "severity": "high",
+      "action": "block_petition_assembly",
+      "message": "Bona fide marriage evidence below minimum. Collect additional joint documents before assembling the petition."
+    },
+    {
+      "id": "timeline_conflict",
+      "label": "Conflicting addresses or dates",
+      "trigger": { "fact": "address_history", "condition": "internal_conflict_detected" },
+      "severity": "high",
+      "action": "attorney_review_required",
+      "message": "Conflicting address/date information detected. Reconcile before filing."
+    },
+    {
+      "id": "criminal_risk",
+      "label": "Criminal history present",
+      "trigger": { "fact": "criminal_history", "condition": "is_present" },
+      "severity": "critical",
+      "action": "attorney_review_required",
+      "message": "Criminal history present. Requires attorney admissibility assessment (possible waiver analysis)."
+    },
+    {
+      "id": "immigration_risk",
+      "label": "Overstay / prior denial / removal / unlawful presence",
+      "trigger": { "fact": "immigration_history", "condition": "any_adverse_present" },
+      "severity": "critical",
+      "action": "attorney_review_required",
+      "message": "Adverse immigration history present. Assess inadmissibility bars and waiver eligibility (e.g., 3/10-year bar, I-601/I-601A)."
+    },
+    {
+      "id": "unlawful_entry_aos_bar",
+      "label": "AOS may be barred by unlawful entry",
+      "trigger": { "fact": "beneficiary_lawful_entry", "condition": "is_false", "and_scenario_in": ["USC_AOS", "LPR_petitioner"] },
+      "severity": "critical",
+      "action": "attorney_review_required",
+      "message": "Last entry without inspection. AOS likely unavailable; assess consular processing + I-601A provisional waiver."
+    },
+    {
+      "id": "income_below_guideline",
+      "label": "Petitioner income below I-864 guideline",
+      "trigger": { "fact": "petitioner_income", "condition": "below_125pct_poverty_for_household" },
+      "severity": "high",
+      "action": "notify_attorney",
+      "message": "Petitioner income appears below 125% poverty guideline for household size. Joint sponsor or assets likely required."
+    },
+    {
+      "id": "priority_date_not_current",
+      "label": "F2A priority date not current (LPR petitioner)",
+      "trigger": { "fact": "priority_date_current", "condition": "is_false", "and_scenario_in": ["LPR_petitioner"] },
+      "severity": "info",
+      "action": "notify_attorney",
+      "message": "F2A priority date not current. AOS cannot be filed until visa available per Visa Bulletin."
+    }
+  ],
+
+  "_comment_scoring": "Completeness scoring produces BOTH a dimension breakdown and a single overall score. Dimensions map to the four pillars adjudicators care about. Overall = weighted sum of dimension scores minus flag penalties, floored at 0 and capped at 100. The breakdown is what gets shown to the attorney as the explainable 'magic moment'.",
+
+  "scoring": {
+    "method": "weighted_dimensions_with_penalties",
+    "dimensions": [
+      {
+        "id": "identity",
+        "label": "Identity & relationship",
+        "weight": 0.20,
+        "components": [
+          { "type": "facts_present", "facts": ["petitioner_identity", "beneficiary_identity", "marriage_date", "marriage_location"], "share": 0.5 },
+          { "type": "documents_present", "docs": ["beneficiary_passport", "petitioner_status_proof", "marriage_certificate"], "share": 0.5 }
+        ]
+      },
+      {
+        "id": "bona_fide",
+        "label": "Bona fide marriage",
+        "weight": 0.35,
+        "components": [
+          { "type": "evidence_threshold", "category": "bona_fide_marriage", "share": 0.7, "_note": "score = min(count/min_items, 1.0); strength-weighted variant optional" },
+          { "type": "evidence_threshold", "category": "cohabitation", "share": 0.3 }
+        ]
+      },
+      {
+        "id": "financial",
+        "label": "Financial support (I-864)",
+        "weight": 0.20,
+        "components": [
+          { "type": "documents_present", "docs": ["petitioner_tax_return_recent", "petitioner_w2_or_paystub"], "share": 0.6 },
+          { "type": "facts_present", "facts": ["petitioner_income"], "share": 0.4 }
+        ]
+      },
+      {
+        "id": "admissibility",
+        "label": "Admissibility & status",
+        "weight": 0.25,
+        "components": [
+          { "type": "facts_present", "facts": ["beneficiary_entry_record", "immigration_history", "criminal_history"], "share": 0.6 },
+          { "type": "documents_present", "docs": ["i94_record"], "share": 0.4 }
+        ]
+      }
+    ],
+    "penalties": [
+      { "flag": "bona_fide_weak", "deduct": 15 },
+      { "flag": "timeline_conflict", "deduct": 10 },
+      { "flag": "criminal_risk", "deduct": 10 },
+      { "flag": "immigration_risk", "deduct": 15 },
+      { "flag": "unlawful_entry_aos_bar", "deduct": 15 },
+      { "flag": "income_below_guideline", "deduct": 5 }
+    ],
+    "thresholds": {
+      "petition_ready": 85,
+      "review_advised": 60,
+      "not_ready": 0
+    }
+  },
+
+  "_comment_output": "output_contract pins the structure of each deliverable so results are stable, reviewable, and handoff-ready. Each item carries source references back to transcript timestamps or document objects.",
+
+  "output_contract": {
+    "consultation_summary": {
+      "sections": ["parties", "marriage_facts", "scenario_determination", "key_facts_timeline", "open_questions"],
+      "source_traced": true,
+      "editable": true
+    },
+    "missing_documents_checklist": {
+      "groups_by": "document_category",
+      "item_states": ["provided", "missing", "needs_supplementation"],
+      "source_traced": true,
+      "editable": true
+    },
+    "follow_up_questions": {
+      "ordered_by": "fact_priority",
+      "generated_from": "missing_required_facts",
+      "editable": true
+    },
+    "intake_completeness_score": {
+      "shows_overall": true,
+      "shows_dimension_breakdown": true,
+      "shows_blocking_flags": true,
+      "explainable": true
+    }
+  }
+}

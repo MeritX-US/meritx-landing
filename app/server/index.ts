@@ -978,8 +978,11 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
                 }
             }
 
-            const analysisResult = await runPlaybookAnalysis(recordText, allMediaParts, record.items || []);
+            const { analysis: analysisResult, caseType } = await runPlaybookAnalysis(recordText, allMediaParts, record.items || [], record.caseType);
             record.analysis = analysisResult;
+            if (caseType && !record.caseType) {
+                record.caseType = caseType;
+            }
         } catch (err: any) {
             console.error('⚠️ Playbook analysis failed:', err.message);
         }
@@ -1058,8 +1061,11 @@ app.post('/api/intake/regenerate', async (req, res) => {
 
         try {
             console.log(`Running Playbook Analysis (Regenerate) for record: ${existingRecordId}`);
-            const analysisResult = await runPlaybookAnalysis(transcriptText, parts, existingRecord.items || []);
+            const { analysis: analysisResult, caseType } = await runPlaybookAnalysis(transcriptText, parts, existingRecord.items || [], existingRecord.caseType);
             records[recordIndex].analysis = analysisResult;
+            if (caseType && !existingRecord.caseType) {
+                records[recordIndex].caseType = caseType;
+            }
         } catch (err: any) {
             console.error('⚠️ Playbook analysis regeneration failed:', err.message);
         }

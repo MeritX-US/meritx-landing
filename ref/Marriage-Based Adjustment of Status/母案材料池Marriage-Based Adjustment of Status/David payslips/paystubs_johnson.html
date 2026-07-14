@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pay Stubs – Midwest Tech Solutions</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #d8dce0; padding: 30px; font-family: 'Courier New', monospace; display: flex; flex-direction: column; align-items: center; gap: 24px; }
+
+  .stub { background: white; width: 680px; box-shadow: 0 3px 16px rgba(0,0,0,0.14); border: 1px solid #ccc; }
+
+  .stub-header { background: #1E3A5F; color: white; padding: 12px 22px; display: flex; justify-content: space-between; align-items: flex-start; }
+  .company-name { font-size: 16px; font-weight: 900; font-family: Arial, sans-serif; letter-spacing: -0.3px; }
+  .company-addr { font-size: 9px; color: rgba(255,255,255,0.65); margin-top: 2px; font-family: Arial, sans-serif; }
+  .stub-label { text-align: right; }
+  .stub-label .sl { font-size: 9px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 1px; font-family: Arial, sans-serif; }
+  .stub-label .sv { font-size: 13px; font-weight: 700; font-family: Arial, sans-serif; }
+
+  .emp-row { display: flex; justify-content: space-between; padding: 10px 22px; background: #f5f7fa; border-bottom: 1px solid #ddd; font-size: 11px; }
+  .er-item { }
+  .er-label { color: #999; text-transform: uppercase; letter-spacing: 0.5px; font-size: 9px; font-family: Arial, sans-serif; margin-bottom: 2px; }
+  .er-value { color: #111; font-weight: 700; font-family: Arial, sans-serif; font-size: 12px; }
+
+  .period-bar { background: #2C5F8A; color: white; padding: 6px 22px; font-size: 10px; font-family: Arial, sans-serif; display: flex; gap: 32px; }
+  .pb-item span:first-child { color: rgba(255,255,255,0.65); margin-right: 6px; }
+
+  .earnings-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .earnings-table thead tr { background: #eee; }
+  .earnings-table th { padding: 7px 22px; text-align: left; font-size: 9px; text-transform: uppercase; letter-spacing: 0.8px; color: #666; font-family: Arial, sans-serif; font-weight: 700; }
+  .earnings-table th:last-child, .earnings-table td:last-child { text-align: right; }
+  .earnings-table th:nth-child(2), .earnings-table td:nth-child(2) { text-align: right; }
+  .earnings-table th:nth-child(3), .earnings-table td:nth-child(3) { text-align: right; }
+  .earnings-table td { padding: 8px 22px; border-bottom: 1px solid #f0f0f0; color: #333; font-family: 'Courier New', monospace; }
+  .earnings-table tr:nth-child(even) td { background: #fafafa; }
+  .earnings-table .section-row td { background: #1E3A5F; color: white; font-size: 9px; text-transform: uppercase; letter-spacing: 1px; font-family: Arial, sans-serif; padding: 4px 22px; }
+
+  .totals-row { display: flex; background: #1E3A5F; color: white; }
+  .total-cell { flex: 1; padding: 12px 22px; border-right: 1px solid rgba(255,255,255,0.15); }
+  .total-cell:last-child { border-right: none; }
+  .tc-label { font-size: 9px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 1px; font-family: Arial, sans-serif; margin-bottom: 3px; }
+  .tc-value { font-size: 18px; font-weight: 900; font-family: Arial, sans-serif; }
+
+  .stub-footer { padding: 8px 22px; background: #f5f7fa; border-top: 1px solid #ddd; font-size: 9px; color: #888; font-family: Arial, sans-serif; display: flex; justify-content: space-between; }
+</style>
+</head>
+<body>
+
+<!-- PAY STUB 1 -->
+<div class="stub">
+  <div class="stub-header">
+    <div>
+      <div class="company-name">MIDWEST TECH SOLUTIONS, LLC</div>
+      <div class="company-addr">100 N. Michigan Ave., Chicago, IL 60601 · EIN: XX-XXXXXXX</div>
+    </div>
+    <div class="stub-label">
+      <div class="sl">Pay Statement</div>
+      <div class="sv">STUB 1 OF 3</div>
+    </div>
+  </div>
+
+  <div class="emp-row">
+    <div class="er-item"><div class="er-label">Employee Name</div><div class="er-value">JOHNSON, MICHAEL DAVID</div></div>
+    <div class="er-item"><div class="er-label">Employee ID</div><div class="er-value">MTS-0042</div></div>
+    <div class="er-item"><div class="er-label">Pay Type</div><div class="er-value">Bi-Weekly Salary</div></div>
+    <div class="er-item"><div class="er-label">Annual Salary</div><div class="er-value">$95,000.00</div></div>
+  </div>
+
+  <div class="period-bar">
+    <div><span>Pay Period:</span><strong>Jan 16 – Jan 31, 2023</strong></div>
+    <div><span>Pay Date:</span><strong>Feb 3, 2023</strong></div>
+    <div><span>Pay Period #:</span><strong>02 of 26</strong></div>
+  </div>
+
+  <table class="earnings-table">
+    <thead>
+      <tr><th>Description</th><th>Rate</th><th>Hours</th><th>Current</th></tr>
+    </thead>
+    <tbody>
+      <tr class="section-row"><td colspan="4">Earnings</td></tr>
+      <tr><td>Regular Salary</td><td>$3,653.85</td><td>—</td><td>$3,653.85</td></tr>
+      <tr class="section-row"><td colspan="4">Deductions</td></tr>
+      <tr><td>Federal Income Tax (W/H)</td><td></td><td></td><td>($442.00)</td></tr>
+      <tr><td>State Income Tax (IL)</td><td></td><td></td><td>($109.62)</td></tr>
+      <tr><td>Social Security (6.2%)</td><td></td><td></td><td>($226.54)</td></tr>
+      <tr><td>Medicare (1.45%)</td><td></td><td></td><td>($52.98)</td></tr>
+      <tr><td>401(k) Contribution</td><td></td><td></td><td>($146.15)</td></tr>
+      <tr><td>Health Insurance Premium</td><td></td><td></td><td>($134.00)</td></tr>
+    </tbody>
+  </table>
+
+  <div class="totals-row">
+    <div class="total-cell"><div class="tc-label">Gross Pay</div><div class="tc-value">$3,653.85</div></div>
+    <div class="total-cell"><div class="tc-label">Deductions</div><div class="tc-value">($1,111.29)</div></div>
+    <div class="total-cell"><div class="tc-label">Net Pay</div><div class="tc-value">$2,542.56</div></div>
+    <div class="total-cell"><div class="tc-label">YTD Gross</div><div class="tc-value">$7,307.70</div></div>
+  </div>
+  <div class="stub-footer">
+    <span>Direct Deposit — Chase Bank ···· XXXX</span>
+    <span>Check/Advice #: 002314</span>
+  </div>
+</div>
+
+<!-- PAY STUB 2 -->
+<div class="stub">
+  <div class="stub-header">
+    <div>
+      <div class="company-name">MIDWEST TECH SOLUTIONS, LLC</div>
+      <div class="company-addr">100 N. Michigan Ave., Chicago, IL 60601 · EIN: XX-XXXXXXX</div>
+    </div>
+    <div class="stub-label">
+      <div class="sl">Pay Statement</div>
+      <div class="sv">STUB 2 OF 3</div>
+    </div>
+  </div>
+
+  <div class="emp-row">
+    <div class="er-item"><div class="er-label">Employee Name</div><div class="er-value">JOHNSON, MICHAEL DAVID</div></div>
+    <div class="er-item"><div class="er-label">Employee ID</div><div class="er-value">MTS-0042</div></div>
+    <div class="er-item"><div class="er-label">Pay Type</div><div class="er-value">Bi-Weekly Salary</div></div>
+    <div class="er-item"><div class="er-label">Annual Salary</div><div class="er-value">$95,000.00</div></div>
+  </div>
+
+  <div class="period-bar">
+    <div><span>Pay Period:</span><strong>Feb 1 – Feb 15, 2023</strong></div>
+    <div><span>Pay Date:</span><strong>Feb 17, 2023</strong></div>
+    <div><span>Pay Period #:</span><strong>03 of 26</strong></div>
+  </div>
+
+  <table class="earnings-table">
+    <thead>
+      <tr><th>Description</th><th>Rate</th><th>Hours</th><th>Current</th></tr>
+    </thead>
+    <tbody>
+      <tr class="section-row"><td colspan="4">Earnings</td></tr>
+      <tr><td>Regular Salary</td><td>$3,653.85</td><td>—</td><td>$3,653.85</td></tr>
+      <tr class="section-row"><td colspan="4">Deductions</td></tr>
+      <tr><td>Federal Income Tax (W/H)</td><td></td><td></td><td>($442.00)</td></tr>
+      <tr><td>State Income Tax (IL)</td><td></td><td></td><td>($109.62)</td></tr>
+      <tr><td>Social Security (6.2%)</td><td></td><td></td><td>($226.54)</td></tr>
+      <tr><td>Medicare (1.45%)</td><td></td><td></td><td>($52.98)</td></tr>
+      <tr><td>401(k) Contribution</td><td></td><td></td><td>($146.15)</td></tr>
+      <tr><td>Health Insurance Premium</td><td></td><td></td><td>($134.00)</td></tr>
+    </tbody>
+  </table>
+
+  <div class="totals-row">
+    <div class="total-cell"><div class="tc-label">Gross Pay</div><div class="tc-value">$3,653.85</div></div>
+    <div class="total-cell"><div class="tc-label">Deductions</div><div class="tc-value">($1,111.29)</div></div>
+    <div class="total-cell"><div class="tc-label">Net Pay</div><div class="tc-value">$2,542.56</div></div>
+    <div class="total-cell"><div class="tc-label">YTD Gross</div><div class="tc-value">$10,961.55</div></div>
+  </div>
+  <div class="stub-footer">
+    <span>Direct Deposit — Chase Bank ···· XXXX</span>
+    <span>Check/Advice #: 002367</span>
+  </div>
+</div>
+
+<!-- PAY STUB 3 -->
+<div class="stub">
+  <div class="stub-header">
+    <div>
+      <div class="company-name">MIDWEST TECH SOLUTIONS, LLC</div>
+      <div class="company-addr">100 N. Michigan Ave., Chicago, IL 60601 · EIN: XX-XXXXXXX</div>
+    </div>
+    <div class="stub-label">
+      <div class="sl">Pay Statement</div>
+      <div class="sv">STUB 3 OF 3</div>
+    </div>
+  </div>
+
+  <div class="emp-row">
+    <div class="er-item"><div class="er-label">Employee Name</div><div class="er-value">JOHNSON, MICHAEL DAVID</div></div>
+    <div class="er-item"><div class="er-label">Employee ID</div><div class="er-value">MTS-0042</div></div>
+    <div class="er-item"><div class="er-label">Pay Type</div><div class="er-value">Bi-Weekly Salary</div></div>
+    <div class="er-item"><div class="er-label">Annual Salary</div><div class="er-value">$95,000.00</div></div>
+  </div>
+
+  <div class="period-bar">
+    <div><span>Pay Period:</span><strong>Feb 16 – Feb 28, 2023</strong></div>
+    <div><span>Pay Date:</span><strong>Mar 3, 2023</strong></div>
+    <div><span>Pay Period #:</span><strong>04 of 26</strong></div>
+  </div>
+
+  <table class="earnings-table">
+    <thead>
+      <tr><th>Description</th><th>Rate</th><th>Hours</th><th>Current</th></tr>
+    </thead>
+    <tbody>
+      <tr class="section-row"><td colspan="4">Earnings</td></tr>
+      <tr><td>Regular Salary</td><td>$3,653.85</td><td>—</td><td>$3,653.85</td></tr>
+      <tr class="section-row"><td colspan="4">Deductions</td></tr>
+      <tr><td>Federal Income Tax (W/H)</td><td></td><td></td><td>($442.00)</td></tr>
+      <tr><td>State Income Tax (IL)</td><td></td><td></td><td>($109.62)</td></tr>
+      <tr><td>Social Security (6.2%)</td><td></td><td></td><td>($226.54)</td></tr>
+      <tr><td>Medicare (1.45%)</td><td></td><td></td><td>($52.98)</td></tr>
+      <tr><td>401(k) Contribution</td><td></td><td></td><td>($146.15)</td></tr>
+      <tr><td>Health Insurance Premium</td><td></td><td></td><td>($134.00)</td></tr>
+    </tbody>
+  </table>
+
+  <div class="totals-row">
+    <div class="total-cell"><div class="tc-label">Gross Pay</div><div class="tc-value">$3,653.85</div></div>
+    <div class="total-cell"><div class="tc-label">Deductions</div><div class="tc-value">($1,111.29)</div></div>
+    <div class="total-cell"><div class="tc-label">Net Pay</div><div class="tc-value">$2,542.56</div></div>
+    <div class="total-cell"><div class="tc-label">YTD Gross</div><div class="tc-value">$14,615.40</div></div>
+  </div>
+  <div class="stub-footer">
+    <span>Direct Deposit — Chase Bank ···· XXXX</span>
+    <span>Check/Advice #: 002421</span>
+  </div>
+</div>
+
+</body>
+</html>
