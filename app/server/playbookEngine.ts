@@ -124,6 +124,18 @@ export async function runPlaybookAnalysis(
     evidenceSchema.push(`- "${cat}" (${(ev as any).label}): Examples include ${pref}`);
   }
 
+  const allForms = new Set<string>();
+  Object.values(playbook.scenarios).forEach((scn: any) => {
+    (scn.forms || []).forEach((f: string) => allForms.add(f));
+  });
+  const formMappingTemplate: Record<string, any> = {};
+  allForms.forEach(f => {
+    if (f.startsWith('I-') || f.startsWith('DS-') || f.startsWith('ETA-')) {
+      formMappingTemplate[f] = {};
+    }
+  });
+  const formMappingJsonStr = JSON.stringify(formMappingTemplate, null, 4);
+
   // Compile the prompt for LLM fact extraction and classification
   const prompt = `You are an expert legal case classifier and document analyst for an immigration law firm.
 Your task is to analyze the provided consultation transcript and case files.
@@ -134,6 +146,10 @@ Provided Case Materials:
 ${recordText}
 --- TRANSCRIPT END ---
 Total Files in Matter: ${JSON.stringify(existingItems.map(i => ({ name: i.name, type: i.type, url: i.url })))}
+
+CRITICAL RULES:
+- ONLY extract facts explicitly stated in the materials. DO NOT hallucinate names, nationalities, or dates.
+- For self-petitioned cases (e.g. EB-1A), the petitioner and beneficiary are often the same person. Do not invent a separate petitioner entity unless one explicitly exists in the materials.
 
 Instructions:
 1. Extract values for each of the following required facts.
@@ -159,11 +175,7 @@ For each matched evidence item, specify:
 - "timeline_conflict_details": A description of the conflict or null.
 
 5. Map extracted facts to relevant forms:
-- "uscis_form_mapping": {
-    "I-130": {},
-    "I-485": {},
-    "I-140": {}
-  }
+- "uscis_form_mapping": ${formMappingJsonStr}
 
 6. Draft the Attorney Cover Letter in Markdown format:
 Include an Introduction, Factual Background, Eligibility Analysis matching the scenario, and an Exhibit List referencing the classified files.
@@ -181,11 +193,7 @@ You must return a valid JSON object matching the following structure:
   ],
   "timeline_conflict_detected": false,
   "timeline_conflict_details": null,
-  "uscis_form_mapping": {
-    "I-130": {},
-    "I-485": {},
-    "I-140": {}
-  },
+  "uscis_form_mapping": ${formMappingJsonStr},
   "cover_letter_draft": "string"
 }
 `;
@@ -378,7 +386,7 @@ You must return a valid JSON object matching the following structure:
       evidence,
       riskFlags,
       followUpQuestions,
-      uscisFormMapping: data.uscis_form_mapping || { 'I-130': {}, 'I-485': {}, 'I-140': {} },
+      uscisFormMapping: data.uscis_form_mapping || formMappingTemplate,
       coverLetterDraft: data.cover_letter_draft || ''
     }
   };
