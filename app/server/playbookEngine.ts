@@ -54,10 +54,12 @@ export interface PlaybookAnalysis {
   coverLetterDraft: string;
 }
 
-export function loadPlaybook(caseType: string = 'marriage_green_card'): any {
-  let fileName = 'marriage_gc_v1.json';
+export function loadPlaybook(caseType: string = 'unknown'): any {
+  let fileName = 'general_intake_v1.json';
   if (caseType === 'eb1a') {
     fileName = 'eb1a_v1.json';
+  } else if (caseType === 'marriage_green_card') {
+    fileName = 'marriage_gc_v1.json';
   }
   const filePath = path.join(__dirname, `playbooks/${fileName}`);
   if (!fs.existsSync(filePath)) {
@@ -89,11 +91,15 @@ export async function runPlaybookAnalysis(
   let caseType = providedCaseType;
   if (!caseType) {
     // Detect case type
-    const detectPrompt = `Analyze the following case materials and determine if it is a 'marriage_green_card' case or an 'eb1a' case. Return ONLY the string 'eb1a' or 'marriage_green_card'.\nFiles: ${JSON.stringify(existingItems.map(i => i.name))}\nTranscript: ${recordText.substring(0, 1500)}`;
+    const detectPrompt = `Analyze the following case materials and determine if it is a 'marriage_green_card' case or an 'eb1a' case.
+If there is not enough context to determine the case type, you MUST default to 'unknown'.
+Return EXACTLY the string 'eb1a', 'marriage_green_card', or 'unknown' and nothing else.
+Files: ${JSON.stringify(existingItems.map(i => i.name))}
+Transcript: ${recordText.substring(0, 1500)}`;
     const result = await model.generateContent(detectPrompt);
-    const text = result.response.text().toLowerCase();
-    caseType = text.includes('eb1a') ? 'eb1a' : 'marriage_green_card';
-    console.log(`Detected Case Type: ${caseType}`);
+    const text = result.response.text().toLowerCase().trim();
+    caseType = text === 'eb1a' ? 'eb1a' : (text === 'marriage_green_card' ? 'marriage_green_card' : 'unknown');
+    console.log(`Detected Case Type: ${caseType} (Model returned: ${text})`);
   }
 
   const playbook = loadPlaybook(caseType);
@@ -120,8 +126,13 @@ export async function runPlaybookAnalysis(
 
   const evidenceSchema: string[] = [];
   for (const [cat, ev] of Object.entries(playbook.evidence_map)) {
-    const pref = (ev as any).preferred.map((p: any) => p.id).join(', ');
-    evidenceSchema.push(`- "${cat}" (${(ev as any).label}): Examples include ${pref}`);
+    let pref = '';
+    if ((ev as any).preferred) {
+      pref = (ev as any).preferred.map((p: any) => p.id).join(', ');
+    } else if ((ev as any).requires_all) {
+      pref = (ev as any).requires_all.join(', ');
+    }
+    evidenceSchema.push(`- "${cat}" (${(ev as any).label})${pref ? `: Examples include ${pref}` : ''}`);
   }
 
   const allForms = new Set<string>();

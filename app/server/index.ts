@@ -7,7 +7,34 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleAIFileManager } from '@google/generative-ai/server';
 import { runPlaybookAnalysis } from './playbookEngine';
+import dns from 'dns';
+
+// Fix for Node.js 18+ IPv6 fetch issues causing 'fetch failed'
+dns.setDefaultResultOrder('ipv4first');
+
+// Helper for Google API Retries
+async function uploadFileWithRetry(fileManager: GoogleAIFileManager, filePath: string, options: any, maxRetries = 3) {
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            console.log(`[File API] Attempting upload for ${filePath}. MimeType: ${options.mimeType}`);
+            return await fileManager.uploadFile(filePath, options);
+        } catch (error: any) {
+            console.error(`[File API] Upload attempt ${i + 1} failed for ${filePath}`);
+            console.error(`[File API] Error message: ${error.message}`);
+            if (error.cause) {
+                console.error(`[File API] Error cause:`, error.cause);
+            }
+            if (error.response) {
+                console.error(`[File API] Error response status:`, error.response.status);
+            }
+            if (i === maxRetries - 1) throw error;
+            console.log(`[File API] Waiting before retry...`);
+            await new Promise(resolve => setTimeout(resolve, 2000 * (i + 1))); // exponential backoff
+        }
+    }
+}
 
 import { createClient } from "@deepgram/sdk";
 import twilio from 'twilio';
@@ -28,6 +55,7 @@ if (!geminiApiKey) {
     process.exit(1);
 }
 const genAI = new GoogleGenerativeAI(geminiApiKey);
+const fileManager = new GoogleAIFileManager(geminiApiKey);
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -753,14 +781,14 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
 
         let existingRecord: any = null;
 
-        // Compute hash for all uploaded files
-        const filesWithHash = files.map(file => {
+        // Compute hash for all uploaded files sequentially to save memory
+        const filesWithHash: any[] = [];
+        for (const file of files) {
             const fileBuffer = fs.readFileSync(file.path);
             const hashSum = crypto.createHash('sha256');
             hashSum.update(fileBuffer);
-            const hash = hashSum.digest('hex');
-            return { ...file, hash };
-        });
+            filesWithHash.push({ ...file, hash: hashSum.digest('hex') });
+        }
 
         let validFiles: any[] = filesWithHash;
 
@@ -838,18 +866,19 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
             }
         }
 
-        // Prepare media for Gemini (only non-audio files)
-        const parts = await Promise.all(imagePdfFiles.map(async (file) => {
-            const data = fs.readFileSync(file.path);
-            const mimeType = file.mimetype;
-
-            return {
-                inlineData: {
-                    data: data.toString('base64'),
-                    mimeType
+        // Prepare media for Gemini (only non-audio files) using Google AI File API
+        const parts: any[] = [];
+        for (const file of imagePdfFiles) {
+            console.log(`Uploading ${file.originalname} to Gemini via File API...`);
+            const uploadResult = await uploadFileWithRetry(fileManager, file.path, { mimeType: file.mimetype, displayName: file.originalname });
+            file.fileUri = uploadResult!.file.uri; // Save URI on the file object
+            parts.push({
+                fileData: {
+                    mimeType: file.mimetype,
+                    fileUri: uploadResult!.file.uri
                 }
-            };
-        }));
+            });
+        }
 
         let contextPrompt = "";
         let existingSummary = "";
@@ -898,7 +927,7 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
             type: file.mimetype.startsWith('image/') ? 'image' : file.mimetype.startsWith('audio/') ? 'audio' : 'pdf',
             url: `/uploads/${path.basename(file.path)}`,
             name: file.originalname,
-            metadata: { size: file.size, mimetype: file.mimetype, hash: file.hash }
+            metadata: { size: file.size, mimetype: file.mimetype, hash: file.hash, fileUri: file.fileUri }
         }));
 
         const records = getRecords();
@@ -959,20 +988,34 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
             console.log(`Running Playbook Analysis for record: ${record.id}`);
             const recordText = record.transcript ? record.transcript.text : "";
             
-            // Collect all image/pdf files currently in the record for analysis
-            const allMediaParts = [];
+            // Prepare all items (new and existing) for playbook analysis
+            const allMediaParts: any[] = [];
             if (record.items) {
                 for (const item of record.items) {
                     if (item.type === 'image' || item.type === 'pdf') {
-                        const filePath = path.join(serverRootDir, item.url.replace('/uploads', 'uploads'));
-                        if (fs.existsSync(filePath)) {
-                            const data = fs.readFileSync(filePath);
+                        if (item.metadata && item.metadata.fileUri) {
                             allMediaParts.push({
-                                inlineData: {
-                                    data: data.toString('base64'),
-                                    mimeType: item.metadata?.mimetype || (item.type === 'image' ? 'image/jpeg' : 'application/pdf')
+                                fileData: {
+                                    fileUri: item.metadata.fileUri,
+                                    mimeType: item.metadata.mimetype || (item.type === 'image' ? 'image/jpeg' : 'application/pdf')
                                 }
                             });
+                        } else {
+                            // Fallback for old items without fileUri
+                            const filePath = path.join(serverRootDir, item.url.replace('/uploads', 'uploads'));
+                            if (fs.existsSync(filePath)) {
+                                console.log(`Fallback uploading old item ${item.name} to Gemini...`);
+                                const mimeType = item.metadata?.mimetype || (item.type === 'image' ? 'image/jpeg' : 'application/pdf');
+                                const uploadResult = await uploadFileWithRetry(fileManager, filePath, { mimeType });
+                                item.metadata = item.metadata || {};
+                                item.metadata.fileUri = uploadResult!.file.uri;
+                                allMediaParts.push({
+                                    fileData: {
+                                        fileUri: uploadResult!.file.uri,
+                                        mimeType: mimeType
+                                    }
+                                });
+                            }
                         }
                     }
                 }
@@ -980,11 +1023,14 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
 
             const { analysis: analysisResult, caseType } = await runPlaybookAnalysis(recordText, allMediaParts, record.items || [], record.caseType);
             record.analysis = analysisResult;
-            if (caseType && !record.caseType) {
+            if (caseType && caseType !== 'unknown' && !record.caseType) {
                 record.caseType = caseType;
             }
+            record.analysisError = undefined; // clear any previous errors
         } catch (err: any) {
             console.error('⚠️ Playbook analysis failed:', err.message);
+            record.analysisError = err.message;
+            fs.appendFileSync(path.join(__dirname, 'error.log'), `[${new Date().toISOString()}] Playbook analysis failed: ${err.message}\n${err.stack}\n\n`);
         }
 
         if (isNewRecord) {
@@ -1023,13 +1069,27 @@ app.post('/api/intake/regenerate', async (req, res) => {
                 if (item.type === 'image' || item.type === 'pdf') {
                     const filePath = path.join(serverRootDir, item.url.replace('/uploads', 'uploads'));
                     if (fs.existsSync(filePath)) {
-                        const data = fs.readFileSync(filePath);
-                        parts.push({
-                            inlineData: {
-                                data: data.toString('base64'),
-                                mimeType: item.metadata?.mimetype || (item.type === 'image' ? 'image/jpeg' : 'application/pdf')
-                            }
-                        });
+                        if (item.metadata && item.metadata.fileUri) {
+                            parts.push({
+                                fileData: {
+                                    fileUri: item.metadata.fileUri,
+                                    mimeType: item.metadata.mimetype || (item.type === 'image' ? 'image/jpeg' : 'application/pdf')
+                                }
+                            });
+                        } else {
+                            // Fallback upload
+                            const mimeType = item.metadata?.mimetype || (item.type === 'image' ? 'image/jpeg' : 'application/pdf');
+                            console.log(`Fallback uploading ${item.name} to Gemini...`);
+                            const uploadResult = await uploadFileWithRetry(fileManager, filePath, { mimeType });
+                            item.metadata = item.metadata || {};
+                            item.metadata.fileUri = uploadResult!.file.uri;
+                            parts.push({
+                                fileData: {
+                                    fileUri: uploadResult!.file.uri,
+                                    mimeType: mimeType
+                                }
+                            });
+                        }
                     }
                 }
             }
@@ -1063,11 +1123,14 @@ app.post('/api/intake/regenerate', async (req, res) => {
             console.log(`Running Playbook Analysis (Regenerate) for record: ${existingRecordId}`);
             const { analysis: analysisResult, caseType } = await runPlaybookAnalysis(transcriptText, parts, existingRecord.items || [], existingRecord.caseType);
             records[recordIndex].analysis = analysisResult;
-            if (caseType && !existingRecord.caseType) {
+            if (caseType && caseType !== 'unknown' && !existingRecord.caseType) {
                 records[recordIndex].caseType = caseType;
             }
+            records[recordIndex].analysisError = undefined; // clear previous error
         } catch (err: any) {
-            console.error('⚠️ Playbook analysis regeneration failed:', err.message);
+            console.error('⚠️ Playbook analysis failed (Regenerate):', err.message);
+            records[recordIndex].analysisError = err.message;
+            fs.appendFileSync(path.join(__dirname, 'error.log'), `[${new Date().toISOString()}] Playbook analysis regeneration failed: ${err.message}\n${err.stack}\n\n`);
         }
 
         fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));

@@ -833,12 +833,13 @@ function App() {
                 background: 'rgba(255, 255, 255, 0.03)',
                 border: '1px solid var(--border-color)',
                 cursor: 'pointer',
-                transition: 'all 0.2s'
+                transition: 'all 0.2s',
+                overflow: 'hidden'
               }}
             >
               {item.type === 'image' ? <ImageIcon size={20} style={{ color: 'var(--accent-primary)' }} /> : item.type === 'audio' ? <PlayCircle size={20} style={{ color: 'var(--accent-primary)' }} /> : <FileIcon size={20} style={{ color: 'var(--accent-primary)' }} />}
               <div className="item-meta" style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                <span className="item-name" style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name || `Item ${idx + 1}`}</span>
+                <span className="item-name" title={item.name || `Item ${idx + 1}`} style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name || `Item ${idx + 1}`}</span>
                 <span className="item-type" style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{item.type.toUpperCase()}</span>
               </div>
             </div>
@@ -1461,8 +1462,8 @@ function App() {
                                   {isProvided ? '✓' : '⚠️'}
                                 </span>
                                 <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.label}</div>
-                                  <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  <div title={doc.label} style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.label}</div>
+                                  <div title={isProvided ? `File: ${doc.fileName}` : 'Missing / Required'} style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                     {isProvided ? `File: ${doc.fileName}` : 'Missing / Required'}
                                   </div>
                                 </div>
@@ -1472,7 +1473,16 @@ function App() {
                         </div>
                       ) : (
                         <div style={{ padding: '1rem', borderRadius: '8px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', textAlign: 'center' }}>
-                          <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '0.75rem' }}>No Playbook analysis found.</p>
+                          {record?.analysisError ? (
+                            <>
+                              <p style={{ color: 'var(--danger)', fontSize: '0.8rem', marginBottom: '0.75rem', fontWeight: 600 }}>Analysis Failed</p>
+                              <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginBottom: '0.75rem', background: 'rgba(239, 68, 68, 0.05)', padding: '0.5rem', borderRadius: '4px', textAlign: 'left' }}>
+                                {record.analysisError}
+                              </p>
+                            </>
+                          ) : (
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '0.75rem' }}>No Playbook analysis found.</p>
+                          )}
                           <button className="btn-history" onClick={handleRegenerateSummary} disabled={isRegenerating} style={{ fontSize: '0.75rem', padding: '0.4rem 0.6rem' }}>
                             <RefreshCw size={12} className={isRegenerating ? 'spin' : ''} /> Run Analysis
                           </button>
@@ -1549,6 +1559,11 @@ function App() {
                             </div>
                             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                               Applied rules: <strong>{analysis.playbookName || 'Intake Playbook'}</strong>
+                              {record?.caseType && (
+                                <span style={{ marginLeft: '10px', padding: '2px 8px', background: 'var(--accent-primary)', color: 'white', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase' }}>
+                                  Type: {record.caseType}
+                                </span>
+                              )}
                             </div>
                             {analysis.completeness.penaltiesApplied > 0 && (
                               <div style={{ fontSize: '0.8rem', color: 'var(--danger)', background: 'rgba(239, 68, 68, 0.05)', padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid rgba(239, 68, 68, 0.15)', display: 'inline-block', width: 'fit-content' }}>
@@ -2079,16 +2094,20 @@ function App() {
 
                                   <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: '0.75rem 1rem', marginBottom: '2rem', fontSize: '0.85rem' }}>
                                     <div style={{ fontWeight: 'bold', color: '#475569' }}>CASE TYPE:</div>
-                                    <div>Marriage-Based Permanent Residence (AOS concurrent filing)</div>
+                                    <div>{analysis?.playbookName || (record?.caseType === 'eb1a' ? 'EB-1A Extraordinary Ability' : 'Marriage-Based Permanent Residence')} {analysis?.scenarioLabel ? `(${analysis.scenarioLabel})` : ''}</div>
                                     
-                                    <div style={{ fontWeight: 'bold', color: '#475569' }}>PETITIONER:</div>
-                                    <div>{getDisplayName(analysis?.facts?.petitioner_identity?.value, 'Michael David Johnson')} (U.S. Citizen)</div>
+                                    {analysis?.facts?.petitioner_identity?.value && record?.caseType !== 'eb1a' && (
+                                      <>
+                                        <div style={{ fontWeight: 'bold', color: '#475569' }}>PETITIONER:</div>
+                                        <div>{getDisplayName(analysis?.facts?.petitioner_identity?.value, 'Unknown')} {analysis?.facts?.petitioner_status?.value ? `(${analysis.facts.petitioner_status.value})` : ''}</div>
+                                      </>
+                                    )}
                                     
                                     <div style={{ fontWeight: 'bold', color: '#475569' }}>BENEFICIARY:</div>
-                                    <div>{getDisplayName(analysis?.facts?.beneficiary_identity?.value, 'Li Ying Chen Martinez')} (China/PRC)</div>
+                                    <div>{getDisplayName(analysis?.facts?.beneficiary_identity?.value, 'Unknown')}</div>
 
                                     <div style={{ fontWeight: 'bold', color: '#475569' }}>FORMS INCLUDED:</div>
-                                    <div>Form I-130, I-130A, I-485, I-864, I-693</div>
+                                    <div>{analysis?.uscisFormMapping && typeof analysis.uscisFormMapping === 'object' && !Array.isArray(analysis.uscisFormMapping) ? Object.keys(analysis.uscisFormMapping).join(', ') : 'N/A'}</div>
 
                                     <div style={{ fontWeight: 'bold', color: '#475569' }}>PREPARED BY:</div>
                                     <div>MeritX Legal Petition Assembly Engine</div>

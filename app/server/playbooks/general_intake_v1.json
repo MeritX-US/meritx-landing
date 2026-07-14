@@ -1,0 +1,77 @@
+{
+  "playbook_id": "general_intake_v1",
+  "version": "1.0.0",
+  "case_type": "unknown",
+  "jurisdiction": "US-Federal",
+  "language_variants": ["en", "zh"],
+  "audience": "law_firm_internal",
+  "description": "General Immigration Intake playbook. Used when the system does not yet have enough context to determine a specific visa category.",
+  
+  "scenarios": {
+    "General_Inquiry": {
+      "label": "Pending classification",
+      "resolve_when": {},
+      "forms": [],
+      "notes": "Needs more information to determine a specific path."
+    }
+  },
+
+  "required_facts": [
+    { "id": "client_identity", "label": "Client full legal name & DOB", "type": "entity", "required": false, "priority": 1, "confirm_by_human": false, "applies_to": ["General_Inquiry"] },
+    { "id": "immigration_goals", "label": "Primary immigration goal or visa type sought", "type": "string", "required": true, "priority": 1, "confirm_by_human": true, "applies_to": ["General_Inquiry"] }
+  ],
+
+  "required_documents": {
+    "identity": [
+      { "id": "passport_or_id", "label": "Government-issued ID or Passport", "required": false, "applies_to": ["General_Inquiry"] }
+    ]
+  },
+
+  "evidence_map": {},
+  "escalation_flags": [],
+
+  "scoring": {
+    "method": "weighted_dimensions_with_penalties",
+    "dimensions": [
+      {
+        "id": "intake_progress",
+        "label": "Basic Information Gathering",
+        "weight": 1.0,
+        "components": [
+          { "type": "facts_present", "facts": ["client_identity", "immigration_goals"], "share": 1.0 }
+        ]
+      }
+    ],
+    "penalties": [],
+    "thresholds": {
+      "petition_ready": 100,
+      "review_advised": 50,
+      "not_ready": 0
+    }
+  },
+
+  "output_contract": {
+    "consultation_summary": {
+      "sections": ["parties", "goals", "open_questions"],
+      "source_traced": true,
+      "editable": true
+    },
+    "missing_documents_checklist": {
+      "groups_by": "document_category",
+      "item_states": ["provided", "missing"],
+      "source_traced": true,
+      "editable": true
+    },
+    "follow_up_questions": {
+      "ordered_by": "fact_priority",
+      "generated_from": "missing_required_facts",
+      "editable": true
+    },
+    "intake_completeness_score": {
+      "shows_overall": true,
+      "shows_dimension_breakdown": true,
+      "shows_blocking_flags": false,
+      "explainable": true
+    }
+  }
+}
