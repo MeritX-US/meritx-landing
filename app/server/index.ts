@@ -10,6 +10,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GoogleAIFileManager } from '@google/generative-ai/server';
 import { runPlaybookAnalysis } from './playbookEngine';
 import dns from 'dns';
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 
 // Fix for Node.js 18+ IPv6 fetch issues causing 'fetch failed'
 dns.setDefaultResultOrder('ipv4first');
@@ -1220,6 +1221,171 @@ Deliver the response now.`;
     } catch (error: any) {
         console.error('❌ Inline refinement failed:', error.message);
         res.status(500).json({ error: 'Failed to refine analysis inline', message: error.message });
+    }
+});
+
+// 8. PDF Compilation Endpoint
+app.get('/api/intake/package/:id/pdf', async (req, res) => {
+    const { id } = req.params;
+    
+    try {
+        const records = getRecords();
+        const record = records.find(r => r.id === id);
+        
+        if (!record) {
+            return res.status(404).json({ error: 'Record not found' });
+        }
+
+        // Initialize a new PDF document
+        const mergedPdf = await PDFDocument.create();
+        const timesRomanFont = await mergedPdf.embedFont(StandardFonts.TimesRoman);
+        const timesRomanBold = await mergedPdf.embedFont(StandardFonts.TimesRomanBold);
+
+        // Add a Table of Contents Page (Exhibit Index)
+        const tocPage = mergedPdf.addPage();
+        const { width, height } = tocPage.getSize();
+        
+        const isMarriage = record.caseType !== 'eb1a';
+        const caseTypeLabel = isMarriage ? 'Marriage-Based Permanent Residence' : 'I-140, EB-1A, Alien of Extraordinary Ability - INA 203(b)(1)(A)';
+        const petitionerNameRaw = record.analysis?.facts?.petitioner_identity?.value || 'Unknown Petitioner';
+        const beneficiaryNameRaw = record.analysis?.facts?.beneficiary_identity?.value || 'Unknown Beneficiary';
+        
+        // Strip DOBs for the header to prevent bleeding off the page
+        const pName = petitionerNameRaw.split(',')[0].trim();
+        const bName = beneficiaryNameRaw.split(',')[0].trim();
+
+        let cursorY = height - 80;
+        const leftMargin = 72; // 1 inch margin
+        
+        // Helper to draw bold prefix + normal text
+        const drawPrefixLine = (prefix: string, text: string, y: number) => {
+            tocPage.drawText(prefix, { x: leftMargin, y, size: 12, font: timesRomanBold, color: rgb(0, 0, 0) });
+            const prefixWidth = timesRomanBold.widthOfTextAtSize(prefix, 12);
+            tocPage.drawText(text, { x: leftMargin + prefixWidth, y, size: 12, font: timesRomanFont, color: rgb(0, 0, 0) });
+        };
+
+        drawPrefixLine('Petitioner/Beneficiary: ', `${pName} / ${bName}`, cursorY);
+        cursorY -= 30;
+
+        drawPrefixLine('Petition: ', caseTypeLabel, cursorY);
+        cursorY -= 60;
+
+        const title = 'TABLE OF CONTENTS';
+        const titleWidth = timesRomanBold.widthOfTextAtSize(title, 14);
+        tocPage.drawText(title, {
+            x: (width / 2) - (titleWidth / 2), y: cursorY, size: 14, font: timesRomanBold, color: rgb(0, 0, 0)
+        });
+        cursorY -= 50;
+
+        const formNames = Object.keys(record.analysis?.uscisFormMapping || {}).filter(f => !f.includes('_by_location'));
+        
+        // Expanded form descriptions to match formal legal style
+        const formDescriptions: Record<string, string> = {
+            'I-130': 'Petition for Alien Relative',
+            'I-130A': 'Supplemental Information for Spouse Beneficiary',
+            'I-485': 'Application to Register Permanent Residence or Adjust Status',
+            'I-864': 'Affidavit of Support Under Section 213A of the INA',
+            'I-693': 'Report of Medical Examination and Vaccination Record',
+            'I-765': 'Application for Employment Authorization',
+            'I-131': 'Application for Travel Document',
+            'DS-260': 'Immigrant Visa and Alien Registration Application',
+            'G-1145': 'e-Notification of Application/Petition Acceptance',
+            'G-1450': 'Authorization for Credit Card Transactions'
+        };
+
+        let itemIndex = 1;
+        
+        // Optional G-Forms typically included in packages
+        if (isMarriage) {
+            tocPage.drawText(`${itemIndex}. Form G-1450, ${formDescriptions['G-1450']}`, { x: leftMargin, y: cursorY, size: 12, font: timesRomanFont });
+            cursorY -= 25;
+            itemIndex++;
+            tocPage.drawText(`${itemIndex}. Form G-1145, ${formDescriptions['G-1145']}`, { x: leftMargin, y: cursorY, size: 12, font: timesRomanFont });
+            cursorY -= 25;
+            itemIndex++;
+        }
+
+        formNames.forEach(form => {
+            const desc = formDescriptions[form] ? `, ${formDescriptions[form]}` : '';
+            tocPage.drawText(`${itemIndex}. Form ${form}${desc}`, { x: leftMargin, y: cursorY, size: 12, font: timesRomanFont });
+            cursorY -= 25;
+            itemIndex++;
+        });
+
+        if (record.analysis?.coverLetterDraft) {
+            tocPage.drawText(`${itemIndex}. Cover Letter in support of Petition`, { x: leftMargin, y: cursorY, size: 12, font: timesRomanFont });
+            cursorY -= 25;
+            itemIndex++;
+        }
+
+        tocPage.drawText(`${itemIndex}. List of Exhibits`, { x: leftMargin, y: cursorY, size: 12, font: timesRomanFont });
+        cursorY -= 25;
+        itemIndex++;
+        
+        const exhibitsCount = record.items?.length || 0;
+        tocPage.drawText(`${itemIndex}. Exhibits 1-${exhibitsCount}`, { x: leftMargin, y: cursorY, size: 12, font: timesRomanFont });
+        cursorY -= 40;
+
+        // Iterate and embed uploaded files
+        let exhibitNumber = 1;
+        for (const item of (record.items || [])) {
+            if (cursorY < 50) {
+                // Not perfectly handling TOC overflow, but usually fits
+                // Skip drawing more lines on TOC if it overflows
+            } else {
+                tocPage.drawText(`   Exhibit ${exhibitNumber}: ${item.name}`, { x: leftMargin + 10, y: cursorY, size: 11, font: timesRomanFont });
+                cursorY -= 20;
+            }
+
+            try {
+                // Ensure absolute path
+                const filePath = path.join(__dirname, item.url.startsWith('/uploads') ? item.url : `/uploads/${item.url}`);
+                if (fs.existsSync(filePath)) {
+                    const fileBytes = fs.readFileSync(filePath);
+                    
+                    if (item.type === 'pdf') {
+                        const pdfToMerge = await PDFDocument.load(fileBytes, { ignoreEncryption: true });
+                        const copiedPages = await mergedPdf.copyPages(pdfToMerge, pdfToMerge.getPageIndices());
+                        copiedPages.forEach(page => mergedPdf.addPage(page));
+                    } else if (item.type === 'image') {
+                        let img;
+                        if (filePath.toLowerCase().endsWith('.png')) {
+                            img = await mergedPdf.embedPng(fileBytes);
+                        } else if (filePath.toLowerCase().endsWith('.jpg') || filePath.toLowerCase().endsWith('.jpeg')) {
+                            img = await mergedPdf.embedJpg(fileBytes);
+                        }
+                        
+                        if (img) {
+                            const imgPage = mergedPdf.addPage();
+                            const { width: pWidth, height: pHeight } = imgPage.getSize();
+                            const imgDims = img.scaleToFit(pWidth - 40, pHeight - 40);
+                            imgPage.drawImage(img, {
+                                x: pWidth / 2 - imgDims.width / 2,
+                                y: pHeight / 2 - imgDims.height / 2,
+                                width: imgDims.width,
+                                height: imgDims.height,
+                            });
+                        }
+                    }
+                }
+            } catch (err: any) {
+                console.error(`Failed to merge file ${item.name}: ${err.message}`);
+                // Add a blank page with error message
+                const errPage = mergedPdf.addPage();
+                errPage.drawText(`Error loading Exhibit ${exhibitNumber}: ${item.name}`, { x: 50, y: errPage.getSize().height - 50, size: 12, font: timesRomanFont });
+            }
+            exhibitNumber++;
+        }
+
+        const mergedPdfBytes = await mergedPdf.save();
+        
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="Petition_Package_${id}.pdf"`);
+        res.send(Buffer.from(mergedPdfBytes));
+
+    } catch (error: any) {
+        console.error('❌ PDF Compilation failed:', error.message);
+        res.status(500).json({ error: 'Failed to compile PDF package', message: error.message });
     }
 });
 

@@ -2013,6 +2013,28 @@ function App() {
                                   </>
                                 )}
                               </button>
+                              <button 
+                                onClick={() => {
+                                  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+                                  window.open(`${baseUrl}/api/intake/package/${selectedRecordId}/pdf`, '_blank');
+                                }}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.4rem',
+                                  padding: '0.4rem 0.75rem',
+                                  background: '#16a34a',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  color: 'white',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 'bold',
+                                  cursor: 'pointer',
+                                  boxShadow: '0 2px 8px rgba(22, 163, 74, 0.3)'
+                                }}
+                              >
+                                <Download size={12} /> All-in-One PDF
+                              </button>
                             </div>
                           </div>
 
@@ -2023,7 +2045,7 @@ function App() {
                                 { id: 'cover-sheet', label: '1. Cover Sheet', icon: <FileText size={14} /> },
                                 { id: 'cover-letter', label: '2. Cover Letter', icon: <FileText size={14} /> },
                                 { id: 'form-mapping', label: '3. Forms Map', icon: <FileText size={14} /> },
-                                { id: 'exhibit-index', label: '4. Exhibits', icon: <FileText size={14} /> },
+                                { id: 'exhibit-index', label: '4. Table of Contents', icon: <FileText size={14} /> },
                                 { id: 'checklist', label: '5. Sign-off', icon: <CheckCircle size={14} /> },
                               ].map((doc) => {
                                 const isSelected = selectedAssemblyDocId === doc.id;
@@ -2192,7 +2214,11 @@ function App() {
                                                     <td style={{ padding: '0.4rem', fontWeight: 600, color: '#334155' }}>
                                                       {fieldName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
                                                     </td>
-                                                    <td style={{ padding: '0.4rem', color: '#0f172a' }}>{fields[fieldName]}</td>
+                                                    <td style={{ padding: '0.4rem', color: '#0f172a' }}>
+                                                      {typeof fields[fieldName] === 'object' && fields[fieldName] !== null 
+                                                        ? JSON.stringify(fields[fieldName]) 
+                                                        : String(fields[fieldName] || '')}
+                                                    </td>
                                                     <td style={{ padding: '0.4rem', color: '#64748b', fontStyle: 'italic', fontSize: '0.75rem' }}>{sourceText}</td>
                                                   </tr>
                                                 );
@@ -2209,55 +2235,65 @@ function App() {
                               </div>
                             )}
 
-                            {/* Page 4: Exhibit Index */}
-                            {selectedAssemblyDocId === 'exhibit-index' && (
-                              <div>
-                                <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.2rem', borderBottom: '2px solid #1e293b', paddingBottom: '0.5rem', textAlign: 'center' }}>EXHIBIT INDEX</h3>
-                                <p style={{ fontSize: '0.8rem', color: '#64748b', textAlign: 'center', marginBottom: '2rem' }}>
-                                  In Support of Concurrent Filing of Form I-130 and Form I-485
-                                </p>
-                                <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-                                  <table style={{ width: '100%', minWidth: '600px', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
-                                    <thead>
-                                      <tr style={{ borderBottom: '2px solid #475569', textAlign: 'left' }}>
-                                        <th style={{ padding: '0.5rem', fontWeight: 'bold', width: '90px' }}>Exhibit</th>
-                                        <th style={{ padding: '0.5rem', fontWeight: 'bold' }}>Document Description</th>
-                                        <th style={{ padding: '0.5rem', fontWeight: 'bold', width: '120px' }}>Status</th>
-                                        <th style={{ padding: '0.5rem', fontWeight: 'bold' }}>Linked File</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {analysis.documents.map((doc: any, index: number) => {
-                                        const isProvided = doc.status === 'provided';
-                                        const letter = String.fromCharCode(65 + index);
-                                        return (
-                                          <tr key={doc.id} style={{ borderBottom: '1px solid #cbd5e1' }}>
-                                            <td style={{ padding: '0.6rem 0.5rem', fontWeight: 'bold', color: '#0f172a' }}>Exhibit {letter}</td>
-                                            <td style={{ padding: '0.6rem 0.5rem', color: '#334155', fontWeight: 550 }}>{doc.label}</td>
-                                            <td style={{ padding: '0.6rem 0.5rem' }}>
-                                              <span style={{
-                                                display: 'inline-block',
-                                                padding: '0.1rem 0.35rem',
-                                                borderRadius: '4px',
-                                                fontSize: '0.7rem',
-                                                fontWeight: 'bold',
-                                                background: isProvided ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                                                color: isProvided ? '#16a34a' : '#dc2626'
-                                              }}>
-                                                {isProvided ? '✓ MATCHED' : '⚠️ MISSING'}
-                                              </span>
-                                            </td>
-                                            <td style={{ padding: '0.6rem 0.5rem', color: isProvided ? '#0f172a' : '#94a3b8', fontStyle: isProvided ? 'normal' : 'italic', fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' }}>
-                                              {isProvided ? doc.fileName : 'Not Provided'}
-                                            </td>
-                                          </tr>
-                                        );
-                                      })}
-                                    </tbody>
-                                  </table>
+                            {/* Page 4: Table of Contents */}
+                            {selectedAssemblyDocId === 'exhibit-index' && (() => {
+                              const caseTypeLabel = analysis?.playbookName || (record?.caseType === 'eb1a' ? 'EB-1A, Alien of Extraordinary Ability - INA 203(b)(1)(A)' : 'Marriage-Based Permanent Residence');
+                              const petitionerName = analysis?.facts?.petitioner_identity?.value || 'Unknown Petitioner';
+                              const beneficiaryName = analysis?.facts?.beneficiary_identity?.value || 'Unknown Beneficiary';
+                              const formNames = Object.keys(analysis?.uscisFormMapping || {}).filter(f => !f.includes('_by_location'));
+                              let itemIndex = 1;
+
+                              return (
+                              <div style={{ padding: '2rem 1rem', maxWidth: '800px', margin: '0 auto', fontFamily: '"Times New Roman", Times, serif' }}>
+                                <div style={{ textAlign: 'center', marginBottom: '3rem' }}>
+                                  <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.2rem', fontWeight: 'bold' }}>
+                                    Petitioner/Beneficiary: {petitionerName} {petitionerName !== beneficiaryName ? `/ ${beneficiaryName}` : ''}
+                                  </h3>
+                                  <p style={{ fontSize: '1.1rem', margin: '0 0 3rem 0' }}>
+                                    Petition: {caseTypeLabel}
+                                  </p>
+                                  <h2 style={{ fontSize: '1.3rem', fontWeight: 'bold', letterSpacing: '0.05em' }}>
+                                    TABLE OF CONTENTS
+                                  </h2>
+                                </div>
+                                
+                                <div style={{ fontSize: '1.1rem', lineHeight: '1.8' }}>
+                                  {formNames.map((form) => (
+                                    <div key={form} style={{ display: 'flex', marginBottom: '0.5rem' }}>
+                                      <span style={{ width: '30px' }}>{itemIndex++}.</span>
+                                      <span>Form {form}</span>
+                                    </div>
+                                  ))}
+                                  
+                                  {analysis?.coverLetterDraft && (
+                                    <div style={{ display: 'flex', marginBottom: '0.5rem' }}>
+                                      <span style={{ width: '30px' }}>{itemIndex++}.</span>
+                                      <span>Cover Letter in support of Petition</span>
+                                    </div>
+                                  )}
+
+                                  <div style={{ display: 'flex', marginBottom: '0.5rem' }}>
+                                    <span style={{ width: '30px' }}>{itemIndex++}.</span>
+                                    <span>List of Exhibits</span>
+                                  </div>
+
+                                  <div style={{ display: 'flex', marginBottom: '0.5rem' }}>
+                                    <span style={{ width: '30px' }}>{itemIndex++}.</span>
+                                    <span>Exhibits 1-{record?.items?.length || 0}</span>
+                                  </div>
+
+                                  <div style={{ paddingLeft: '40px', marginTop: '1rem', fontSize: '1rem' }}>
+                                    {(record?.items || []).map((item: any, i: number) => (
+                                      <div key={i} style={{ marginBottom: '0.4rem', color: '#334155' }}>
+                                        Exhibit {i + 1}: {item.name}
+                                      </div>
+                                    ))}
+                                  </div>
                                 </div>
                               </div>
-                            )}
+                              );
+                            })()}
+
 
                             {/* Page 5: Attorney Review Checklist */}
                             {selectedAssemblyDocId === 'checklist' && (
