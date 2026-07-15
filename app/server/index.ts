@@ -1339,7 +1339,7 @@ app.get('/api/intake/package/:id/pdf', async (req, res) => {
 
             try {
                 // Ensure absolute path
-                const filePath = path.join(__dirname, item.url.startsWith('/uploads') ? item.url : `/uploads/${item.url}`);
+                const filePath = path.join(serverRootDir, item.url.replace('/uploads', 'uploads'));
                 if (fs.existsSync(filePath)) {
                     const fileBytes = fs.readFileSync(filePath);
                     

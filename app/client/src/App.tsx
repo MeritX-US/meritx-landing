@@ -608,23 +608,18 @@ function App() {
       // 4. Download and add uploaded files to exhibits/ folder
       const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
       
-      const downloadPromises = record.analysis.documents.map(async (doc: any, idx: number) => {
-        if (doc.status === 'provided' && doc.fileName) {
-          const item = record.items?.find((i: any) => i.name === doc.fileName);
-          if (item && item.url) {
-            try {
-              const fileUrl = item.url.startsWith('http') ? item.url : `${baseUrl}${item.url}`;
-              const res = await fetch(fileUrl);
-              if (res.ok) {
-                const blob = await res.blob();
-                const letter = String.fromCharCode(65 + idx);
-                const fileExt = doc.fileName.split('.').pop() || 'png';
-                const cleanDocLabel = doc.label.replace(/[^a-zA-Z0-9]/g, '_');
-                zip.file(`exhibits/Exhibit_${letter}_${cleanDocLabel}.${fileExt}`, blob);
-              }
-            } catch (e) {
-              console.error(`Failed to download ${doc.fileName} for ZIP assembly:`, e);
+      const downloadPromises = (record.items || []).map(async (item: any, idx: number) => {
+        if (item && item.url) {
+          try {
+            const fileUrl = item.url.startsWith('http') ? item.url : `${baseUrl}${item.url}`;
+            const res = await fetch(fileUrl);
+            if (res.ok) {
+              const blob = await res.blob();
+              const cleanDocLabel = item.name.replace(/[^a-zA-Z0-9.]/g, '_');
+              zip.file(`exhibits/Exhibit_${idx + 1}_${cleanDocLabel}`, blob);
             }
+          } catch (e) {
+            console.error(`Failed to download ${item.name} for ZIP assembly:`, e);
           }
         }
       });
@@ -2699,7 +2694,7 @@ function App() {
               
               {(() => {
                 const record = records.find(r => r.id === selectedRecordId);
-                const documentCount = record?.analysis?.documents?.filter((d: any) => d.status === 'provided').length || 0;
+                const documentCount = record?.items?.length || 0;
                 return (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.75rem', textAlign: 'left', background: 'rgba(0,0,0,0.15)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                     <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.4rem', marginBottom: '0.4rem' }}>
