@@ -9,10 +9,13 @@ export interface PlaybookAnalysis {
   playbookName: string;
   scenario: string;
   scenarioLabel: string;
-  completeness: {
-    overall: number;
-    dimensions: Record<string, number>;
-    penaltiesApplied: number;
+  scores?: {
+    intakeCompleteness?: { score: number; reasoning?: string };
+    documentCompleteness?: { score: number; reasoning?: string };
+    evidenceSufficiency?: { score: number; reasoning?: string };
+    criterionCoverage?: { score: number; reasoning?: string };
+    finalMeritsStrength?: { score: number; reasoning?: string };
+    filingReadiness?: { score: number; reasoning?: string };
   };
   facts: Record<string, {
     value: any;
@@ -188,8 +191,16 @@ For each matched evidence item, specify:
 5. Map extracted facts to relevant forms:
 - "uscis_form_mapping": ${formMappingJsonStr}
 
-6. Draft the Attorney Cover Letter in Markdown format:
-${playbook.cover_letter_template ? `Use the following structure and template as a strict guide for drafting the cover letter:\n\n${playbook.cover_letter_template}\n\nReplace bracketed placeholders with actual extracted facts. DO NOT include boilerplate warnings or instructions from the template, just output the final drafted letter.` : `Include an Introduction, Factual Background, Eligibility Analysis matching the scenario, and an Exhibit List referencing the classified files.`}
+7. Calculate 6 specific Case Readiness Dimensions (0-100 scale) based on the provided materials and legal standards:
+- intakeCompleteness: Are personal, immigration, and professional history facts collected?
+- documentCompleteness: Are the core documents and translations provided?
+- evidenceSufficiency: Is the evidence strong enough to prove the legal elements?
+- criterionCoverage: How many of the 10 criteria are met?
+- finalMeritsStrength: Does the evidence demonstrate sustained acclaim and top-of-field standing?
+- filingReadiness: Overall readiness combining the above.
+
+7. Generate specific Follow-Up Questions (Refinement Questions) for missing or weak evidence. 
+${playbook.refinement_guidelines ? `Use the following guidelines to formulate targeted, professional questions to the client:\n\n${playbook.refinement_guidelines}` : `Ask questions for any missing documents or unclear facts.`}
 
 You must return a valid JSON object matching the following structure:
 {
@@ -205,12 +216,26 @@ You must return a valid JSON object matching the following structure:
   "timeline_conflict_detected": false,
   "timeline_conflict_details": null,
   "uscis_form_mapping": ${formMappingJsonStr},
-  "cover_letter_draft": "string"
+  "scores": {
+    "intakeCompleteness": { "score": 0, "reasoning": "string" },
+    "documentCompleteness": { "score": 0, "reasoning": "string" },
+    "evidenceSufficiency": { "score": 0, "reasoning": "string" },
+    "criterionCoverage": { "score": 0, "reasoning": "string" },
+    "finalMeritsStrength": { "score": 0, "reasoning": "string" },
+    "filingReadiness": { "score": 0, "reasoning": "string" }
+  },
+  "refinement_questions": [
+    { "question": "string", "reason": "string", "priority": "Critical | High | Medium | Low" }
+  ]
 }
 `;
 
   const response = await jsonModel.generateContent([prompt, ...mediaParts]);
   const responseText = response.response.text();
+  
+  if (response.response.candidates && response.response.candidates[0].finishReason) {
+    console.log('Gemini finishReason:', response.response.candidates[0].finishReason);
+  }
 
   let data: any;
   try {
@@ -344,42 +369,55 @@ You must return a valid JSON object matching the following structure:
     }
   });
 
-  // 6. Completeness Scoring Calculation (Dynamic from JSON)
-  const dimensionScores: Record<string, number> = {};
-  let rawScore = 0;
+  // 6. Completeness Scoring Calculation (AI-driven 6 Dimensions)
+  const scores = data.scores || {
+    intakeCompleteness: { score: 0, reasoning: "Not provided" },
+    documentCompleteness: { score: 0, reasoning: "Not provided" },
+    evidenceSufficiency: { score: 0, reasoning: "Not provided" },
+    criterionCoverage: { score: 0, reasoning: "Not provided" },
+    finalMeritsStrength: { score: 0, reasoning: "Not provided" },
+    filingReadiness: { score: 0, reasoning: "Not provided" }
+  };
 
-  playbook.scoring.dimensions.forEach((dim: any) => {
-    let dimScore = 0;
-    dim.components.forEach((comp: any) => {
-      let compScore = 0;
-      if (comp.type === 'facts_present') {
-        const present = comp.facts.filter((f: string) => extractedFacts[f] && extractedFacts[f].value !== null && extractedFacts[f].value !== '').length;
-        compScore = comp.facts.length > 0 ? present / comp.facts.length : 0;
-      } else if (comp.type === 'documents_present') {
-        const present = comp.docs.filter((d: string) => documents.find(doc => doc.id === d && doc.status === 'provided')).length;
-        compScore = comp.docs.length > 0 ? present / comp.docs.length : 0;
-      } else if (comp.type === 'evidence_threshold') {
-        const count = evidenceCounts[comp.category] || 0;
-        const min = playbook.evidence_map[comp.category]?.min_items || 1;
-        compScore = Math.min(count / min, 1.0);
-      }
-      dimScore += compScore * comp.share;
+  // Append AI-generated refinement questions
+  if (data.refinement_questions && Array.isArray(data.refinement_questions)) {
+    data.refinement_questions.forEach((q: any) => {
+      followUpQuestions.push({
+        id: `refinement_${Math.random().toString(36).substring(7)}`,
+        label: `${q.priority ? '[' + q.priority + '] ' : ''}${q.question} (Reason: ${q.reason})`,
+        priority: q.priority === 'Critical' ? 1 : q.priority === 'High' ? 2 : 3
+      });
     });
-    
-    dimensionScores[dim.id] = Math.round(dimScore * 100);
-    rawScore += dimScore * 100 * dim.weight;
-  });
+  }
 
-  // Calculate penalties from active flags
-  let penaltiesApplied = 0;
-  riskFlags.forEach((flag) => {
-    const penaltyDef = playbook.scoring.penalties.find((p: any) => p.flag === flag.id);
-    if (penaltyDef) {
-      penaltiesApplied += penaltyDef.deduct;
+  // --- Stage 2: Cover Letter Drafting ---
+  let coverLetterDraft = '';
+  if (playbook.cover_letter_template) {
+    try {
+      console.log('Initiating Stage 2: Cover Letter Drafting...');
+      const textModel = genAI!.getGenerativeModel({
+        model: "gemini-2.5-flash"
+      });
+      const draftPrompt = `You are an expert immigration attorney. Draft the Attorney Cover Letter in Markdown format using the provided template and extracted facts.
+
+TEMPLATE:
+${playbook.cover_letter_template}
+
+EXTRACTED FACTS:
+${JSON.stringify(extractedFacts, null, 2)}
+
+EVIDENCE MAPPINGS:
+${JSON.stringify(evidence, null, 2)}
+
+Replace bracketed placeholders with actual extracted facts. DO NOT include boilerplate warnings or instructions from the template, just output the final drafted letter.`;
+      
+      const draftResponse = await textModel.generateContent(draftPrompt);
+      coverLetterDraft = draftResponse.response.text();
+    } catch (err: any) {
+      console.error('Failed to draft cover letter in Stage 2:', err.message);
+      coverLetterDraft = "Error generating draft: " + err.message;
     }
-  });
-
-  const overallScore = Math.max(0, Math.min(100, Math.round(rawScore - penaltiesApplied)));
+  }
 
   return {
     caseType: caseType,
@@ -387,18 +425,14 @@ You must return a valid JSON object matching the following structure:
       playbookName: playbook.description || 'Intake Playbook',
       scenario,
       scenarioLabel,
-      completeness: {
-        overall: overallScore,
-        dimensions: dimensionScores,
-        penaltiesApplied
-      },
+      scores, // The new 6 dimensions
       facts: extractedFacts,
       documents,
       evidence,
       riskFlags,
       followUpQuestions,
       uscisFormMapping: data.uscis_form_mapping || formMappingTemplate,
-      coverLetterDraft: data.cover_letter_draft || ''
+      coverLetterDraft: coverLetterDraft
     }
   };
 }

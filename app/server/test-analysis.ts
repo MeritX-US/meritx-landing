@@ -60,7 +60,7 @@ async function test() {
     const { analysis: result } = await runPlaybookAnalysis(recordText, allMediaParts, record.items || []);
     console.log('Analysis completed successfully!');
     console.log('Scenario:', result.scenarioLabel);
-    console.log('Completeness score:', result.completeness.overall);
+    console.log('Filing readiness score:', result.scores?.filingReadiness?.score);
     console.log('Document checklist status:');
     result.documents.forEach((doc: any) => {
       console.log(`- ${doc.label}: ${doc.status} (${doc.fileName || 'none'})`);

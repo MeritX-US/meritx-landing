@@ -1529,29 +1529,12 @@ function App() {
               {/* 2. Completeness & Risk Flags Tab */}
               {activeResultTab === 'completeness' && (
                 <>
-                  <div className="glass-card completeness-dashboard-card" style={{ gridColumn: analysis?.coverLetterDraft ? 'auto' : '1 / -1' }}>
+                  <div className="glass-card completeness-dashboard-card" style={{ gridColumn: '1 / -1' }}>
                     <div className="section-title">Case Completeness Dashboard</div>
                     {analysis ? (
                       <div>
                         {/* Overall Score Section */}
                         <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '2rem' }}>
-                          <div className="completeness-ring-container" style={{ position: 'relative', width: '120px', height: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                            <svg width="120" height="120" viewBox="0 0 120 120">
-                              <circle cx="60" cy="60" r="50" stroke="rgba(255,255,255,0.05)" strokeWidth="8" fill="transparent" />
-                              <circle cx="60" cy="60" r="50" stroke="var(--success)" strokeWidth="8" fill="transparent"
-                                strokeDasharray={2 * Math.PI * 50}
-                                strokeDashoffset={2 * Math.PI * 50 * (1 - analysis.completeness.overall / 100)}
-                                strokeLinecap="round"
-                                transform="rotate(-90 60 60)"
-                                style={{ transition: 'stroke-dashoffset 0.5s ease-in-out' }}
-                              />
-                            </svg>
-                            <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                              <span style={{ fontSize: '1.75rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>{analysis.completeness.overall}%</span>
-                              <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Score</span>
-                            </div>
-                          </div>
-
                           <div style={{ flex: 1, minWidth: '220px', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
                             <div style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                               Scenario: <span style={{ color: 'var(--accent-primary)' }}>{analysis.scenarioLabel}</span>
@@ -1564,30 +1547,43 @@ function App() {
                                 </span>
                               )}
                             </div>
-                            {analysis.completeness.penaltiesApplied > 0 && (
-                              <div style={{ fontSize: '0.8rem', color: 'var(--danger)', background: 'rgba(239, 68, 68, 0.05)', padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid rgba(239, 68, 68, 0.15)', display: 'inline-block', width: 'fit-content' }}>
-                                ⚠️ Penalty Deductions: <strong>-{analysis.completeness.penaltiesApplied}%</strong> (from active risk flags)
-                              </div>
-                            )}
                           </div>
                         </div>
 
                         {/* Dimension Progress Bars */}
                         <h3 style={{ fontSize: '0.95rem', color: 'var(--text-primary)', marginBottom: '0.8rem', fontWeight: 600 }}>Dimension Breakdown</h3>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '2rem' }}>
-                          {Object.entries(analysis.completeness.dimensions).map(([key, score], idx) => {
-                            const colors = ['var(--accent-primary)', 'var(--success)', '#F59E0B', '#EF4444', '#8B5CF6'];
-                            const color = colors[idx % colors.length];
-                            const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2rem' }}>
+                          {analysis.scores && Object.entries(analysis.scores).map(([key, data]: [string, any], idx) => {
+                            const score = data.score || 0;
+                            let color = 'var(--success)';
+                            let statusLabel = 'Strong';
+                            if (score < 40) { color = 'var(--danger)'; statusLabel = 'Not Established'; }
+                            else if (score < 60) { color = '#F59E0B'; statusLabel = 'Weak / Substantial Gaps'; }
+                            else if (score < 75) { color = '#3B82F6'; statusLabel = 'Potentially Usable'; }
+                            else if (score < 85) { color = 'var(--success)'; statusLabel = 'Strong'; }
+                            else { color = '#8B5CF6'; statusLabel = 'Very Strong'; }
+                            
+                            const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+                            
                             return (
-                            <div key={idx} style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '0.4rem' }}>
-                                <span style={{ color: 'var(--text-primary)', fontWeight: 550 }}>{label}</span>
-                                <span style={{ color: color, fontWeight: 'bold' }}>{score as number}%</span>
+                            <div key={idx} style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '1rem 1.25rem', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '0.95rem' }}>{label}</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                  <span style={{ color: color, fontWeight: 'bold', fontSize: '0.8rem', padding: '0.2rem 0.5rem', background: `${color}15`, borderRadius: '4px' }}>
+                                    {statusLabel}
+                                  </span>
+                                  <span style={{ color: 'var(--text-primary)', fontWeight: 'bold', fontSize: '1.1rem' }}>{score}%</span>
+                                </div>
                               </div>
-                              <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden' }}>
+                              <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden', margin: '0.5rem 0' }}>
                                 <div style={{ width: `${score}%`, height: '100%', background: color, borderRadius: '3px', transition: 'width 0.5s ease-in-out' }} />
                               </div>
+                              {data.reasoning && (
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
+                                  {data.reasoning}
+                                </div>
+                              )}
                             </div>
                             );
                           })}
@@ -1653,23 +1649,6 @@ function App() {
                     )}
                   </div>
 
-                  {/* Right Column: Draft Cover Letter if available */}
-                  {analysis?.coverLetterDraft && (
-                    <div className="glass-card cover-letter-card" style={{ display: 'flex', flexDirection: 'column' }}>
-                      <div className="section-title-small" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
-                        <FileText size={18} style={{ color: 'var(--accent-primary)' }} />
-                        Draft Cover Letter Review
-                      </div>
-                      <div className="cover-letter-letterhead" style={{
-                        maxHeight: '480px', overflowY: 'auto', padding: '1.5rem',
-                        background: '#ffffff', color: '#1e293b', fontFamily: '"Georgia", serif',
-                        fontSize: '0.85rem', lineHeight: '1.6', borderRadius: '6px', border: '1px solid var(--border-color)',
-                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), inset 0 2px 4px rgba(0,0,0,0.06)'
-                      }}>
-                        <ReactMarkdown>{analysis.coverLetterDraft}</ReactMarkdown>
-                      </div>
-                    </div>
-                  )}
                 </>
               )}
 
@@ -2045,7 +2024,8 @@ function App() {
                                 { id: 'cover-letter', label: '2. Cover Letter', icon: <FileText size={14} /> },
                                 { id: 'form-mapping', label: '3. Forms Map', icon: <FileText size={14} /> },
                                 { id: 'exhibit-index', label: '4. Table of Contents', icon: <FileText size={14} /> },
-                                { id: 'checklist', label: '5. Sign-off', icon: <CheckCircle size={14} /> },
+                                { id: 'exhibit-compilation', label: '5. Exhibits', icon: <FileText size={14} /> },
+                                { id: 'checklist', label: '6. Sign-off', icon: <CheckCircle size={14} /> },
                               ].map((doc) => {
                                 const isSelected = selectedAssemblyDocId === doc.id;
                                 return (
@@ -2291,7 +2271,8 @@ function App() {
                             })()}
 
 
-                            {/* Page 5: Attorney Review Checklist */}
+
+                            {/* Page 6: Attorney Review Checklist */}
                             {selectedAssemblyDocId === 'checklist' && (
                               <div>
                                 <h3 style={{ margin: '0 0 1.5rem 0', fontSize: '1.2rem', borderBottom: '2px solid #1e293b', paddingBottom: '0.5rem' }}>Attorney Review & Sign-Off</h3>

@@ -58,6 +58,32 @@ if (!geminiApiKey) {
 const genAI = new GoogleGenerativeAI(geminiApiKey);
 const fileManager = new GoogleAIFileManager(geminiApiKey);
 
+async function getOrUploadGeminiFile(item: any): Promise<string> {
+    const filePath = path.join(serverRootDir, item.url.replace('/uploads', 'uploads'));
+    const mimeType = item.metadata?.mimetype || (item.type === 'image' ? 'image/jpeg' : 'application/pdf');
+
+    if (item.metadata && item.metadata.fileUri) {
+        try {
+            const fileId = item.metadata.fileUri.split('/').pop();
+            const fileName = `files/${fileId}`;
+            await fileManager.getFile(fileName);
+            return item.metadata.fileUri; // Valid!
+        } catch (err) {
+            console.log(`Gemini File API file ${item.metadata.fileUri} expired or missing, re-uploading...`);
+        }
+    }
+    
+    if (fs.existsSync(filePath)) {
+        console.log(`Uploading ${item.name} to Gemini...`);
+        const uploadResult = await uploadFileWithRetry(fileManager, filePath, { mimeType });
+        item.metadata = item.metadata || {};
+        item.metadata.fileUri = uploadResult!.file.uri;
+        return uploadResult!.file.uri;
+    } else {
+        throw new Error(`Local file not found for upload: ${filePath}`);
+    }
+}
+
 const app = express();
 const port = process.env.PORT || 3001;
 
@@ -994,29 +1020,16 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
             if (record.items) {
                 for (const item of record.items) {
                     if (item.type === 'image' || item.type === 'pdf') {
-                        if (item.metadata && item.metadata.fileUri) {
+                        try {
+                            const validUri = await getOrUploadGeminiFile(item);
                             allMediaParts.push({
                                 fileData: {
-                                    fileUri: item.metadata.fileUri,
-                                    mimeType: item.metadata.mimetype || (item.type === 'image' ? 'image/jpeg' : 'application/pdf')
+                                    fileUri: validUri,
+                                    mimeType: item.metadata?.mimetype || (item.type === 'image' ? 'image/jpeg' : 'application/pdf')
                                 }
                             });
-                        } else {
-                            // Fallback for old items without fileUri
-                            const filePath = path.join(serverRootDir, item.url.replace('/uploads', 'uploads'));
-                            if (fs.existsSync(filePath)) {
-                                console.log(`Fallback uploading old item ${item.name} to Gemini...`);
-                                const mimeType = item.metadata?.mimetype || (item.type === 'image' ? 'image/jpeg' : 'application/pdf');
-                                const uploadResult = await uploadFileWithRetry(fileManager, filePath, { mimeType });
-                                item.metadata = item.metadata || {};
-                                item.metadata.fileUri = uploadResult!.file.uri;
-                                allMediaParts.push({
-                                    fileData: {
-                                        fileUri: uploadResult!.file.uri,
-                                        mimeType: mimeType
-                                    }
-                                });
-                            }
+                        } catch (err: any) {
+                            console.error(`Failed to get/upload file for item ${item.name}:`, err.message);
                         }
                     }
                 }
@@ -1068,29 +1081,16 @@ app.post('/api/intake/regenerate', async (req, res) => {
         if (existingRecord.items) {
             for (const item of existingRecord.items) {
                 if (item.type === 'image' || item.type === 'pdf') {
-                    const filePath = path.join(serverRootDir, item.url.replace('/uploads', 'uploads'));
-                    if (fs.existsSync(filePath)) {
-                        if (item.metadata && item.metadata.fileUri) {
-                            parts.push({
-                                fileData: {
-                                    fileUri: item.metadata.fileUri,
-                                    mimeType: item.metadata.mimetype || (item.type === 'image' ? 'image/jpeg' : 'application/pdf')
-                                }
-                            });
-                        } else {
-                            // Fallback upload
-                            const mimeType = item.metadata?.mimetype || (item.type === 'image' ? 'image/jpeg' : 'application/pdf');
-                            console.log(`Fallback uploading ${item.name} to Gemini...`);
-                            const uploadResult = await uploadFileWithRetry(fileManager, filePath, { mimeType });
-                            item.metadata = item.metadata || {};
-                            item.metadata.fileUri = uploadResult!.file.uri;
-                            parts.push({
-                                fileData: {
-                                    fileUri: uploadResult!.file.uri,
-                                    mimeType: mimeType
-                                }
-                            });
-                        }
+                    try {
+                        const validUri = await getOrUploadGeminiFile(item);
+                        parts.push({
+                            fileData: {
+                                fileUri: validUri,
+                                mimeType: item.metadata?.mimetype || (item.type === 'image' ? 'image/jpeg' : 'application/pdf')
+                            }
+                        });
+                    } catch (err: any) {
+                        console.error(`Failed to get/upload file for item ${item.name}:`, err.message);
                     }
                 }
             }
