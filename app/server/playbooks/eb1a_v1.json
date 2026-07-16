@@ -3,10 +3,12 @@
   "version": "1.0.0",
   "case_type": "eb1a",
   "jurisdiction": "US-Federal",
-  "language_variants": ["en", "zh"],
+  "language_variants": [
+    "en",
+    "zh"
+  ],
   "audience": "law_firm_internal",
   "description": "EB-1A Extraordinary Ability intake playbook. Covers self-petitioning or employer-sponsored I-140, concurrent AOS, and consular processing.",
-  
   "scenarios": {
     "I140_Only": {
       "label": "I-140 Petition Only",
@@ -14,7 +16,10 @@
         "beneficiary_location": "abroad",
         "filing_strategy": "i140_only"
       },
-      "forms": ["I-140", "ETA-750B_or_Statement"],
+      "forms": [
+        "I-140",
+        "ETA-750B_or_Statement"
+      ],
       "notes": "Premium processing available. Consular processing follows approval."
     },
     "Concurrent_AOS": {
@@ -23,7 +28,13 @@
         "beneficiary_location": "inside_us",
         "beneficiary_lawful_entry": true
       },
-      "forms": ["I-140", "I-485", "I-765", "I-131", "I-693"],
+      "forms": [
+        "I-140",
+        "I-485",
+        "I-765",
+        "I-131",
+        "I-693"
+      ],
       "notes": "Priority date must be current for EB-1 to file concurrently."
     },
     "Consular_DS260": {
@@ -32,75 +43,297 @@
         "beneficiary_location": "abroad",
         "filing_strategy": "consular"
       },
-      "forms": ["DS-260", "civil_documents_package"],
+      "forms": [
+        "DS-260",
+        "civil_documents_package"
+      ],
       "notes": "After I-140 approval, NVC processing."
     }
   },
-
   "required_facts": [
-    { "id": "beneficiary_identity", "label": "Beneficiary full legal name & DOB", "type": "entity", "required": true, "priority": 1, "confirm_by_human": false, "applies_to": ["I140_Only", "Concurrent_AOS", "Consular_DS260"] },
-    { "id": "beneficiary_location", "label": "Beneficiary currently inside U.S. or abroad", "type": "enum", "values": ["inside_us", "abroad"], "required": true, "priority": 1, "confirm_by_human": true, "scenario_resolver": true, "applies_to": ["I140_Only", "Concurrent_AOS", "Consular_DS260"] },
-    { "id": "filing_strategy", "label": "Filing strategy (i140_only vs concurrent vs consular)", "type": "enum", "values": ["i140_only", "concurrent", "consular"], "required": true, "priority": 1, "confirm_by_human": true, "scenario_resolver": true, "applies_to": ["I140_Only", "Concurrent_AOS", "Consular_DS260"] },
-    { "id": "field_of_endeavor", "label": "Area of extraordinary ability", "type": "string", "required": true, "priority": 1, "confirm_by_human": true, "applies_to": ["I140_Only", "Concurrent_AOS", "Consular_DS260"] },
-    { "id": "intent_to_continue_work", "label": "Intent to continue working in area of expertise", "type": "boolean", "required": true, "priority": 2, "confirm_by_human": true, "applies_to": ["I140_Only", "Concurrent_AOS", "Consular_DS260"] },
-    { "id": "sustained_acclaim_summary", "label": "Summary of sustained national/international acclaim", "type": "string", "required": true, "priority": 2, "confirm_by_human": false, "applies_to": ["I140_Only", "Concurrent_AOS", "Consular_DS260"] },
-    { "id": "beneficiary_lawful_entry", "label": "Was last entry lawful / inspected", "type": "boolean", "required": true, "priority": 2, "confirm_by_human": true, "scenario_resolver": true, "applies_to": ["Concurrent_AOS"] },
-    { "id": "beneficiary_entry_record", "label": "Beneficiary most recent entry: date, place, manner (I-94 / inspection)", "type": "structured", "required": true, "priority": 2, "confirm_by_human": true, "applies_to": ["Concurrent_AOS"] },
-    { "id": "immigration_history", "label": "Overstay, prior denials, removal/deportation, unlawful presence", "type": "structured", "required": true, "priority": 2, "confirm_by_human": true, "checked_for": ["immigration_risk"], "applies_to": ["I140_Only", "Concurrent_AOS", "Consular_DS260"] },
-    { "id": "criminal_history", "label": "Any arrests or convictions", "type": "structured", "required": true, "priority": 2, "confirm_by_human": true, "checked_for": ["criminal_risk"], "applies_to": ["I140_Only", "Concurrent_AOS", "Consular_DS260"] }
+    {
+      "id": "beneficiary_identity",
+      "label": "Beneficiary full legal name & DOB",
+      "type": "entity",
+      "required": true,
+      "priority": 1,
+      "confirm_by_human": false,
+      "applies_to": [
+        "I140_Only",
+        "Concurrent_AOS",
+        "Consular_DS260"
+      ]
+    },
+    {
+      "id": "beneficiary_location",
+      "label": "Beneficiary currently inside U.S. or abroad",
+      "type": "enum",
+      "values": [
+        "inside_us",
+        "abroad"
+      ],
+      "required": true,
+      "priority": 1,
+      "confirm_by_human": true,
+      "scenario_resolver": true,
+      "applies_to": [
+        "I140_Only",
+        "Concurrent_AOS",
+        "Consular_DS260"
+      ]
+    },
+    {
+      "id": "filing_strategy",
+      "label": "Filing strategy (i140_only vs concurrent vs consular)",
+      "type": "enum",
+      "values": [
+        "i140_only",
+        "concurrent",
+        "consular"
+      ],
+      "required": true,
+      "priority": 1,
+      "confirm_by_human": true,
+      "scenario_resolver": true,
+      "applies_to": [
+        "I140_Only",
+        "Concurrent_AOS",
+        "Consular_DS260"
+      ]
+    },
+    {
+      "id": "field_of_endeavor",
+      "label": "Area of extraordinary ability",
+      "type": "string",
+      "required": true,
+      "priority": 1,
+      "confirm_by_human": true,
+      "applies_to": [
+        "I140_Only",
+        "Concurrent_AOS",
+        "Consular_DS260"
+      ]
+    },
+    {
+      "id": "intent_to_continue_work",
+      "label": "Intent to continue working in area of expertise",
+      "type": "boolean",
+      "required": true,
+      "priority": 2,
+      "confirm_by_human": true,
+      "applies_to": [
+        "I140_Only",
+        "Concurrent_AOS",
+        "Consular_DS260"
+      ]
+    },
+    {
+      "id": "sustained_acclaim_summary",
+      "label": "Summary of sustained national/international acclaim",
+      "type": "string",
+      "required": true,
+      "priority": 2,
+      "confirm_by_human": false,
+      "applies_to": [
+        "I140_Only",
+        "Concurrent_AOS",
+        "Consular_DS260"
+      ]
+    },
+    {
+      "id": "beneficiary_lawful_entry",
+      "label": "Was last entry lawful / inspected",
+      "type": "boolean",
+      "required": true,
+      "priority": 2,
+      "confirm_by_human": true,
+      "scenario_resolver": true,
+      "applies_to": [
+        "Concurrent_AOS"
+      ]
+    },
+    {
+      "id": "beneficiary_entry_record",
+      "label": "Beneficiary most recent entry: date, place, manner (I-94 / inspection)",
+      "type": "structured",
+      "required": true,
+      "priority": 2,
+      "confirm_by_human": true,
+      "applies_to": [
+        "Concurrent_AOS"
+      ]
+    },
+    {
+      "id": "immigration_history",
+      "label": "Overstay, prior denials, removal/deportation, unlawful presence",
+      "type": "structured",
+      "required": true,
+      "priority": 2,
+      "confirm_by_human": true,
+      "checked_for": [
+        "immigration_risk"
+      ],
+      "applies_to": [
+        "I140_Only",
+        "Concurrent_AOS",
+        "Consular_DS260"
+      ]
+    },
+    {
+      "id": "criminal_history",
+      "label": "Any arrests or convictions",
+      "type": "structured",
+      "required": true,
+      "priority": 2,
+      "confirm_by_human": true,
+      "checked_for": [
+        "criminal_risk"
+      ],
+      "applies_to": [
+        "I140_Only",
+        "Concurrent_AOS",
+        "Consular_DS260"
+      ]
+    }
   ],
-
   "required_documents": {
     "identity": [
-      { "id": "beneficiary_passport", "label": "Beneficiary passport biographic page", "required": true, "applies_to": ["I140_Only", "Concurrent_AOS", "Consular_DS260"] },
-      { "id": "statement_of_intent", "label": "Statement detailing plans to continue work in area of expertise", "required": true, "applies_to": ["I140_Only", "Concurrent_AOS", "Consular_DS260"] }
+      {
+        "id": "beneficiary_passport",
+        "label": "Beneficiary passport biographic page",
+        "required": true,
+        "applies_to": [
+          "I140_Only",
+          "Concurrent_AOS",
+          "Consular_DS260"
+        ]
+      },
+      {
+        "id": "statement_of_intent",
+        "label": "Statement detailing plans to continue work in area of expertise",
+        "required": true,
+        "applies_to": [
+          "I140_Only",
+          "Concurrent_AOS",
+          "Consular_DS260"
+        ]
+      }
     ],
     "entry_status": [
-      { "id": "i94_record", "label": "I-94 / entry record", "required": true, "applies_to": ["Concurrent_AOS"] },
-      { "id": "current_visa_or_status_doc", "label": "Current visa / status document", "required": false, "applies_to": ["Concurrent_AOS"] }
+      {
+        "id": "i94_record",
+        "label": "I-94 / entry record",
+        "required": true,
+        "applies_to": [
+          "Concurrent_AOS"
+        ]
+      },
+      {
+        "id": "current_visa_or_status_doc",
+        "label": "Current visa / status document",
+        "required": false,
+        "applies_to": [
+          "Concurrent_AOS"
+        ]
+      }
     ],
     "medical": [
-      { "id": "i693_medical", "label": "I-693 medical exam (civil surgeon)", "required": true, "applies_to": ["Concurrent_AOS"] }
+      {
+        "id": "i693_medical",
+        "label": "I-693 medical exam (civil surgeon)",
+        "required": true,
+        "applies_to": [
+          "Concurrent_AOS"
+        ]
+      }
     ]
   },
-
   "evidence_map": {
     "eb1a_criteria": {
       "label": "Extraordinary Ability Criteria (10 regulatory criteria)",
       "min_items": 3,
       "weight": "critical",
       "preferred": [
-        { "id": "awards_prizes", "strength": "high" },
-        { "id": "memberships_elite", "strength": "high" },
-        { "id": "published_material_about_applicant", "strength": "high" },
-        { "id": "judging_others", "strength": "high" },
-        { "id": "original_contributions", "strength": "high" },
-        { "id": "scholarly_articles", "strength": "high" },
-        { "id": "exhibitions_showcases", "strength": "medium" },
-        { "id": "leading_critical_role", "strength": "high" },
-        { "id": "high_salary", "strength": "medium" },
-        { "id": "commercial_successes_arts", "strength": "medium" }
+        {
+          "id": "awards_prizes",
+          "strength": "high"
+        },
+        {
+          "id": "memberships_elite",
+          "strength": "high"
+        },
+        {
+          "id": "published_material_about_applicant",
+          "strength": "high"
+        },
+        {
+          "id": "judging_others",
+          "strength": "high"
+        },
+        {
+          "id": "original_contributions",
+          "strength": "high"
+        },
+        {
+          "id": "scholarly_articles",
+          "strength": "high"
+        },
+        {
+          "id": "exhibitions_showcases",
+          "strength": "medium"
+        },
+        {
+          "id": "leading_critical_role",
+          "strength": "high"
+        },
+        {
+          "id": "high_salary",
+          "strength": "medium"
+        },
+        {
+          "id": "commercial_successes_arts",
+          "strength": "medium"
+        }
       ],
-      "applies_to": ["I140_Only", "Concurrent_AOS", "Consular_DS260"]
+      "applies_to": [
+        "I140_Only",
+        "Concurrent_AOS",
+        "Consular_DS260"
+      ]
     },
     "sustained_acclaim": {
       "label": "Sustained Acclaim & Impact",
       "min_items": 2,
       "weight": "high",
       "preferred": [
-        { "id": "expert_reference_letters", "strength": "high" },
-        { "id": "citation_record", "strength": "high" },
-        { "id": "media_coverage", "strength": "medium" }
+        {
+          "id": "expert_reference_letters",
+          "strength": "high"
+        },
+        {
+          "id": "citation_record",
+          "strength": "high"
+        },
+        {
+          "id": "media_coverage",
+          "strength": "medium"
+        }
       ],
-      "applies_to": ["I140_Only", "Concurrent_AOS", "Consular_DS260"]
+      "applies_to": [
+        "I140_Only",
+        "Concurrent_AOS",
+        "Consular_DS260"
+      ]
     }
   },
-
   "escalation_flags": [
     {
       "id": "criteria_weak",
       "label": "Fewer than 3 extraordinary ability criteria met",
-      "trigger": { "evidence_category": "eb1a_criteria", "condition": "count_lt_min_items" },
+      "trigger": {
+        "evidence_category": "eb1a_criteria",
+        "condition": "count_lt_min_items"
+      },
       "severity": "high",
       "action": "block_petition_assembly",
       "message": "Fewer than 3 statutory criteria identified. EB-1A requires at least 3, or a major one-time achievement."
@@ -108,7 +341,10 @@
     {
       "id": "acclaim_weak",
       "label": "Weak evidence of sustained acclaim",
-      "trigger": { "evidence_category": "sustained_acclaim", "condition": "count_lt_min_items" },
+      "trigger": {
+        "evidence_category": "sustained_acclaim",
+        "condition": "count_lt_min_items"
+      },
       "severity": "info",
       "action": "notify_attorney",
       "message": "Limited independent evidence (letters, citations) of sustained national/international acclaim."
@@ -116,7 +352,10 @@
     {
       "id": "criminal_risk",
       "label": "Criminal history present",
-      "trigger": { "fact": "criminal_history", "condition": "is_present" },
+      "trigger": {
+        "fact": "criminal_history",
+        "condition": "is_present"
+      },
       "severity": "critical",
       "action": "attorney_review_required",
       "message": "Criminal history present. Requires attorney admissibility assessment."
@@ -124,7 +363,10 @@
     {
       "id": "immigration_risk",
       "label": "Adverse immigration history",
-      "trigger": { "fact": "immigration_history", "condition": "any_adverse_present" },
+      "trigger": {
+        "fact": "immigration_history",
+        "condition": "any_adverse_present"
+      },
       "severity": "critical",
       "action": "attorney_review_required",
       "message": "Adverse immigration history present. Assess inadmissibility bars."
@@ -132,57 +374,114 @@
     {
       "id": "unlawful_entry_aos_bar",
       "label": "AOS may be barred by unlawful entry",
-      "trigger": { "fact": "beneficiary_lawful_entry", "condition": "is_false", "and_scenario_in": ["Concurrent_AOS"] },
+      "trigger": {
+        "fact": "beneficiary_lawful_entry",
+        "condition": "is_false",
+        "and_scenario_in": [
+          "Concurrent_AOS"
+        ]
+      },
       "severity": "critical",
       "action": "attorney_review_required",
       "message": "Last entry without inspection. AOS likely unavailable for EB-1A."
     }
   ],
-
   "scoring": {
     "method": "weighted_dimensions_with_penalties",
     "dimensions": [
       {
         "id": "identity",
         "label": "Identity & Intent",
-        "weight": 0.20,
+        "weight": 0.2,
         "components": [
-          { "type": "facts_present", "facts": ["beneficiary_identity", "field_of_endeavor", "intent_to_continue_work"], "share": 0.5 },
-          { "type": "documents_present", "docs": ["beneficiary_passport", "statement_of_intent"], "share": 0.5 }
+          {
+            "type": "facts_present",
+            "facts": [
+              "beneficiary_identity",
+              "field_of_endeavor",
+              "intent_to_continue_work"
+            ],
+            "share": 0.5
+          },
+          {
+            "type": "documents_present",
+            "docs": [
+              "beneficiary_passport",
+              "statement_of_intent"
+            ],
+            "share": 0.5
+          }
         ]
       },
       {
         "id": "criteria",
         "label": "Extraordinary Ability Criteria",
-        "weight": 0.40,
+        "weight": 0.4,
         "components": [
-          { "type": "evidence_threshold", "category": "eb1a_criteria", "share": 1.0 }
+          {
+            "type": "evidence_threshold",
+            "category": "eb1a_criteria",
+            "share": 1
+          }
         ]
       },
       {
         "id": "acclaim",
         "label": "Sustained Acclaim & Impact",
-        "weight": 0.20,
+        "weight": 0.2,
         "components": [
-          { "type": "evidence_threshold", "category": "sustained_acclaim", "share": 1.0 }
+          {
+            "type": "evidence_threshold",
+            "category": "sustained_acclaim",
+            "share": 1
+          }
         ]
       },
       {
         "id": "admissibility",
         "label": "Admissibility & Status",
-        "weight": 0.20,
+        "weight": 0.2,
         "components": [
-          { "type": "facts_present", "facts": ["beneficiary_entry_record", "immigration_history", "criminal_history"], "share": 0.6 },
-          { "type": "documents_present", "docs": ["i94_record"], "share": 0.4 }
+          {
+            "type": "facts_present",
+            "facts": [
+              "beneficiary_entry_record",
+              "immigration_history",
+              "criminal_history"
+            ],
+            "share": 0.6
+          },
+          {
+            "type": "documents_present",
+            "docs": [
+              "i94_record"
+            ],
+            "share": 0.4
+          }
         ]
       }
     ],
     "penalties": [
-      { "flag": "criteria_weak", "deduct": 20 },
-      { "flag": "acclaim_weak", "deduct": 10 },
-      { "flag": "criminal_risk", "deduct": 10 },
-      { "flag": "immigration_risk", "deduct": 15 },
-      { "flag": "unlawful_entry_aos_bar", "deduct": 15 }
+      {
+        "flag": "criteria_weak",
+        "deduct": 20
+      },
+      {
+        "flag": "acclaim_weak",
+        "deduct": 10
+      },
+      {
+        "flag": "criminal_risk",
+        "deduct": 10
+      },
+      {
+        "flag": "immigration_risk",
+        "deduct": 15
+      },
+      {
+        "flag": "unlawful_entry_aos_bar",
+        "deduct": 15
+      }
     ],
     "thresholds": {
       "petition_ready": 85,
@@ -190,16 +489,24 @@
       "not_ready": 0
     }
   },
-
   "output_contract": {
     "consultation_summary": {
-      "sections": ["parties", "extraordinary_ability_facts", "scenario_determination", "open_questions"],
+      "sections": [
+        "parties",
+        "extraordinary_ability_facts",
+        "scenario_determination",
+        "open_questions"
+      ],
       "source_traced": true,
       "editable": true
     },
     "missing_documents_checklist": {
       "groups_by": "document_category",
-      "item_states": ["provided", "missing", "needs_supplementation"],
+      "item_states": [
+        "provided",
+        "missing",
+        "needs_supplementation"
+      ],
       "source_traced": true,
       "editable": true
     },
@@ -214,5 +521,6 @@
       "shows_blocking_flags": true,
       "explainable": true
     }
-  }
+  },
+  "cover_letter_template": "[LAW FIRM LETTERHEAD]\n[DATE]\n\nU.S. Citizenship and Immigration Services\n[APPLICABLE USCIS FILING ADDRESS]\n\nRE: Form I-140, Immigrant Petition for Alien Worker\nPetitioner/Beneficiary: [FULL LEGAL NAME]\nClassification Sought: EB-1A - Alien of Extraordinary Ability\nArea of Extraordinary Ability: [PRECISE FIELD]\nRequested Processing: [Adjustment of Status / Consular Processing]\n\nDear USCIS Officer:\n\nThis letter is submitted in support of the Form I-140 self-petition filed by [BENEFICIARY FULL NAME] under section 203(b)(1)(A) of the Immigration and Nationality Act and 8 C.F.R. § 204.5(h).\n\nThe evidence establishes that [MR./MS./DR. LAST NAME] is an individual of extraordinary ability in the field of [PRECISELY DEFINED FIELD]. The record demonstrates sustained national or international acclaim through [IDENTIFY THE STRONGEST ACHIEVEMENTS] and recognition by independent experts, organizations, publications, and institutions in the field.\n\nThis petition establishes that:\n1. [BENEFICIARY] satisfies at least [NUMBER] regulatory criteria under 8 C.F.R. § 204.5(h)(3);\n2. The totality of the evidence demonstrates that [BENEFICIARY] belongs to the small percentage who have risen to the very top of the field;\n3. [BENEFICIARY] has sustained national or international acclaim;\n4. [BENEFICIARY] intends to continue working in the area of extraordinary ability in the United States; and\n5. [BENEFICIARY'S] continued work will prospectively benefit the United States.\n\nFor these reasons, the Petitioner respectfully requests approval of this Form I-140 petition.\n\nI. INTRODUCTION AND EXECUTIVE SUMMARY\n[BENEFICIARY] is a [PROFESSION OR TITLE] recognized for [PRINCIPAL AREA OF EXPERTISE]. Over a career spanning approximately [NUMBER] years, the Beneficiary has achieved repeated recognition for work that has influenced [INDUSTRY / DISCIPLINE / COMMUNITY].\n\n- [MAJOR ACCOMPLISHMENT ONE] - describe the achievement, measurable impact, and independent recognition.\n- [MAJOR ACCOMPLISHMENT TWO] - identify why it was original, selective, influential, or nationally/internationally recognized.\n- [MAJOR ACCOMPLISHMENT THREE] - explain the beneficiary's personal role and corroborate it with objective evidence.\n\nIndependent evidence from [EXPERTS, MEDIA, INSTITUTIONS, CLIENTS, GOVERNMENT ENTITIES, INDUSTRY ORGANIZATIONS, OR OBJECTIVE DATABASES] confirms that these are not ordinary career accomplishments, but achievements consistent with sustained acclaim and top-of-field standing.\n\nII. THE BENEFICIARY AND THE FIELD OF EXTRAORDINARY ABILITY\nA. Professional Background\n[BENEFICIARY] has worked in [FIELD] since [YEAR]. The Beneficiary's career includes [KEY ROLES, ORGANIZATIONS, PROJECTS, PUBLICATIONS, PRODUCTS, OR PERFORMANCES]. A detailed curriculum vitae is included at Exhibit [EXHIBIT NUMBER].\n\nB. Definition of the Field\nThe relevant field is [PRECISE FIELD DEFINITION]. This field includes professionals who [DESCRIBE THE CORE FUNCTIONS, EXPERTISE, MARKET, OR DISCIPLINE]. It is more precise than the broader field of [GENERAL INDUSTRY] because [EXPLAIN THE DISTINCTION].\n\nThe Beneficiary's work falls within this field because [CONNECT THE CAREER, ACHIEVEMENTS, AND FUTURE WORK TO THE FIELD]. The same field definition is used throughout this petition for the regulatory criteria, final merits determination, and intended U.S. work.\n\nIII. LEGAL STANDARD\nUnder INA § 203(b)(1)(A) and 8 C.F.R. § 204.5(h), extraordinary ability means a level of expertise indicating that the individual is among the small percentage who have risen to the very top of the field.\nThe petition must present evidence of either a qualifying one-time achievement or evidence satisfying at least three of the ten criteria in 8 C.F.R. § 204.5(h)(3).\nSatisfying three criteria is a threshold inquiry. USCIS then considers the record in its totality to determine whether the beneficiary has sustained national or international acclaim and is among the small percentage at the top of the field.\nThe petitioner bears the burden of establishing eligibility by a preponderance of the evidence.\n\nThis petition relies on the following criteria:\n- [CRITERION 1]\n- [CRITERION 2]\n- [CRITERION 3]\n\nIV. EVIDENCE SATISFYING THE REGULATORY CRITERIA\n\n[Draft the relevant criteria sections here based on the 8 C.F.R. § 204.5(h)(3) regulations, replacing placeholders with extracted evidence. For example: Awards, Memberships, Published Material, Judging, Original Contributions, Authorship, Artistic Exhibitions, Leading/Critical Role, High Salary, Commercial Success]. \n\nV. FINAL MERITS DETERMINATION\nThe evidence must be considered collectively to determine whether [BENEFICIARY] has sustained national or international acclaim and is among the small percentage who have risen to the very top of [FIELD].\n\nA. Sustained National or International Acclaim\nThe Beneficiary's acclaim has been sustained over approximately [NUMBER] years, from [YEAR] through the present. The record shows continuing recognition through:\n- Awards or competitive honors received in [YEARS];\n- Published coverage appearing in [YEARS];\n- Major contributions created, adopted, or recognized in [YEARS];\n- Leading or critical roles held from [YEARS];\nThis chronology demonstrates a continuing pattern of recognition rather than an isolated achievement.\n\nB. The Beneficiary Has Risen to the Very Top of the Field\nSelectivity: [BENEFICIARY] was selected for [AWARDS, POSITIONS, JUDGING ROLES, OR INVITATIONS] through merit-based or competitive processes.\nIndependent recognition: Recognition came from organizations and individuals independent of the Beneficiary and the Beneficiary's employers.\nObjective impact: The Beneficiary's work produced measurable outcomes including [METRICS].\n\nC. Totality of the Evidence\nViewed individually, the evidence satisfies at least [NUMBER] regulatory criteria. Viewed collectively, it demonstrates that the Beneficiary has achieved sustained national or international acclaim, has produced original and consequential work, and is among the small percentage at the top of the defined field.\n\nVI. INTENTION TO CONTINUE WORK IN THE UNITED STATES\nThe Beneficiary intends to continue working in [THE SAME AREA OF EXTRAORDINARY ABILITY] in the United States. Specifically, the Beneficiary plans to:\n1. [CONTINUE EMPLOYMENT, CONSULTING, RESEARCH, ENTREPRENEURSHIP, OR COLLABORATION];\n2. [EXPAND THE PRIOR WORK DOCUMENTED IN THIS PETITION].\nThese proposed activities are a continuation of the Beneficiary's established work because [EXPLAIN THE DIRECT CONNECTION BETWEEN PAST ACHIEVEMENTS AND FUTURE U.S. WORK].\n\nVII. PROSPECTIVE BENEFIT TO THE UNITED STATES\nThe Beneficiary's continued work will prospectively benefit the United States by:\n- Advancing [TECHNOLOGY, SCIENCE, EDUCATION, BUSINESS, ARTS, OR ATHLETICS];\n- Contributing to U.S. competitiveness in [FIELD];\nFor example, [DESCRIBE ONE OR MORE CONCRETE U.S. ACTIVITIES AND THEIR EXPECTED RESULTS].\n\nVIII. CONCLUSION\nThe record establishes that [BENEFICIARY]:\n1. Has sustained national or international acclaim;\n2. Has achievements recognized in the field of expertise;\n3. Satisfies at least [NUMBER] criteria under 8 C.F.R. § 204.5(h)(3);\n4. Is among the small percentage who have risen to the very top of the field;\n5. Intends to continue working in the area of extraordinary ability in the United States; and\n6. Will prospectively benefit the United States through that continued work.\n\nAccordingly, the Petitioner respectfully requests that USCIS approve this Form I-140 petition and classify [BENEFICIARY FULL NAME] as an individual of extraordinary ability under INA § 203(b)(1)(A).\n\nRespectfully submitted,\n[ATTORNEY NAME OR SELF-PETITIONER]\n\n---\n\nAPPENDIX: EXHIBIT INDEX\nTab A - Forms and Filing Documents\n- Form I-140\n- Filing-fee documentation\n\nTab B - Identity and Professional Background\n- Passport biographic page\n- Curriculum vitae\n\nTab C - Evidence of Regulatory Criteria\n- [List Exhibits here based on the case facts]\n"
 }

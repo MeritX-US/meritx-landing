@@ -189,7 +189,7 @@ For each matched evidence item, specify:
 - "uscis_form_mapping": ${formMappingJsonStr}
 
 6. Draft the Attorney Cover Letter in Markdown format:
-Include an Introduction, Factual Background, Eligibility Analysis matching the scenario, and an Exhibit List referencing the classified files.
+${playbook.cover_letter_template ? `Use the following structure and template as a strict guide for drafting the cover letter:\n\n${playbook.cover_letter_template}\n\nReplace bracketed placeholders with actual extracted facts. DO NOT include boilerplate warnings or instructions from the template, just output the final drafted letter.` : `Include an Introduction, Factual Background, Eligibility Analysis matching the scenario, and an Exhibit List referencing the classified files.`}
 
 You must return a valid JSON object matching the following structure:
 {

@@ -92,7 +92,7 @@ const generatePDFBlob = (textContent: string): Blob => {
   return doc.output('blob');
 };
 
-const generateExhibitIndexPDF = (documents: any[]): Blob => {
+const generateExhibitIndexPDF = (documents: any[], caseType?: string): Blob => {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'in',
@@ -105,7 +105,11 @@ const generateExhibitIndexPDF = (documents: any[]): Blob => {
   
   doc.setFont('times', 'normal');
   doc.setFontSize(10);
-  doc.text("In Support of Concurrent Filing of Form I-130 and Form I-485", 4.25, 1.3, { align: 'center' });
+  
+  const subtitle = caseType === 'eb1a' 
+    ? "In Support of Form I-140, Immigrant Petition for Alien Worker" 
+    : "In Support of Concurrent Filing of Form I-130 and Form I-485";
+  doc.text(subtitle, 4.25, 1.3, { align: 'center' });
   
   const head = [['Exhibit', 'Document Description', 'Status', 'Linked File']];
   const body = documents.map((docItem: any, idx: number) => {
@@ -598,7 +602,7 @@ function App() {
       zip.file("01_Cover_Letter.pdf", coverLetterPdf);
       
       // 2. Add Exhibit Index
-      const exhibitIndexPdf = generateExhibitIndexPDF(record.analysis.documents);
+      const exhibitIndexPdf = generateExhibitIndexPDF(record.analysis.documents, record.caseType);
       zip.file("02_Exhibit_Index.pdf", exhibitIndexPdf);
       
       // 3. Add USCIS Form Field Mappings
@@ -2230,60 +2234,57 @@ function App() {
                               </div>
                             )}
 
-                            {/* Page 4: Table of Contents */}
+                            {/* Page 4: Exhibit Index */}
                             {selectedAssemblyDocId === 'exhibit-index' && (() => {
-                              const caseTypeLabel = analysis?.playbookName || (record?.caseType === 'eb1a' ? 'EB-1A, Alien of Extraordinary Ability - INA 203(b)(1)(A)' : 'Marriage-Based Permanent Residence');
-                              const petitionerName = analysis?.facts?.petitioner_identity?.value || 'Unknown Petitioner';
-                              const beneficiaryName = analysis?.facts?.beneficiary_identity?.value || 'Unknown Beneficiary';
-                              const formNames = Object.keys(analysis?.uscisFormMapping || {}).filter(f => !f.includes('_by_location'));
-                              let itemIndex = 1;
-
-                              return (
-                              <div style={{ padding: '2rem 1rem', maxWidth: '800px', margin: '0 auto', fontFamily: '"Times New Roman", Times, serif' }}>
-                                <div style={{ textAlign: 'center', marginBottom: '3rem' }}>
-                                  <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.2rem', fontWeight: 'bold' }}>
-                                    Petitioner/Beneficiary: {petitionerName} {petitionerName !== beneficiaryName ? `/ ${beneficiaryName}` : ''}
-                                  </h3>
-                                  <p style={{ fontSize: '1.1rem', margin: '0 0 3rem 0' }}>
-                                    Petition: {caseTypeLabel}
-                                  </p>
-                                  <h2 style={{ fontSize: '1.3rem', fontWeight: 'bold', letterSpacing: '0.05em' }}>
-                                    TABLE OF CONTENTS
-                                  </h2>
-                                </div>
+                              const subtitle = record?.caseType === 'eb1a' 
+                                ? 'In Support of Form I-140, Immigrant Petition for Alien Worker' 
+                                : 'In Support of Concurrent Filing of Form I-130 and Form I-485';
                                 
-                                <div style={{ fontSize: '1.1rem', lineHeight: '1.8' }}>
-                                  {formNames.map((form) => (
-                                    <div key={form} style={{ display: 'flex', marginBottom: '0.5rem' }}>
-                                      <span style={{ width: '30px' }}>{itemIndex++}.</span>
-                                      <span>Form {form}</span>
-                                    </div>
-                                  ))}
-                                  
-                                  {analysis?.coverLetterDraft && (
-                                    <div style={{ display: 'flex', marginBottom: '0.5rem' }}>
-                                      <span style={{ width: '30px' }}>{itemIndex++}.</span>
-                                      <span>Cover Letter in support of Petition</span>
-                                    </div>
-                                  )}
-
-                                  <div style={{ display: 'flex', marginBottom: '0.5rem' }}>
-                                    <span style={{ width: '30px' }}>{itemIndex++}.</span>
-                                    <span>List of Exhibits</span>
-                                  </div>
-
-                                  <div style={{ display: 'flex', marginBottom: '0.5rem' }}>
-                                    <span style={{ width: '30px' }}>{itemIndex++}.</span>
-                                    <span>Exhibits 1-{record?.items?.length || 0}</span>
-                                  </div>
-
-                                  <div style={{ paddingLeft: '40px', marginTop: '1rem', fontSize: '1rem' }}>
-                                    {(record?.items || []).map((item: any, i: number) => (
-                                      <div key={i} style={{ marginBottom: '0.4rem', color: '#334155' }}>
-                                        Exhibit {i + 1}: {item.name}
-                                      </div>
-                                    ))}
-                                  </div>
+                              return (
+                              <div>
+                                <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.2rem', borderBottom: '2px solid #1e293b', paddingBottom: '0.5rem', textAlign: 'center' }}>EXHIBIT INDEX</h3>
+                                <p style={{ fontSize: '0.8rem', color: '#64748b', textAlign: 'center', marginBottom: '2rem' }}>
+                                  {subtitle}
+                                </p>
+                                <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                                  <table style={{ width: '100%', minWidth: '600px', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                                    <thead>
+                                      <tr style={{ borderBottom: '2px solid #475569', textAlign: 'left' }}>
+                                        <th style={{ padding: '0.5rem', fontWeight: 'bold', width: '90px' }}>Exhibit</th>
+                                        <th style={{ padding: '0.5rem', fontWeight: 'bold' }}>Document Description</th>
+                                        <th style={{ padding: '0.5rem', fontWeight: 'bold', width: '120px' }}>Status</th>
+                                        <th style={{ padding: '0.5rem', fontWeight: 'bold' }}>Linked File</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {(analysis?.documents || []).map((doc: any, index: number) => {
+                                        const isProvided = doc.status === 'provided';
+                                        const letter = String.fromCharCode(65 + index);
+                                        return (
+                                          <tr key={doc.id || index} style={{ borderBottom: '1px solid #cbd5e1' }}>
+                                            <td style={{ padding: '0.6rem 0.5rem', fontWeight: 'bold', color: '#0f172a' }}>Exhibit {letter}</td>
+                                            <td style={{ padding: '0.6rem 0.5rem', color: '#334155', fontWeight: 550 }}>{doc.label}</td>
+                                            <td style={{ padding: '0.6rem 0.5rem' }}>
+                                              <span style={{
+                                                display: 'inline-block',
+                                                padding: '0.1rem 0.35rem',
+                                                borderRadius: '4px',
+                                                fontSize: '0.7rem',
+                                                fontWeight: 'bold',
+                                                background: isProvided ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                                                color: isProvided ? '#16a34a' : '#dc2626'
+                                              }}>
+                                                {isProvided ? '✓ MATCHED' : '⚠️ MISSING'}
+                                              </span>
+                                            </td>
+                                            <td style={{ padding: '0.6rem 0.5rem', color: isProvided ? '#0f172a' : '#94a3b8', fontStyle: isProvided ? 'normal' : 'italic', fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' }}>
+                                              {isProvided ? doc.fileName : 'Not Provided'}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
                                 </div>
                               </div>
                               );
@@ -2300,64 +2301,75 @@ function App() {
                                 </p>
 
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '2.5rem' }}>
-                                  {[
-                                    'Verify that petitioner and beneficiary legal names match biological passport pages.',
-                                    'Review and reconcile any date gaps or address conflicts in address history timeline.',
-                                    'Confirm that petitioner income meets or exceeds the required 125% Federal Poverty Line for sponsorship.',
-                                    'Approve draft Cover Letter and Exhibit List mappings.',
-                                    'Authorize MeritX to compile all verified exhibit files and drafts into a single ZIP archive.'
-                                  ].map((checkText, idx) => {
-                                    const isChecked = assemblyCheckedItems.includes(String(idx));
-                                    return (
-                                      <label key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem', cursor: 'pointer', userSelect: 'none', fontSize: '0.85rem' }}>
-                                        <input
-                                          type="checkbox"
-                                          checked={isChecked}
-                                          onChange={() => {
-                                            if (isChecked) {
-                                              setAssemblyCheckedItems(prev => prev.filter(i => i !== String(idx)));
-                                            } else {
-                                              setAssemblyCheckedItems(prev => [...prev, String(idx)]);
-                                            }
-                                          }}
-                                          style={{ marginTop: '4px', cursor: 'pointer' }}
-                                        />
-                                        <span style={{ color: isChecked ? '#0f172a' : '#475569', fontWeight: isChecked ? 550 : 400 }}>{checkText}</span>
-                                      </label>
-                                    );
-                                  })}
-                                </div>
+                                  {(() => {
+                                    const isEb1a = record?.caseType === 'eb1a';
+                                    const checklistItems = isEb1a ? [
+                                      'Verify that petitioner and beneficiary legal names match biological passport pages.',
+                                      'Verify that the beneficiary meets at least 3 of the 10 extraordinary ability criteria.',
+                                      'Review and reconcile any date gaps in the beneficiary\'s employment history.',
+                                      'Approve draft Cover Letter and Exhibit List mappings.',
+                                      'Authorize MeritX to compile all verified exhibit files and drafts into a single ZIP archive.'
+                                    ] : [
+                                      'Verify that petitioner and beneficiary legal names match biological passport pages.',
+                                      'Review and reconcile any date gaps or address conflicts in address history timeline.',
+                                      'Confirm that petitioner income meets or exceeds the required 125% Federal Poverty Line for sponsorship.',
+                                      'Approve draft Cover Letter and Exhibit List mappings.',
+                                      'Authorize MeritX to compile all verified exhibit files and drafts into a single ZIP archive.'
+                                    ];
 
-                                <div style={{ textAlign: 'center' }}>
-                                  <button
-                                    onClick={handleAssemblePackage}
-                                    disabled={assemblyCheckedItems.length < 5 || isAssembling}
-                                    style={{
-                                      padding: '0.75rem 2rem',
-                                      background: assemblyCheckedItems.length === 5 ? 'var(--accent-primary)' : 'rgba(255,255,255,0.05)',
-                                      color: assemblyCheckedItems.length === 5 ? 'white' : 'var(--text-secondary)',
-                                      border: assemblyCheckedItems.length === 5 ? 'none' : '1px solid var(--border-color)',
-                                      borderRadius: '8px',
-                                      fontSize: '0.9rem',
-                                      fontWeight: 'bold',
-                                      cursor: assemblyCheckedItems.length === 5 ? 'pointer' : 'not-allowed',
-                                      transition: 'all 0.2s',
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: '0.5rem',
-                                      boxShadow: assemblyCheckedItems.length === 5 ? '0 4px 15px rgba(59, 130, 246, 0.4)' : 'none'
-                                    }}
-                                  >
-                                    {isAssembling ? (
+                                    return (
                                       <>
-                                        <RefreshCw size={16} className="spin" /> Assembling Package...
+                                        {checklistItems.map((checkText, idx) => {
+                                          const isChecked = assemblyCheckedItems.includes(String(idx));
+                                          return (
+                                            <label key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem', cursor: 'pointer', userSelect: 'none', fontSize: '0.85rem' }}>
+                                              <input
+                                                type="checkbox"
+                                                checked={isChecked}
+                                                onChange={() => {
+                                                  if (isChecked) {
+                                                    setAssemblyCheckedItems(prev => prev.filter(i => i !== String(idx)));
+                                                  } else {
+                                                    setAssemblyCheckedItems(prev => [...prev, String(idx)]);
+                                                  }
+                                                }}
+                                                style={{ marginTop: '4px', cursor: 'pointer' }}
+                                              />
+                                              <span style={{ color: isChecked ? '#0f172a' : '#475569', fontWeight: isChecked ? 550 : 400 }}>{checkText}</span>
+                                            </label>
+                                          );
+                                        })}
+                                        
+                                        <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
+                                          <button
+                                            onClick={handleAssemblePackage}
+                                            disabled={assemblyCheckedItems.length < checklistItems.length || isAssembling}
+                                            style={{
+                                              padding: '0.75rem 2rem',
+                                              background: assemblyCheckedItems.length === checklistItems.length ? 'var(--accent-primary)' : 'rgba(255,255,255,0.05)',
+                                              color: assemblyCheckedItems.length === checklistItems.length ? 'white' : 'var(--text-secondary)',
+                                              border: assemblyCheckedItems.length === checklistItems.length ? 'none' : '1px solid var(--border-color)',
+                                              borderRadius: '8px',
+                                              fontSize: '0.9rem',
+                                              fontWeight: 'bold',
+                                              cursor: assemblyCheckedItems.length === checklistItems.length ? 'pointer' : 'not-allowed',
+                                              transition: 'all 0.2s',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '0.5rem',
+                                              boxShadow: assemblyCheckedItems.length === checklistItems.length ? '0 4px 15px rgba(59, 130, 246, 0.4)' : 'none'
+                                            }}
+                                          >
+                                            {isAssembling ? (
+                                              <><RefreshCw size={16} className="spin" /> Assembling...</>
+                                            ) : (
+                                              <><CheckCircle size={16} /> Approve & Assemble Package</>
+                                            )}
+                                          </button>
+                                        </div>
                                       </>
-                                    ) : (
-                                      <>
-                                        <CheckCircle size={16} /> Approve & Assemble Package
-                                      </>
-                                    )}
-                                  </button>
+                                    );
+                                  })()}
                                 </div>
                               </div>
                             )}

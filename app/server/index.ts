@@ -1242,7 +1242,7 @@ app.get('/api/intake/package/:id/pdf', async (req, res) => {
         const timesRomanBold = await mergedPdf.embedFont(StandardFonts.TimesRomanBold);
 
         // Add a Table of Contents Page (Exhibit Index)
-        const tocPage = mergedPdf.addPage();
+        let tocPage = mergedPdf.addPage();
         const { width, height } = tocPage.getSize();
         
         const isMarriage = record.caseType !== 'eb1a';
@@ -1250,9 +1250,16 @@ app.get('/api/intake/package/:id/pdf', async (req, res) => {
         const petitionerNameRaw = record.analysis?.facts?.petitioner_identity?.value || 'Unknown Petitioner';
         const beneficiaryNameRaw = record.analysis?.facts?.beneficiary_identity?.value || 'Unknown Beneficiary';
         
-        // Strip DOBs for the header to prevent bleeding off the page
-        const pName = petitionerNameRaw.split(',')[0].trim();
-        const bName = beneficiaryNameRaw.split(',')[0].trim();
+        const extractName = (rawName: any) => {
+            if (typeof rawName === 'string') return rawName.split(',')[0].trim();
+            if (typeof rawName === 'object' && rawName !== null) {
+                return rawName.full_legal_name || rawName.name || 'Unknown';
+            }
+            return 'Unknown';
+        };
+
+        const pName = extractName(petitionerNameRaw);
+        const bName = extractName(beneficiaryNameRaw);
 
         let cursorY = height - 80;
         const leftMargin = 72; // 1 inch margin
@@ -1277,40 +1284,10 @@ app.get('/api/intake/package/:id/pdf', async (req, res) => {
         });
         cursorY -= 50;
 
-        const formNames = Object.keys(record.analysis?.uscisFormMapping || {}).filter(f => !f.includes('_by_location'));
+        // We intentionally do not list USCIS forms in the All-in-One PDF Table of Contents 
+        // because the actual PDF only bundles the Cover Letter and Exhibits.
         
-        // Expanded form descriptions to match formal legal style
-        const formDescriptions: Record<string, string> = {
-            'I-130': 'Petition for Alien Relative',
-            'I-130A': 'Supplemental Information for Spouse Beneficiary',
-            'I-485': 'Application to Register Permanent Residence or Adjust Status',
-            'I-864': 'Affidavit of Support Under Section 213A of the INA',
-            'I-693': 'Report of Medical Examination and Vaccination Record',
-            'I-765': 'Application for Employment Authorization',
-            'I-131': 'Application for Travel Document',
-            'DS-260': 'Immigrant Visa and Alien Registration Application',
-            'G-1145': 'e-Notification of Application/Petition Acceptance',
-            'G-1450': 'Authorization for Credit Card Transactions'
-        };
-
         let itemIndex = 1;
-        
-        // Optional G-Forms typically included in packages
-        if (isMarriage) {
-            tocPage.drawText(`${itemIndex}. Form G-1450, ${formDescriptions['G-1450']}`, { x: leftMargin, y: cursorY, size: 12, font: timesRomanFont });
-            cursorY -= 25;
-            itemIndex++;
-            tocPage.drawText(`${itemIndex}. Form G-1145, ${formDescriptions['G-1145']}`, { x: leftMargin, y: cursorY, size: 12, font: timesRomanFont });
-            cursorY -= 25;
-            itemIndex++;
-        }
-
-        formNames.forEach(form => {
-            const desc = formDescriptions[form] ? `, ${formDescriptions[form]}` : '';
-            tocPage.drawText(`${itemIndex}. Form ${form}${desc}`, { x: leftMargin, y: cursorY, size: 12, font: timesRomanFont });
-            cursorY -= 25;
-            itemIndex++;
-        });
 
         if (record.analysis?.coverLetterDraft) {
             tocPage.drawText(`${itemIndex}. Cover Letter in support of Petition`, { x: leftMargin, y: cursorY, size: 12, font: timesRomanFont });
@@ -1326,17 +1303,90 @@ app.get('/api/intake/package/:id/pdf', async (req, res) => {
         tocPage.drawText(`${itemIndex}. Exhibits 1-${exhibitsCount}`, { x: leftMargin, y: cursorY, size: 12, font: timesRomanFont });
         cursorY -= 40;
 
-        // Iterate and embed uploaded files
+        // Loop 1: Draw all exhibits on the Table of Contents (handles multi-page TOC)
         let exhibitNumber = 1;
         for (const item of (record.items || [])) {
             if (cursorY < 50) {
-                // Not perfectly handling TOC overflow, but usually fits
-                // Skip drawing more lines on TOC if it overflows
-            } else {
-                tocPage.drawText(`   Exhibit ${exhibitNumber}: ${item.name}`, { x: leftMargin + 10, y: cursorY, size: 11, font: timesRomanFont });
-                cursorY -= 20;
+                tocPage = mergedPdf.addPage();
+                cursorY = height - 50; // reset to top
             }
+            
+            tocPage.drawText(`   Exhibit ${exhibitNumber}: ${item.name}`, { x: leftMargin + 10, y: cursorY, size: 11, font: timesRomanFont });
+            cursorY -= 20;
+            exhibitNumber++;
+        }
 
+        // Render the Cover Letter if it exists
+        if (record.analysis?.coverLetterDraft) {
+            let clPage = mergedPdf.addPage();
+            let clCursorY = height - 72; // 1 inch top margin
+            
+            const wrapText = (text: string, maxWidth: number, font: any, fontSize: number): string[] => {
+                const words = text.split(' ');
+                const lines: string[] = [];
+                let currentLine = '';
+                
+                for (const word of words) {
+                    const testLine = currentLine ? `${currentLine} ${word}` : word;
+                    const width = font.widthOfTextAtSize(testLine, fontSize);
+                    if (width > maxWidth) {
+                        lines.push(currentLine);
+                        currentLine = word;
+                    } else {
+                        currentLine = testLine;
+                    }
+                }
+                if (currentLine) lines.push(currentLine);
+                return lines;
+            };
+
+            const clLines = record.analysis.coverLetterDraft.split('\n');
+            const clMaxWidth = width - 144; // 1 inch margins on both sides
+
+            for (const line of clLines) {
+                if (line.trim() === '') {
+                    clCursorY -= 15;
+                    if (clCursorY < 72) {
+                        clPage = mergedPdf.addPage();
+                        clCursorY = height - 72;
+                    }
+                    continue;
+                }
+
+                let isHeading = false;
+                let headingFontSize = 11;
+                let cleanLine = line;
+                let currentFont = timesRomanFont;
+
+                if (line.startsWith('# ')) {
+                    isHeading = true; headingFontSize = 16; cleanLine = line.substring(2); currentFont = timesRomanBold;
+                } else if (line.startsWith('## ')) {
+                    isHeading = true; headingFontSize = 13; cleanLine = line.substring(3); currentFont = timesRomanBold;
+                } else if (line.startsWith('### ')) {
+                    isHeading = true; headingFontSize = 11; cleanLine = line.substring(4); currentFont = timesRomanBold;
+                } else if (line.startsWith('#### ')) {
+                    isHeading = true; headingFontSize = 11; cleanLine = line.substring(5); currentFont = timesRomanBold;
+                }
+
+                cleanLine = cleanLine.replace(/\*\*/g, '').replace(/\*/g, '').replace(/^- /g, '• ').replace(/^\* /g, '• ');
+
+                const wrappedLines = wrapText(cleanLine, clMaxWidth, currentFont, isHeading ? headingFontSize : 11);
+
+                for (const wrappedLine of wrappedLines) {
+                    if (clCursorY < 72) {
+                        clPage = mergedPdf.addPage();
+                        clCursorY = height - 72;
+                    }
+                    clPage.drawText(wrappedLine, { x: 72, y: clCursorY, size: isHeading ? headingFontSize : 11, font: currentFont });
+                    clCursorY -= isHeading ? 22 : 16;
+                }
+                if (isHeading) clCursorY -= 8;
+            }
+        }
+
+        // Loop 2: Embed the actual files AFTER the Table of Contents is complete
+        exhibitNumber = 1;
+        for (const item of (record.items || [])) {
             try {
                 // Ensure absolute path
                 const filePath = path.join(serverRootDir, item.url.replace('/uploads', 'uploads'));
