@@ -345,7 +345,9 @@ You must return a valid JSON object matching the following structure:
           const present = factVal === true || (typeof factVal === 'string' && factVal.toLowerCase() !== 'none' && factVal.toLowerCase() !== 'no');
           if (present) { triggered = true; sourceText = extractedFacts[flag.trigger.fact]?.source || 'Extracted from transcript.'; }
         } else if (flag.trigger.condition === 'any_adverse_present') {
-          const present = factVal === true || (typeof factVal === 'string' && factVal.toLowerCase() !== 'none' && factVal.toLowerCase() !== 'no');
+          const isStr = typeof factVal === 'string';
+          const lowerVal = isStr ? factVal.toLowerCase() : '';
+          const present = factVal === true || (isStr && lowerVal !== 'none' && lowerVal !== 'no' && lowerVal !== 'false' && !lowerVal.includes("marked 'no'") && !lowerVal.includes("marked \"no\"") && !lowerVal.includes("no adverse"));
           if (present) { triggered = true; sourceText = extractedFacts[flag.trigger.fact]?.source || 'Adverse history found.'; }
         } else if (flag.trigger.condition === 'is_false') {
           if (factVal === false) {
@@ -364,7 +366,8 @@ You must return a valid JSON object matching the following structure:
         severity: flag.severity,
         action: flag.action,
         message: flag.message,
-        source: sourceText
+        source: sourceText,
+        factValue: flag.trigger?.fact ? extractedFacts[flag.trigger.fact]?.value : undefined
       });
     }
   });

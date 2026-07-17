@@ -1623,8 +1623,13 @@ function App() {
                                       </span>
                                     </div>
                                     <p style={{ margin: '0 0 0.4rem 0', fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: '1.4' }}>{flag.message}</p>
+                                    {flag.factValue && typeof flag.factValue === 'string' && (
+                                      <div style={{ fontSize: '0.75rem', color: 'var(--danger)', marginTop: '0.4rem' }}>
+                                        <strong>Specific Problem:</strong> {flag.factValue}
+                                      </div>
+                                    )}
                                     <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.3rem', marginTop: '0.3rem' }}>
-                                      <strong>Source Trace:</strong> {flag.source}
+                                      <strong>Source File / Trace:</strong> {flag.source}
                                     </div>
                                     {flag.action && (
                                       <div style={{ fontSize: '0.75rem', color: 'var(--text-primary)', marginTop: '0.3rem' }}>
@@ -1731,7 +1736,7 @@ function App() {
                                     
                                     return (
                                       <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                                        <td style={{ padding: '0.6rem 0.5rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }}>{ev.fileName}</td>
+                                        <td title={ev.file_name || 'Unknown File'} style={{ padding: '0.6rem 0.5rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }}>{ev.file_name || 'Unknown File'}</td>
                                         <td style={{ padding: '0.6rem 0.5rem', color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
                                           {ev.type.replace(/_/g, ' ')}
                                         </td>

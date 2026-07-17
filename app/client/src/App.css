@@ -1063,6 +1063,25 @@ audio::-webkit-media-controls-time-remaining-display {
   color: #0f172a !important;
 }
 
+.legal-markdown-preview pre {
+  white-space: pre-wrap !important;
+  word-break: break-word;
+  background: transparent;
+  font-family: inherit;
+  padding: 0;
+  margin: 0;
+  overflow-x: hidden;
+  color: inherit;
+}
+
+.legal-markdown-preview code {
+  white-space: pre-wrap !important;
+  word-break: break-word;
+  background: transparent;
+  font-family: inherit;
+  color: inherit;
+}
+
 .assembly-paper-sheet {
   background: #ffffff;
   color: #1e293b;

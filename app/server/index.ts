@@ -10,7 +10,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GoogleAIFileManager } from '@google/generative-ai/server';
 import { runPlaybookAnalysis } from './playbookEngine';
 import dns from 'dns';
-import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import { PDFDocument, rgb, StandardFonts, PageSizes } from 'pdf-lib';
 
 // Fix for Node.js 18+ IPv6 fetch issues causing 'fetch failed'
 dns.setDefaultResultOrder('ipv4first');
@@ -1242,7 +1242,7 @@ app.get('/api/intake/package/:id/pdf', async (req, res) => {
         const timesRomanBold = await mergedPdf.embedFont(StandardFonts.TimesRomanBold);
 
         // Add a Table of Contents Page (Exhibit Index)
-        let tocPage = mergedPdf.addPage();
+        let tocPage = mergedPdf.addPage(PageSizes.Letter);
         const { width, height } = tocPage.getSize();
         
         const isMarriage = record.caseType !== 'eb1a';
@@ -1307,7 +1307,7 @@ app.get('/api/intake/package/:id/pdf', async (req, res) => {
         let exhibitNumber = 1;
         for (const item of (record.items || [])) {
             if (cursorY < 50) {
-                tocPage = mergedPdf.addPage();
+                tocPage = mergedPdf.addPage(PageSizes.Letter);
                 cursorY = height - 50; // reset to top
             }
             
@@ -1318,7 +1318,7 @@ app.get('/api/intake/package/:id/pdf', async (req, res) => {
 
         // Render the Cover Letter if it exists
         if (record.analysis?.coverLetterDraft) {
-            let clPage = mergedPdf.addPage();
+            let clPage = mergedPdf.addPage(PageSizes.Letter);
             let clCursorY = height - 72; // 1 inch top margin
             
             const wrapText = (text: string, maxWidth: number, font: any, fontSize: number): string[] => {
@@ -1347,7 +1347,7 @@ app.get('/api/intake/package/:id/pdf', async (req, res) => {
                 if (line.trim() === '') {
                     clCursorY -= 15;
                     if (clCursorY < 72) {
-                        clPage = mergedPdf.addPage();
+                        clPage = mergedPdf.addPage(PageSizes.Letter);
                         clCursorY = height - 72;
                     }
                     continue;
@@ -1374,7 +1374,7 @@ app.get('/api/intake/package/:id/pdf', async (req, res) => {
 
                 for (const wrappedLine of wrappedLines) {
                     if (clCursorY < 72) {
-                        clPage = mergedPdf.addPage();
+                        clPage = mergedPdf.addPage(PageSizes.Letter);
                         clCursorY = height - 72;
                     }
                     clPage.drawText(wrappedLine, { x: 72, y: clCursorY, size: isHeading ? headingFontSize : 11, font: currentFont });
@@ -1406,7 +1406,7 @@ app.get('/api/intake/package/:id/pdf', async (req, res) => {
                         }
                         
                         if (img) {
-                            const imgPage = mergedPdf.addPage();
+                            const imgPage = mergedPdf.addPage(PageSizes.Letter);
                             const { width: pWidth, height: pHeight } = imgPage.getSize();
                             const imgDims = img.scaleToFit(pWidth - 40, pHeight - 40);
                             imgPage.drawImage(img, {
