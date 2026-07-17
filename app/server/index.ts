@@ -1145,13 +1145,13 @@ app.post('/api/intake/regenerate', async (req, res) => {
 
 // 7. Inline Selected Refinement Endpoint (Option C)
 app.post('/api/intake/refine-inline', async (req, res) => {
-    const { existingRecordId, selectedText, userPrompt } = req.body;
+    const { existingRecordId, selectedText, userPrompt, targetField = 'summary' } = req.body;
     if (!existingRecordId || !selectedText || !userPrompt) {
         return res.status(400).json({ error: 'Missing required parameters (existingRecordId, selectedText, userPrompt)' });
     }
 
     try {
-        console.log(`Inline Refinement for Record: ${existingRecordId}`);
+        console.log(`Inline Refinement for Record: ${existingRecordId} (Field: ${targetField})`);
         const records = getRecords();
         const recordIndex = records.findIndex(r => r.id === existingRecordId);
         
@@ -1160,33 +1160,44 @@ app.post('/api/intake/refine-inline', async (req, res) => {
         }
 
         const existingRecord = records[recordIndex];
-        if (!existingRecord.summary) {
-             return res.status(400).json({ error: 'No summary exists to refine' });
+        let originalText = '';
+        if (targetField === 'coverLetter') {
+            if (!existingRecord.analysis || !existingRecord.analysis.coverLetterDraft) {
+                 return res.status(400).json({ error: 'No cover letter exists to refine' });
+            }
+            originalText = existingRecord.analysis.coverLetterDraft;
+        } else {
+            if (!existingRecord.summary) {
+                 return res.status(400).json({ error: 'No summary exists to refine' });
+            }
+            originalText = existingRecord.summary;
         }
+
+        const docTypeLabel = targetField === 'coverLetter' ? 'Attorney Cover Letter' : 'Matter Collection Summary';
 
         const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-        const prompt = `You are an expert legal intake specialist. Below is the CURRENT full Markdown summary of a "Matter Collection".
+        const prompt = `You are an expert legal intake specialist. Below is the CURRENT full Markdown text of a "${docTypeLabel}".
         
-=== CURRENT SUMMARY ===
-${existingRecord.summary}
+=== CURRENT DOCUMENT ===
+${originalText}
 =======================
 
-The user has selected the following text from the summary as context/anchor:
+The user has selected the following text from the document as context/anchor:
 "${selectedText}"
 
 And the user has provided this specific instruction for revision:
 "${userPrompt}"
 
 CRITICAL INSTRUCTIONS:
-1. Revise the CURRENT SUMMARY to fulfill the user's instruction. You may modify the selected text AND any other parts of the summary that are affected by this instruction.
+1. Revise the CURRENT DOCUMENT to fulfill the user's instruction. You may modify the selected text AND any other parts of the document that are affected by this instruction.
 2. Output your response in the following exact format:
 <explanation>
 A concise, user-facing explanation of what you changed (e.g. "Corrected the birthdate in the Client Information section and updated the timeline accordingly.").
 </explanation>
-<updated_summary>
-The ENTIRE updated Markdown summary from top to bottom.
-</updated_summary>
+<updated_document>
+The ENTIRE updated Markdown document from top to bottom.
+</updated_document>
 
 Deliver the response now.`;
 
@@ -1201,7 +1212,7 @@ Deliver the response now.`;
             explanation = explMatch[1].trim();
         }
 
-        const sumMatch = responseText.match(/<updated_summary>([\s\S]*?)<\/updated_summary>/);
+        const sumMatch = responseText.match(/<updated_document>([\s\S]*?)<\/updated_document>/);
         if (sumMatch) {
             updatedSummary = sumMatch[1].trim();
         } else {
@@ -1214,7 +1225,11 @@ Deliver the response now.`;
             updatedSummary = updatedSummary.replace(/^```markdown\n/, '').replace(/\n```$/, '');
         }
 
-        records[recordIndex].summary = updatedSummary;
+        if (targetField === 'coverLetter') {
+            records[recordIndex].analysis.coverLetterDraft = updatedSummary;
+        } else {
+            records[recordIndex].summary = updatedSummary;
+        }
         fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
 
         res.json({ success: true, record: records[recordIndex], explanation });

@@ -324,6 +324,7 @@ function App() {
   const [refinePrompt, setRefinePrompt] = useState('');
   const [isRefining, setIsRefining] = useState(false);
   const [refinementFeedback, setRefinementFeedback] = useState<string | null>(null);
+  const [refinementTarget, setRefinementTarget] = useState<'summary' | 'coverLetter' | null>(null);
   const docInputRef = useRef<HTMLInputElement>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -686,7 +687,7 @@ function App() {
       if (selection && selection.toString().trim().length > 0) {
         // Only trigger if selection is inside the markdown body
         const anchorNode = selection.anchorNode;
-        if (anchorNode && anchorNode.parentElement && anchorNode.parentElement.closest('.markdown-body')) {
+        if (anchorNode && anchorNode.parentElement && (anchorNode.parentElement.closest('.markdown-body') || anchorNode.parentElement.closest('.legal-markdown-preview'))) {
           const text = selection.toString().trim();
           setSelectedText(text);
           const range = selection.getRangeAt(0);
@@ -728,18 +729,20 @@ function App() {
         body: JSON.stringify({ 
           existingRecordId: selectedRecordId,
           selectedText,
-          userPrompt: refinePrompt
+          userPrompt: refinePrompt,
+          targetField: activeResultTab === 'assembly' && selectedAssemblyDocId === 'cover-letter' ? 'coverLetter' : 'summary'
         }),
       });
 
       const data = await response.json();
       if (response.ok) {
-        showNotification('Refinement Complete', 'The summary has been updated inline.', 'success');
+        showNotification('Refinement Complete', 'The document has been updated inline.', 'success');
         if (data.explanation) {
           setRefinementFeedback(data.explanation);
+          setRefinementTarget(activeResultTab === 'assembly' && selectedAssemblyDocId === 'cover-letter' ? 'coverLetter' : 'summary');
         }
         await fetchRecords();
-        loadRecord(data.record);
+        loadRecord(data.record, true);
         setRefinePrompt('');
       } else {
         showNotification('Refinement Failed', data.error || 'Unknown error', 'error');
@@ -757,8 +760,8 @@ function App() {
     showNotification('Copied', 'Phone number copied to clipboard', 'success');
   };
 
-  const loadRecord = (record: any) => {
-    setActiveResultTab('package');
+  const loadRecord = (record: any, preserveTab: boolean = false) => {
+    if (!preserveTab) setActiveResultTab('package');
     // For matter collections without audio, create a placeholder transcript
     if (record.transcript) {
       setTranscript(record.transcript);
@@ -1389,7 +1392,7 @@ function App() {
                       )}
                     </div>
                     <div className="markdown-body" onMouseUp={handleSelection} onTouchEnd={handleSelection} onKeyUp={handleSelection}>
-                      {refinementFeedback && !isEditing && (
+                      {refinementFeedback && refinementTarget === 'summary' && !isEditing && (
                         <div style={{
                           background: 'rgba(139, 92, 246, 0.15)',
                           border: '1px solid var(--primary)',
@@ -1406,7 +1409,10 @@ function App() {
                             <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: '1.5' }}>{refinementFeedback}</p>
                           </div>
                           <button 
-                            onClick={() => setRefinementFeedback(null)}
+                            onClick={() => {
+                              setRefinementFeedback(null);
+                              setRefinementTarget(null);
+                            }}
                             style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '0.2rem' }}
                           >
                             <X size={16} />
@@ -2158,7 +2164,34 @@ function App() {
 
                             {/* Page 2: Attorney Cover Letter */}
                             {selectedAssemblyDocId === 'cover-letter' && (
-                              <div className="legal-markdown-preview">
+                              <div className="legal-markdown-preview" onMouseUp={handleSelection} onTouchEnd={handleSelection} onKeyUp={handleSelection}>
+                                {refinementFeedback && refinementTarget === 'coverLetter' && (
+                                  <div style={{
+                                    background: 'rgba(139, 92, 246, 0.1)',
+                                    border: '1px solid #d946ef',
+                                    borderRadius: '8px',
+                                    padding: '1rem',
+                                    marginBottom: '1rem',
+                                    display: 'flex',
+                                    gap: '0.8rem',
+                                    alignItems: 'flex-start'
+                                  }}>
+                                    <Wand2 size={20} color="#d946ef" style={{ flexShrink: 0, marginTop: '2px' }} />
+                                    <div style={{ flex: 1 }}>
+                                      <h4 style={{ margin: '0 0 0.4rem 0', color: '#0f172a', fontSize: '0.95rem', fontWeight: 600 }}>✨ AI Refinement Complete</h4>
+                                      <p style={{ margin: 0, color: '#334155', fontSize: '0.9rem', lineHeight: '1.5' }}>{refinementFeedback}</p>
+                                    </div>
+                                    <button 
+                                      onClick={() => {
+                                        setRefinementFeedback(null);
+                                        setRefinementTarget(null);
+                                      }}
+                                      style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', padding: '0.2rem' }}
+                                    >
+                                      <X size={16} />
+                                    </button>
+                                  </div>
+                                )}
                                 {analysis.coverLetterDraft ? (
                                   <ReactMarkdown>{analysis.coverLetterDraft}</ReactMarkdown>
                                 ) : (
