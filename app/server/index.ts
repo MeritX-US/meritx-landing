@@ -455,6 +455,7 @@ app.post('/api/transcribe', upload.array('audios'), async (req, res) => {
 
     try {
         const language = req.body.language || 'en';
+        const caseType = req.body.caseType;
         const activeService = process.env.TRANSCRIPTION_SERVICE || 'assemblyai';
         let combinedText = '';
         let combinedUtterances: any[] = [];
@@ -518,7 +519,8 @@ app.post('/api/transcribe', upload.array('audios'), async (req, res) => {
             summary: summary,
             source: 'upload',
             audioUrl: recordAudioUrls[0],
-            recordingSid: undefined
+            recordingSid: undefined,
+            caseType: (caseType && caseType !== 'auto') ? caseType : undefined
         };
         saveRecord(newRecord);
 
@@ -956,7 +958,7 @@ Output only the raw JSON array containing exactly ${audioItems.length} items.`;
 
 app.post('/api/intake/process', upload.array('files'), async (req, res) => {
     const files = req.files as Express.Multer.File[];
-    const { existingRecordId } = req.body;
+    const { existingRecordId, caseType } = req.body;
 
     if (!files || files.length === 0) {
         return res.status(400).json({ error: 'No files provided' });
@@ -1216,6 +1218,7 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
                 type: 'matter',
                 items: newItems,
                 summary: summary,
+                caseType: (caseType && caseType !== 'auto') ? caseType : undefined,
                 transcript: newAudioText ? {
                     id: `combined_${Date.now()}`,
                     status: 'completed',
@@ -1827,6 +1830,30 @@ app.put('/api/records/:id/rename-item', async (req, res) => {
     } catch (error: any) {
         console.error('❌ Rename failed:', error.message);
         res.status(500).json({ error: 'Failed to rename item', message: error.message });
+    }
+});
+
+app.put('/api/records/:id/case-type', (req, res) => {
+    try {
+        const { id } = req.params;
+        const { caseType } = req.body;
+        if (!caseType) return res.status(400).json({ error: 'caseType is required' });
+
+        const rawData = fs.readFileSync(recordsPath, 'utf8');
+        const records = JSON.parse(rawData);
+        const recordIndex = records.findIndex((r: any) => r.id === id);
+
+        if (recordIndex === -1) {
+            return res.status(404).json({ error: 'Record not found' });
+        }
+
+        records[recordIndex].caseType = caseType;
+        fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
+
+        res.json({ success: true, record: records[recordIndex] });
+    } catch (error: any) {
+        console.error('❌ Failed to update case type:', error.message);
+        res.status(500).json({ error: 'Failed to update case type', message: error.message });
     }
 });
 

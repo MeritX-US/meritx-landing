@@ -297,6 +297,11 @@ function App() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [language, setLanguage] = useState<string>('auto');
+  const [selectedCaseType, setSelectedCaseType] = useState<string>('auto');
+  const [isPackageCaseTypeOpen, setIsPackageCaseTypeOpen] = useState(false);
+  const [isAssemblyCaseTypeOpen, setIsAssemblyCaseTypeOpen] = useState(false);
+  const [isAudioLangOpen, setIsAudioLangOpen] = useState(false);
+  const [isIntakeCaseTypeOpen, setIsIntakeCaseTypeOpen] = useState(false);
   const [processingError, setProcessingError] = useState<string | null>(null);
 
   const [records, setRecords] = useState<any[]>([]);
@@ -549,6 +554,8 @@ function App() {
     if (view === 'results' && selectedRecordId) {
       formData.append('existingRecordId', selectedRecordId);
     }
+    
+    formData.append('caseType', selectedCaseType);
 
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/intake/process`, {
@@ -778,7 +785,7 @@ function App() {
   const handleReclassify = async () => {
     if (!selectedRecordId) return;
     setIsReclassifying(true);
-    showNotification('Re-classifying', 'Asking Gemini to re-classify all documents...', 'info');
+    showNotification('Re-classifying', 'AI is analyzing and re-classifying documents...', 'info');
     try {
       const response = await fetch(
         `${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/records/${selectedRecordId}/reclassify`,
@@ -794,10 +801,38 @@ function App() {
       } else {
         showNotification('Failed', data.error || 'Unknown error', 'error');
       }
-    } catch (err: any) {
-      showNotification('Failed', err.message, 'error');
+    } catch (error: any) {
+      showNotification('Error', error.message, 'error');
     } finally {
       setIsReclassifying(false);
+    }
+  };
+
+  const handleCaseTypeChange = async (newCaseType: string) => {
+    if (!selectedRecordId) return;
+    const record = records.find(r => r.id === selectedRecordId);
+    if (record && record.caseType === newCaseType) return;
+    
+    showNotification('Updating Case Type', 'Changing case type and scheduling re-classification...', 'info');
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/records/${selectedRecordId}/case-type`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ caseType: newCaseType })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        await fetchRecords();
+        loadRecord(data.record, true);
+        showNotification('Case Type Updated', 'Re-classifying documents for the new case type...', 'info');
+        // Automatically trigger re-classify and then regenerate the playbook analysis
+        await handleReclassify();
+        await handleRegenerateSummary();
+      } else {
+        showNotification('Error', 'Failed to update case type', 'error');
+      }
+    } catch (err: any) {
+      showNotification('Error', err.message, 'error');
     }
   };
 
@@ -1297,6 +1332,7 @@ function App() {
         });
     }
     formData.append('language', language);
+    formData.append('caseType', selectedCaseType);
 
     try {
       // 1. Transcribe
@@ -1726,6 +1762,98 @@ function App() {
                         </div>
                       )}
                     </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border-color)' }}>
+                      <div style={{ fontWeight: '600', color: 'var(--text-secondary)', fontSize: '0.85rem', flexShrink: 0, letterSpacing: '0.05em' }}>CASE TYPE</div>
+                      <div 
+                        style={{ position: 'relative', display: 'inline-block' }}
+                        tabIndex={0}
+                        onBlur={(e) => {
+                          if (!e.currentTarget.contains(e.relatedTarget)) {
+                            setIsPackageCaseTypeOpen(false);
+                          }
+                        }}
+                      >
+                        <div
+                          onClick={() => setIsPackageCaseTypeOpen(!isPackageCaseTypeOpen)}
+                          style={{
+                            padding: '0.4rem 2rem 0.4rem 1rem',
+                            borderRadius: '20px',
+                            border: `1px solid ${isPackageCaseTypeOpen ? 'var(--accent-primary)' : 'var(--border-color)'}`,
+                            fontSize: '0.85rem',
+                            fontWeight: 500,
+                            background: 'rgba(255, 255, 255, 0.05)',
+                            color: 'var(--text-primary)',
+                            cursor: 'pointer',
+                            boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+                            transition: 'all 0.2s',
+                            display: 'flex',
+                            alignItems: 'center',
+                            minWidth: '220px',
+                            justifyContent: 'space-between'
+                          }}
+                          onMouseEnter={(e) => !isPackageCaseTypeOpen && (e.currentTarget.style.borderColor = 'var(--accent-primary)')}
+                          onMouseLeave={(e) => !isPackageCaseTypeOpen && (e.currentTarget.style.borderColor = 'var(--border-color)')}
+                        >
+                          <span>
+                            {record?.caseType === 'eb1a' ? 'EB-1A Extraordinary Ability' :
+                             record?.caseType === 'niw' ? 'National Interest Waiver (NIW)' :
+                             record?.caseType === 'marriage_green_card' ? 'Marriage-Based Permanent Residence' : 'Auto-detect (AI)'}
+                          </span>
+                          <div style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isPackageCaseTypeOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}><polyline points="6 9 12 15 18 9"></polyline></svg>
+                          </div>
+                        </div>
+                        {isPackageCaseTypeOpen && (
+                          <div style={{
+                            position: 'absolute',
+                            top: 'calc(100% + 0.5rem)',
+                            left: 0,
+                            right: 0,
+                            background: '#1e293b',
+                            border: '1px solid var(--border-color)',
+                            borderRadius: '12px',
+                            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)',
+                            overflow: 'hidden',
+                            zIndex: 100
+                          }}>
+                            {[
+                              { id: 'auto', label: 'Auto-detect (AI)', disabled: true },
+                              { id: 'eb1a', label: 'EB-1A Extraordinary Ability' },
+                              { id: 'niw', label: 'National Interest Waiver (NIW)' },
+                              { id: 'marriage_green_card', label: 'Marriage-Based Permanent Residence' }
+                            ].map(opt => (
+                              <div
+                                key={opt.id}
+                                onClick={() => {
+                                  if (opt.disabled) return;
+                                  handleCaseTypeChange(opt.id);
+                                  setIsPackageCaseTypeOpen(false);
+                                }}
+                                onMouseEnter={(e) => !opt.disabled && (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)')}
+                                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                                style={{
+                                  padding: '0.6rem 1rem',
+                                  fontSize: '0.85rem',
+                                  color: opt.disabled ? 'var(--text-secondary)' : 'var(--text-primary)',
+                                  cursor: opt.disabled ? 'not-allowed' : 'pointer',
+                                  transition: 'background 0.2s',
+                                  borderBottom: opt.id === 'auto' ? '1px solid rgba(255, 255, 255, 0.05)' : 'none'
+                                }}
+                              >
+                                {opt.label}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      {analysis?.scenarioLabel && record?.caseType !== 'auto' ? (
+                        <span style={{ color: 'var(--accent-primary)', fontSize: '0.8rem', fontWeight: 500, background: 'rgba(59, 130, 246, 0.1)', padding: '0.3rem 0.8rem', borderRadius: '12px' }}>
+                          {analysis.scenarioLabel}
+                        </span>
+                      ) : null}
+                    </div>
+
                     <div className="markdown-body" onMouseUp={handleSelection} onTouchEnd={handleSelection} onKeyUp={handleSelection}>
                       {refinementFeedback && refinementTarget === 'summary' && !isEditing && (
                         <div style={{
@@ -2520,7 +2648,16 @@ function App() {
 
                                   <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: '0.75rem 1rem', marginBottom: '2rem', fontSize: '0.85rem' }}>
                                     <div style={{ fontWeight: 'bold', color: '#475569' }}>CASE TYPE:</div>
-                                    <div>{analysis?.playbookName || (record?.caseType === 'eb1a' ? 'EB-1A Extraordinary Ability' : 'Marriage-Based Permanent Residence')} {analysis?.scenarioLabel ? `(${analysis.scenarioLabel})` : ''}</div>
+                                    <div style={{ color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                      {record?.caseType === 'eb1a' ? 'EB-1A Extraordinary Ability' :
+                                       record?.caseType === 'niw' ? 'National Interest Waiver (NIW)' :
+                                       record?.caseType === 'marriage_green_card' ? 'Marriage-Based Permanent Residence' : 'Auto-detect (AI)'}
+                                      {analysis?.scenarioLabel && record?.caseType !== 'auto' ? (
+                                        <span style={{ color: '#64748b', fontSize: '0.8rem' }}>
+                                          ({analysis.scenarioLabel})
+                                        </span>
+                                      ) : null}
+                                    </div>
                                     
                                     {analysis?.facts?.petitioner_identity?.value && record?.caseType !== 'eb1a' && (
                                       <>
@@ -2735,7 +2872,8 @@ function App() {
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '2.5rem' }}>
                                   {(() => {
                                     const isEb1a = record?.caseType === 'eb1a';
-                                    const checklistItems = isEb1a ? [
+                                    const isNiw = record?.caseType === 'niw';
+                                    const checklistItems = (isEb1a || isNiw) ? [
                                       'Verify that petitioner and beneficiary legal names match biological passport pages.',
                                       'Review and reconcile any date gaps in the beneficiary\'s employment history.',
                                       'Approve draft Petition Letter and Exhibit List mappings.',
@@ -2887,25 +3025,186 @@ function App() {
             )}
 
             <div className="language-selector-container">
-              <label htmlFor="language-select">Audio Language:</label>
-              <select
-                id="language-select"
-                value={language}
-                onChange={(e) => setLanguage(e.target.value)}
+              <label>Audio Language:</label>
+              <div 
+                style={{ position: 'relative', flex: 1 }}
+                tabIndex={0}
+                onBlur={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget)) setIsAudioLangOpen(false);
+                }}
               >
-                <option value="auto">Auto-detect</option>
-                <option value="en">English (English)</option>
-                <option value="zh">Chinese (中文)</option>
-                <option value="es">Spanish (Español)</option>
-                <option value="fr">French (Français)</option>
-                <option value="de">German (Deutsch)</option>
-                <option value="ja">Japanese (日本語)</option>
-                <option value="ko">Korean (한국어)</option>
-                <option value="pt">Portuguese (Português)</option>
-                <option value="vi">Vietnamese (Tiếng Việt)</option>
-                <option value="hi">Hindi (हिन्दी)</option>
-                <option value="ru">Russian (Русский)</option>
-              </select>
+                <div
+                  onClick={() => setIsAudioLangOpen(!isAudioLangOpen)}
+                  style={{
+                    padding: '0.6rem 2rem 0.6rem 1.2rem',
+                    borderRadius: '24px',
+                    border: `1px solid ${isAudioLangOpen ? 'var(--accent-primary)' : 'var(--border-color)'}`,
+                    fontSize: '0.95rem',
+                    fontWeight: 500,
+                    background: 'var(--bg-card)',
+                    color: 'var(--text-primary)',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    width: '100%'
+                  }}
+                  onMouseEnter={(e) => !isAudioLangOpen && (e.currentTarget.style.borderColor = 'var(--accent-primary)')}
+                  onMouseLeave={(e) => !isAudioLangOpen && (e.currentTarget.style.borderColor = 'var(--border-color)')}
+                >
+                  <span>
+                    {language === 'auto' ? 'Auto-detect' :
+                     language === 'en' ? 'English (English)' :
+                     language === 'zh' ? 'Chinese (中文)' :
+                     language === 'es' ? 'Spanish (Español)' :
+                     language === 'fr' ? 'French (Français)' :
+                     language === 'de' ? 'German (Deutsch)' :
+                     language === 'ja' ? 'Japanese (日本語)' :
+                     language === 'ko' ? 'Korean (한국어)' :
+                     language === 'pt' ? 'Portuguese (Português)' :
+                     language === 'vi' ? 'Vietnamese (Tiếng Việt)' :
+                     language === 'hi' ? 'Hindi (हिन्दी)' :
+                     language === 'ru' ? 'Russian (Русский)' : 'Auto-detect'}
+                  </span>
+                  <div style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isAudioLangOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}><polyline points="6 9 12 15 18 9"></polyline></svg>
+                  </div>
+                </div>
+                {isAudioLangOpen && (
+                  <div style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 0.5rem)',
+                    left: 0,
+                    right: 0,
+                    background: '#1e293b',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '16px',
+                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)',
+                    overflow: 'hidden',
+                    overflowY: 'auto',
+                    maxHeight: '300px',
+                    zIndex: 100
+                  }}>
+                    {[
+                      { id: 'auto', label: 'Auto-detect' },
+                      { id: 'en', label: 'English (English)' },
+                      { id: 'zh', label: 'Chinese (中文)' },
+                      { id: 'es', label: 'Spanish (Español)' },
+                      { id: 'fr', label: 'French (Français)' },
+                      { id: 'de', label: 'German (Deutsch)' },
+                      { id: 'ja', label: 'Japanese (日本語)' },
+                      { id: 'ko', label: 'Korean (한국어)' },
+                      { id: 'pt', label: 'Portuguese (Português)' },
+                      { id: 'vi', label: 'Vietnamese (Tiếng Việt)' },
+                      { id: 'hi', label: 'Hindi (हिन्दी)' },
+                      { id: 'ru', label: 'Russian (Русский)' }
+                    ].map(opt => (
+                      <div
+                        key={opt.id}
+                        onClick={() => {
+                          setLanguage(opt.id);
+                          setIsAudioLangOpen(false);
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                        style={{
+                          padding: '0.7rem 1.2rem',
+                          fontSize: '0.95rem',
+                          color: 'var(--text-primary)',
+                          cursor: 'pointer',
+                          transition: 'background 0.2s',
+                          borderBottom: opt.id === 'auto' ? '1px solid rgba(255, 255, 255, 0.05)' : 'none'
+                        }}
+                      >
+                        {opt.label}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="language-selector-container" style={{ marginTop: '1rem' }}>
+              <label>Case Type:</label>
+              <div 
+                style={{ position: 'relative', flex: 1 }}
+                tabIndex={0}
+                onBlur={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget)) setIsIntakeCaseTypeOpen(false);
+                }}
+              >
+                <div
+                  onClick={() => setIsIntakeCaseTypeOpen(!isIntakeCaseTypeOpen)}
+                  style={{
+                    padding: '0.6rem 2rem 0.6rem 1.2rem',
+                    borderRadius: '24px',
+                    border: `1px solid ${isIntakeCaseTypeOpen ? 'var(--accent-primary)' : 'var(--border-color)'}`,
+                    fontSize: '0.95rem',
+                    fontWeight: 500,
+                    background: 'var(--bg-card)',
+                    color: 'var(--text-primary)',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    width: '100%'
+                  }}
+                  onMouseEnter={(e) => !isIntakeCaseTypeOpen && (e.currentTarget.style.borderColor = 'var(--accent-primary)')}
+                  onMouseLeave={(e) => !isIntakeCaseTypeOpen && (e.currentTarget.style.borderColor = 'var(--border-color)')}
+                >
+                  <span>
+                    {selectedCaseType === 'eb1a' ? 'EB-1A Extraordinary Ability' :
+                     selectedCaseType === 'niw' ? 'National Interest Waiver (NIW)' :
+                     selectedCaseType === 'marriage_green_card' ? 'Marriage-Based Permanent Residence' : 'Auto-detect (AI)'}
+                  </span>
+                  <div style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isIntakeCaseTypeOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}><polyline points="6 9 12 15 18 9"></polyline></svg>
+                  </div>
+                </div>
+                {isIntakeCaseTypeOpen && (
+                  <div style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 0.5rem)',
+                    left: 0,
+                    right: 0,
+                    background: '#1e293b',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '16px',
+                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)',
+                    overflow: 'hidden',
+                    zIndex: 100
+                  }}>
+                    {[
+                      { id: 'auto', label: 'Auto-detect (AI)' },
+                      { id: 'eb1a', label: 'EB-1A Extraordinary Ability' },
+                      { id: 'niw', label: 'National Interest Waiver (NIW)' },
+                      { id: 'marriage_green_card', label: 'Marriage-Based Permanent Residence' }
+                    ].map(opt => (
+                      <div
+                        key={opt.id}
+                        onClick={() => {
+                          setSelectedCaseType(opt.id);
+                          setIsIntakeCaseTypeOpen(false);
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                        style={{
+                          padding: '0.7rem 1.2rem',
+                          fontSize: '0.95rem',
+                          color: 'var(--text-primary)',
+                          cursor: 'pointer',
+                          transition: 'background 0.2s',
+                          borderBottom: opt.id === 'auto' ? '1px solid rgba(255, 255, 255, 0.05)' : 'none'
+                        }}
+                      >
+                        {opt.label}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="upload-section">
@@ -3208,6 +3507,7 @@ function App() {
             gap: '0.5rem',
             boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.3)',
             minWidth: showRefineInput ? '300px' : 'auto',
+            width: 'max-content',
             border: '1px solid var(--border-color)',
           }}
         >

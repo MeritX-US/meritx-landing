@@ -59,8 +59,8 @@ export interface PlaybookAnalysis {
 
 export function loadPlaybook(caseType: string = 'unknown'): any {
   let fileName = 'general_intake_v1.json';
-  if (caseType === 'eb1a') {
-    fileName = 'eb1a_v1.json';
+  if (caseType === 'eb1a' || caseType === 'niw') {
+    fileName = 'eb1a_v1.json'; // using EB-1A playbook as a base for NIW temporarily
   } else if (caseType === 'marriage_green_card') {
     fileName = 'marriage_gc_v1.json';
   }
@@ -94,14 +94,14 @@ export async function runPlaybookAnalysis(
   let caseType = providedCaseType;
   if (!caseType) {
     // Detect case type
-    const detectPrompt = `Analyze the following case materials and determine if it is a 'marriage_green_card' case or an 'eb1a' case.
+    const detectPrompt = `Analyze the following case materials and determine if it is a 'marriage_green_card' case, an 'eb1a' case, or an 'niw' case.
 If there is not enough context to determine the case type, you MUST default to 'unknown'.
-Return EXACTLY the string 'eb1a', 'marriage_green_card', or 'unknown' and nothing else.
+Return EXACTLY the string 'eb1a', 'niw', 'marriage_green_card', or 'unknown' and nothing else.
 Files: ${JSON.stringify(existingItems.map(i => i.name))}
 Transcript: ${recordText.substring(0, 1500)}`;
     const result = await model.generateContent(detectPrompt);
     const text = result.response.text().toLowerCase().trim();
-    caseType = text === 'eb1a' ? 'eb1a' : (text === 'marriage_green_card' ? 'marriage_green_card' : 'unknown');
+    caseType = text === 'eb1a' ? 'eb1a' : (text === 'niw' ? 'niw' : (text === 'marriage_green_card' ? 'marriage_green_card' : 'unknown'));
     console.log(`Detected Case Type: ${caseType} (Model returned: ${text})`);
   }
 
