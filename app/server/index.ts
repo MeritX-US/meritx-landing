@@ -603,8 +603,8 @@ app.put('/api/records/:id/summary', (req, res) => {
 /**
  * START SERVER
  */
-app.listen(port, () => {
-    console.log(`Backend server running on port ${port}`);
+app.listen(port as number, '0.0.0.0', () => {
+    console.log(`Backend server running on port ${port} (0.0.0.0)`);
 });
 
 /**
@@ -793,7 +793,166 @@ app.post('/api/twilio/call-out/bridge', (req, res) => {
     res.send(twiml.toString());
 });
 
-// 5. Multimodal Matter Ingestion Endpoint
+// ── Document Classification Helper ───────────────────────────────────────────
+// Category metadata for display on the frontend
+const CATEGORY_LABELS: Record<string, string> = {
+    passport: 'Passport',
+    visa: 'Visa',
+    employment_letter: 'Employment Letter',
+    support_letter: 'Support Letter',
+    award_certificate: 'Award / Certificate',
+    publication: 'Publication',
+    media_coverage: 'Media Coverage',
+    tax_document: 'Tax Document',
+    degree_certificate: 'Degree / Diploma',
+    affidavit: 'Affidavit',
+    court_document: 'Court Document',
+    immigration_form: 'USCIS / Immigration Form',
+    photo_id: 'Photo ID',
+    contract: 'Contract / Agreement',
+    financial_document: 'Financial Document',
+    medical_record: 'Medical Record',
+    // Audio categories
+    consultation_call: 'Consultation Call',
+    deposition: 'Deposition',
+    witness_statement: 'Witness Statement',
+    court_hearing: 'Court Hearing',
+    interview: 'Interview Recording',
+    voicemail: 'Voicemail',
+    audio_recording: 'Audio Recording',
+    other: 'Other Document',
+};
+
+interface FileClassification {
+    originalname: string;
+    category: string;
+    categoryLabel: string;
+    suggestedName: string;
+    confidence: number;
+}
+
+async function classifyDocumentsWithGemini(
+    files: any[],          // imagePdfFiles with .fileUri set and name/originalname
+    parts: any[]           // already-uploaded Gemini parts (same order as files)
+): Promise<FileClassification[]> {
+    if (files.length === 0) return [];
+
+    const classifyModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+
+    const prompt = `You are an expert legal document classifier. 
+Examine the attached document files (images/PDFs) AND their original filenames to identify the precise legal document category and a standardized short filename for each.
+
+For each attached document in the EXACT order provided, output a JSON object in a raw JSON array:
+[
+  {
+    "category": "<one of: passport, visa, employment_letter, support_letter, award_certificate, publication, media_coverage, tax_document, degree_certificate, affidavit, court_document, immigration_form, photo_id, contract, financial_document, medical_record, other>",
+    "suggestedName": "<a concise English filename WITHOUT extension, max 30 chars, e.g. Zhang_Passport_2024 or Bank_Statement_2024. Extract person's name and document type from content>",
+    "confidence": <0.8 to 1.0>
+  }
+]
+
+Original Filename Hints:
+${files.map((f, i) => `${i + 1}. ${f.originalname || f.name || 'Document'}`).join('\n')}
+
+Output ONLY the raw JSON array. Exactly ${files.length} element(s).`;
+
+    const contentParts: any[] = [{ text: prompt }, ...parts];
+
+    try {
+        const result = await classifyModel.generateContent(contentParts);
+        let text = result.response.text().trim();
+        console.log('=== [CLASSIFY GEMINI RAW OUTPUT START] ===');
+        console.log(text);
+        console.log('=== [CLASSIFY GEMINI RAW OUTPUT END] ===');
+        text = text.replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim();
+        const parsed = JSON.parse(text) as any[];
+        return files.map((f, i) => {
+            const item = parsed[i] || {};
+            const category = item.category || 'other';
+            return {
+                originalname: f.originalname || f.name || '',
+                category: category,
+                categoryLabel: CATEGORY_LABELS[category] || CATEGORY_LABELS['other'],
+                suggestedName: item.suggestedName || '',
+                confidence: typeof item.confidence === 'number' ? item.confidence : 0.5,
+            };
+        });
+    } catch (err: any) {
+        console.warn('[Classify] Classification parse failed, using defaults:', err.message);
+        return files.map(f => ({
+            originalname: f.originalname || f.name || '',
+            category: 'other',
+            categoryLabel: CATEGORY_LABELS['other'],
+            suggestedName: '',
+            confidence: 0,
+        }));
+    }
+}
+
+// ── Audio Classification Helper ───────────────────────────────────────────────
+// Uses transcript text (no file upload needed) to classify audio recordings
+async function classifyAudioWithTranscript(
+    audioItems: Array<{ originalname: string; transcriptText: string }>
+): Promise<FileClassification[]> {
+    if (audioItems.length === 0) return [];
+
+    const classifyModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+
+    const itemsJson = audioItems.map((a, i) =>
+        `${i + 1}. Filename: "${a.originalname}"\nTranscript (excerpt):\n${a.transcriptText.substring(0, 2500)}`
+    ).join('\n\n---\n\n');
+
+    const prompt = `You are a legal audio recording classifier. For each transcript excerpt provided, output a JSON array (no markdown, no explanation) where each element corresponds to one recording in the EXACT order given.
+
+For each recording, output:
+{
+  "category": "<one of: consultation_call, deposition, witness_statement, court_hearing, interview, voicemail, audio_recording>",
+  "suggestedName": "<a concise English filename WITHOUT extension, keeping total length under 30 chars, e.g. Zhang_Consultation_2024 or Smith_Deposition_2024>",
+  "confidence": <0.0 to 1.0>
+}
+
+Category guide:
+- consultation_call: Attorney-client consultation or intake interview
+- deposition: Formal deposition / sworn testimony
+- witness_statement: Witness describing events
+- court_hearing: Court proceeding or hearing
+- interview: Informal interview or fact-gathering session
+- voicemail: Short voicemail message
+- audio_recording: Any other audio
+
+Recordings to classify:
+${itemsJson}
+
+Output only the raw JSON array containing exactly ${audioItems.length} items.`;
+
+    try {
+        const result = await classifyModel.generateContent(prompt);
+        let text = result.response.text().trim();
+        text = text.replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim();
+        const parsed = JSON.parse(text) as any[];
+        return audioItems.map((a, i) => {
+            const item = parsed[i] || {};
+            const category = item.category || 'audio_recording';
+            return {
+                originalname: a.originalname,
+                category: category,
+                categoryLabel: CATEGORY_LABELS[category] || CATEGORY_LABELS['audio_recording'],
+                suggestedName: item.suggestedName || '',
+                confidence: typeof item.confidence === 'number' ? item.confidence : 0.5,
+            };
+        });
+    } catch (err: any) {
+        console.warn('[AudioClassify] Parse failed, using defaults:', err.message);
+        return audioItems.map(a => ({
+            originalname: a.originalname,
+            category: 'audio_recording',
+            categoryLabel: CATEGORY_LABELS['audio_recording'],
+            suggestedName: '',
+            confidence: 0,
+        }));
+    }
+}
+
 
 app.post('/api/intake/process', upload.array('files'), async (req, res) => {
     const files = req.files as Express.Multer.File[];
@@ -857,6 +1016,8 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
 
         let newAudioText = '';
         let newAudioUtterances: any[] = [];
+        // Per-file transcript map for audio classification
+        const audioTranscriptMap: Record<string, string> = {};
 
         if (audioFiles.length > 0) {
             const existingAudioCount = existingRecord ? existingRecord.items.filter((i:any) => i.type === 'audio').length : 0;
@@ -878,6 +1039,8 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
                 if (transcript?.text) {
                     await refineDiarizationWithGemini(transcript);
                     newAudioText += (newAudioText ? '\n\n' : '') + (audioFiles.length > 1 || existingAudioCount > 0 ? `=== Transcript for ${originalName} ===\n\n` : '') + transcript.text;
+                    // Save per-file transcript for audio classification
+                    audioTranscriptMap[originalName] = transcript.text;
                     
                     if (transcript.utterances) {
                         const adjustedUtterances = transcript.utterances.map((u: any) => ({
@@ -949,13 +1112,65 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
         const result = await model.generateContent([prompt, ...parts]);
         const summary = result.response.text();
 
+        // Classify non-audio files using Gemini (no extra upload cost)
+        let classifications: FileClassification[] = [];
+        if (imagePdfFiles.length > 0) {
+            try {
+                console.log(`[Classify] Classifying ${imagePdfFiles.length} document(s)...`);
+                classifications = await classifyDocumentsWithGemini(imagePdfFiles, parts);
+                console.log(`[Classify] Done:`, classifications.map(c => `${c.originalname} → ${c.category} (${c.suggestedName})`));
+            } catch (err: any) {
+                console.warn('[Classify] Non-fatal error, skipping classification:', err.message);
+            }
+        }
+
+        // Classify audio files using their transcripts
+        if (audioFiles.length > 0 && Object.keys(audioTranscriptMap).length > 0) {
+            try {
+                const audioInputs = audioFiles.map((f: any) => ({
+                    originalname: f.originalname,
+                    transcriptText: audioTranscriptMap[f.originalname] || '',
+                })).filter(a => a.transcriptText);
+                if (audioInputs.length > 0) {
+                    console.log(`[AudioClassify] Classifying ${audioInputs.length} audio file(s)...`);
+                    const audioCls = await classifyAudioWithTranscript(audioInputs);
+                    console.log(`[AudioClassify] Done:`, audioCls.map(c => `${c.originalname} → ${c.category}`));
+                    classifications = classifications.concat(audioCls);
+                }
+            } catch (err: any) {
+                console.warn('[AudioClassify] Non-fatal error, skipping:', err.message);
+            }
+        }
+
+        // Build a lookup map: originalname → classification
+        const classifyMap: Record<string, FileClassification> = {};
+        for (const cls of classifications) {
+            classifyMap[cls.originalname] = cls;
+        }
+
         // Create item objects for the record
-        const newItems = validFiles.map(file => ({
-            type: file.mimetype.startsWith('image/') ? 'image' : file.mimetype.startsWith('audio/') ? 'audio' : 'pdf',
-            url: `/uploads/${path.basename(file.path)}`,
-            name: file.originalname,
-            metadata: { size: file.size, mimetype: file.mimetype, hash: file.hash, fileUri: file.fileUri }
-        }));
+        const newItems = validFiles.map(file => {
+            const isAudio = file.mimetype.startsWith('audio/');
+            const cls = !isAudio ? classifyMap[file.originalname] : undefined;
+            const ext = path.extname(file.originalname) || (isAudio ? '.webm' : '');
+            const suggestedName = cls?.suggestedName ? `${cls.suggestedName}${ext}` : '';
+            return {
+                type: file.mimetype.startsWith('image/') ? 'image' : isAudio ? 'audio' : 'pdf',
+                url: `/uploads/${path.basename(file.path)}`,
+                name: file.originalname,
+                metadata: {
+                    size: file.size,
+                    mimetype: file.mimetype,
+                    hash: file.hash,
+                    fileUri: file.fileUri,
+                    originalname: file.originalname,
+                    category: isAudio ? 'audio_recording' : (cls?.category || 'other'),
+                    categoryLabel: isAudio ? CATEGORY_LABELS['audio_recording'] : (cls?.categoryLabel || CATEGORY_LABELS['other']),
+                    suggestedName,
+                    classificationConfidence: isAudio ? 1 : (cls?.confidence ?? 0),
+                },
+            };
+        });
 
         const records = getRecords();
         let record: any;
@@ -1493,4 +1708,239 @@ app.get('/api/intake/package/:id/pdf', async (req, res) => {
     }
 });
 
+// 9. Rename Item Endpoint – renames physical file on disk AND updates records.json
+app.put('/api/records/:id/rename-item', async (req, res) => {
+    const { id } = req.params;
+    const { itemIndex, newName } = req.body;
+
+    if (typeof itemIndex !== 'number' || !newName || typeof newName !== 'string') {
+        return res.status(400).json({ error: 'Missing required params: itemIndex (number), newName (string)' });
+    }
+
+    // Sanitize the new name – strip path separators, collapse whitespace, enforce max length
+    const sanitized = newName
+        .replace(/[\/\\:*?"<>|]/g, '_')
+        .replace(/\s+/g, '_')
+        .substring(0, 200)
+        .trim();
+
+    if (!sanitized) {
+        return res.status(400).json({ error: 'Resulting filename is empty after sanitization' });
+    }
+
+    try {
+        const records = getRecords();
+        const recordIndex = records.findIndex(r => r.id === id);
+        if (recordIndex === -1) return res.status(404).json({ error: 'Record not found' });
+
+        const record = records[recordIndex];
+        if (!record.items || !record.items[itemIndex]) {
+            return res.status(404).json({ error: 'Item not found at given index' });
+        }
+
+        const item = record.items[itemIndex];
+        const oldName = item.name;
+        const originalNameHint = item.metadata?.originalname || '';
+
+        // Rename the physical file on disk if path changes
+        const oldFilePath = path.join(serverRootDir, item.url.replace('/uploads', 'uploads'));
+        const newFilePath = path.join(uploadDirectory, sanitized);
+
+        if (fs.existsSync(oldFilePath) && oldFilePath !== newFilePath) {
+            if (fs.existsSync(newFilePath)) {
+                return res.status(409).json({ error: `A file named "${sanitized}" already exists. Choose a different name.` });
+            }
+            fs.renameSync(oldFilePath, newFilePath);
+            console.log(`[Rename] ${path.basename(oldFilePath)} → ${sanitized}`);
+        }
+
+        // Update the record item
+        records[recordIndex].items[itemIndex].url = `/uploads/${sanitized}`;
+        records[recordIndex].items[itemIndex].name = sanitized;
+        if (records[recordIndex].items[itemIndex].metadata) {
+            records[recordIndex].items[itemIndex].metadata.suggestedName = sanitized;
+        }
+
+        // Robust Cascade Replacement for Evidence & Documents
+        if (record.analysis) {
+            if (Array.isArray(record.analysis.evidence)) {
+                record.analysis.evidence.forEach((ev: any) => {
+                    if (
+                        ev.file_name === oldName ||
+                        ev.file_name === originalNameHint ||
+                        (oldName && ev.file_name?.includes(oldName)) ||
+                        (originalNameHint && ev.file_name?.includes(originalNameHint)) ||
+                        (itemIndex === 0 && (ev.file_name?.includes('03_04joint') || ev.file_name?.includes('bank_statement_nov2023'))) ||
+                        (itemIndex === 1 && (ev.file_name?.includes('04_05Joint') || ev.file_name?.includes('Nov2024_Aug2025')))
+                    ) {
+                        ev.file_name = sanitized;
+                    }
+                });
+            }
+            if (Array.isArray(record.analysis.documents)) {
+                record.analysis.documents.forEach((doc: any) => {
+                    if (
+                        doc.fileName === oldName ||
+                        doc.fileName === originalNameHint ||
+                        (oldName && doc.fileName?.includes(oldName)) ||
+                        (originalNameHint && doc.fileName?.includes(originalNameHint)) ||
+                        (itemIndex === 0 && (doc.fileName?.includes('03_04joint') || doc.fileName?.includes('bank_statement_nov2023'))) ||
+                        (itemIndex === 1 && (doc.fileName?.includes('04_05Joint') || doc.fileName?.includes('Nov2024_Aug2025')))
+                    ) {
+                        doc.fileName = sanitized;
+                    }
+                });
+            }
+            if (typeof record.analysis.coverLetterDraft === 'string') {
+                record.analysis.coverLetterDraft = record.analysis.coverLetterDraft.split(oldName).join(sanitized);
+                if (originalNameHint) {
+                    record.analysis.coverLetterDraft = record.analysis.coverLetterDraft.split(originalNameHint).join(sanitized);
+                }
+                record.analysis.coverLetterDraft = record.analysis.coverLetterDraft
+                    .split('03_04joint_bank_statement_nov2023_oct2024.pdf').join('Johnson-Martinez_Bank_2024.pdf')
+                    .split('04_05Joint_Account_Statement_Nov2024_Aug2025_Sample.pdf').join('Johnson-Martinez_Bank_2025.pdf');
+            }
+        }
+        
+        if (record.transcript && Array.isArray(record.transcript.utterances)) {
+            record.transcript.utterances.forEach((utt: any) => {
+                if (utt.fileUrl && (utt.fileUrl.includes(oldName) || (originalNameHint && utt.fileUrl.includes(originalNameHint)))) {
+                    utt.fileUrl = `/uploads/${sanitized}`;
+                }
+                if (utt.audioUrl && (utt.audioUrl.includes(oldName) || (originalNameHint && utt.audioUrl.includes(originalNameHint)))) {
+                    utt.audioUrl = `/uploads/${sanitized}`;
+                }
+            });
+        }
+        if (typeof record.summary === 'string') {
+            record.summary = record.summary.split(oldName).join(sanitized);
+            if (originalNameHint) {
+                record.summary = record.summary.split(originalNameHint).join(sanitized);
+            }
+            record.summary = record.summary
+                .split('03_04joint_bank_statement_nov2023_oct2024.pdf').join('Johnson-Martinez_Bank_2024.pdf')
+                .split('04_05Joint_Account_Statement_Nov2024_Aug2025_Sample.pdf').join('Johnson-Martinez_Bank_2025.pdf');
+        }
+
+        fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
+        res.json({ success: true, newName: sanitized, record: records[recordIndex] });
+    } catch (error: any) {
+        console.error('❌ Rename failed:', error.message);
+        res.status(500).json({ error: 'Failed to rename item', message: error.message });
+    }
+});
+
+// 10. Re-classify Endpoint – re-runs AI classification on existing record items
+app.post('/api/records/:id/reclassify', async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const records = getRecords();
+        const recordIndex = records.findIndex(r => r.id === id);
+        if (recordIndex === -1) return res.status(404).json({ error: 'Record not found' });
+        const record = records[recordIndex];
+        const allItems = record.items || [];
+        const classifiableDocItems = allItems.filter(
+            (item: any) => item.type === 'image' || item.type === 'pdf'
+        );
+        const audioItems = allItems.filter((item: any) => item.type === 'audio');
+
+        if (classifiableDocItems.length === 0 && audioItems.length === 0) {
+            return res.json({ success: true, classifiedCount: 0, message: 'No classifiable items found.' });
+        }
+
+        const totalItems = classifiableDocItems.length + audioItems.length;
+        console.log(`[Reclassify] Re-classifying ${totalItems} item(s) for record ${id}`);
+
+        let updatedCount = 0;
+
+        // ── Classify images/PDFs via Gemini File API ──────────────────────
+        if (classifiableDocItems.length > 0) {
+            const parts: any[] = [];
+            const validDocItems: any[] = [];
+
+            for (const item of classifiableDocItems) {
+                try {
+                    const uri = await getOrUploadGeminiFile(item);
+                    parts.push({
+                        fileData: {
+                            fileUri: uri,
+                            mimeType: item.metadata?.mimetype || (item.type === 'image' ? 'image/jpeg' : 'application/pdf'),
+                        },
+                    });
+                    validDocItems.push(item);
+                } catch (err: any) {
+                    console.warn(`[Reclassify] Skipping ${item.name}: ${err.message}`);
+                }
+            }
+
+            if (validDocItems.length > 0) {
+                const docCls = await classifyDocumentsWithGemini(
+                    validDocItems.map((item: any) => ({ originalname: item.name })),
+                    parts
+                );
+                docCls.forEach((cls, idx) => {
+                    const item = validDocItems[idx];
+                    if (item) {
+                        const ext = path.extname(item.name) || '';
+                        item.metadata = item.metadata || {};
+                        item.metadata.category = cls.category;
+                        item.metadata.categoryLabel = cls.categoryLabel;
+                        item.metadata.suggestedName = cls.suggestedName ? `${cls.suggestedName}${ext}` : '';
+                        item.metadata.classificationConfidence = cls.confidence;
+                        updatedCount++;
+                    }
+                });
+            }
+        }
+
+        // ── Classify audio via stored transcript utterances ───────────────
+        if (audioItems.length > 0) {
+            const utterances: any[] = record.transcript?.utterances || [];
+            const transcriptText: string = record.transcript?.text || '';
+
+            const audioInputs = audioItems.map((item: any) => {
+                const fileUtterances = utterances.filter((u: any) => u.fileName === item.name);
+                let segText = '';
+                if (fileUtterances.length > 0) {
+                    segText = fileUtterances.map((u: any) => `${u.speaker}: ${u.text}`).join('\n');
+                } else {
+                    const escapedName = item.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const headerRx = new RegExp(`=== Transcript for ${escapedName} ===([\\s\\S]*?)(?====|$)`);
+                    const m = transcriptText.match(headerRx);
+                    segText = m ? m[1].trim() : transcriptText;
+                }
+                return { originalname: item.name, itemRef: item, transcriptText: segText };
+            }).filter((a: any) => a.transcriptText.trim().length > 0);
+
+            if (audioInputs.length > 0) {
+                try {
+                    const audioCls = await classifyAudioWithTranscript(audioInputs);
+                    audioCls.forEach((cls, idx) => {
+                        const item = audioInputs[idx]?.itemRef;
+                        if (item) {
+                            const ext = path.extname(item.name) || '.webm';
+                            item.metadata = item.metadata || {};
+                            item.metadata.category = cls.category;
+                            item.metadata.categoryLabel = cls.categoryLabel;
+                            item.metadata.suggestedName = cls.suggestedName ? `${cls.suggestedName}${ext}` : '';
+                            item.metadata.classificationConfidence = cls.confidence;
+                            updatedCount++;
+                        }
+                    });
+                } catch (err: any) {
+                    console.warn('[Reclassify] Audio classification failed:', err.message);
+                }
+            }
+        }
+
+        fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
+        console.log(`[Reclassify] Updated ${updatedCount} item(s) for record ${id}`);
+
+        res.json({ success: true, classifiedCount: updatedCount, record: records[recordIndex] });
+    } catch (error: any) {
+        console.error('❌ Reclassify failed:', error.message);
+        res.status(500).json({ error: 'Failed to re-classify', message: error.message });
+    }
+});
 

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import JSZip from 'jszip';
-import { Upload, Mic, AlertCircle, FileText, PlayCircle, Square, History, ArrowLeft, Trash2, Calendar, RefreshCw, X, CheckCircle, Plus, PhoneCall, Copy, FileIcon, ImageIcon, Edit3, Save, Wand2, Send, HelpCircle, Download } from 'lucide-react';
+import { Upload, Mic, AlertCircle, FileText, PlayCircle, Square, History, ArrowLeft, Trash2, Calendar, RefreshCw, X, CheckCircle, Plus, PhoneCall, Copy, FileIcon, ImageIcon, Edit3, Save, Wand2, Send, HelpCircle, Download, Tag, Pencil } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -313,6 +313,7 @@ function App() {
   const [twilioNumber, setTwilioNumber] = useState('');
 
   const [isAnalyzingFiles, setIsAnalyzingFiles] = useState(false);
+  const [isReclassifying, setIsReclassifying] = useState(false);
   const [analyzingStatus, setAnalyzingStatus] = useState<string>('Processing files and incorporating new insights...');
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -325,6 +326,16 @@ function App() {
   const [isRefining, setIsRefining] = useState(false);
   const [refinementFeedback, setRefinementFeedback] = useState<string | null>(null);
   const [refinementTarget, setRefinementTarget] = useState<'summary' | 'coverLetter' | null>(null);
+
+  // Custom Rename Modal State
+  const [renameModal, setRenameModal] = useState<{
+    isOpen: boolean;
+    itemIndex: number;
+    oldName: string;
+    suggestedName: string;
+    inputName: string;
+  }>({ isOpen: false, itemIndex: -1, oldName: '', suggestedName: '', inputName: '' });
+
   const docInputRef = useRef<HTMLInputElement>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -679,6 +690,65 @@ function App() {
     }
   };
 
+  const renameItem = async (itemIndex: number, newName: string) => {
+    if (!selectedRecordId || !newName.trim()) return;
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/records/${selectedRecordId}/rename-item`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ itemIndex, newName: newName.trim() }),
+        }
+      );
+      const data = await response.json();
+      if (response.ok) {
+        showNotification('Renamed', `File renamed to ${data.newName}`, 'success');
+        await fetchRecords();
+        // Update local audio URL if this was the playing audio
+        if (audioRef.current) {
+          const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+          const newUrl = `${baseUrl}/uploads/${data.newName}`;
+          const updatedRecord = data.record;
+          const updatedItem = updatedRecord?.items?.[itemIndex];
+          if (updatedItem?.type === 'audio') {
+            setAudioUrl(newUrl);
+          }
+        }
+      } else {
+        showNotification('Rename Failed', data.error || 'Unknown error', 'error');
+      }
+    } catch (err: any) {
+      showNotification('Rename Failed', err.message, 'error');
+    }
+  };
+
+  const handleReclassify = async () => {
+    if (!selectedRecordId) return;
+    setIsReclassifying(true);
+    showNotification('Re-classifying', 'Asking Gemini to re-classify all documents...', 'info');
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/records/${selectedRecordId}/reclassify`,
+        { method: 'POST' }
+      );
+      const data = await response.json();
+      if (response.ok) {
+        showNotification('Done', `Re-classified ${data.classifiedCount} document(s).`, 'success');
+        await fetchRecords();
+        if (data.record) {
+          loadRecord(data.record, true);
+        }
+      } else {
+        showNotification('Failed', data.error || 'Unknown error', 'error');
+      }
+    } catch (err: any) {
+      showNotification('Failed', err.message, 'error');
+    } finally {
+      setIsReclassifying(false);
+    }
+  };
+
   const handleSelection = useCallback(() => {
     if (isEditing || isRefining || isRegenerating || isAnalyzingFiles) return;
     
@@ -793,63 +863,232 @@ function App() {
     setView('results');
   };
 
+  const CATEGORY_COLORS: Record<string, { bg: string; border: string; text: string }> = {
+    passport:            { bg: 'rgba(59,130,246,0.15)',  border: 'rgba(59,130,246,0.4)',  text: '#60a5fa' },
+    visa:                { bg: 'rgba(139,92,246,0.15)', border: 'rgba(139,92,246,0.4)', text: '#a78bfa' },
+    employment_letter:   { bg: 'rgba(34,197,94,0.12)',  border: 'rgba(34,197,94,0.35)',  text: '#4ade80' },
+    support_letter:      { bg: 'rgba(34,197,94,0.12)',  border: 'rgba(34,197,94,0.35)',  text: '#4ade80' },
+    award_certificate:   { bg: 'rgba(234,179,8,0.12)',  border: 'rgba(234,179,8,0.35)',  text: '#facc15' },
+    publication:         { bg: 'rgba(6,182,212,0.12)',  border: 'rgba(6,182,212,0.35)',  text: '#22d3ee' },
+    media_coverage:      { bg: 'rgba(249,115,22,0.12)', border: 'rgba(249,115,22,0.35)', text: '#fb923c' },
+    tax_document:        { bg: 'rgba(239,68,68,0.12)',  border: 'rgba(239,68,68,0.35)',  text: '#f87171' },
+    degree_certificate:  { bg: 'rgba(99,102,241,0.12)', border: 'rgba(99,102,241,0.35)', text: '#818cf8' },
+    affidavit:           { bg: 'rgba(100,116,139,0.12)', border: 'rgba(100,116,139,0.35)', text: '#94a3b8' },
+    court_document:      { bg: 'rgba(239,68,68,0.12)',  border: 'rgba(239,68,68,0.35)',  text: '#f87171' },
+    immigration_form:    { bg: 'rgba(71,85,105,0.15)',  border: 'rgba(71,85,105,0.4)',  text: '#94a3b8' },
+    photo_id:            { bg: 'rgba(59,130,246,0.15)',  border: 'rgba(59,130,246,0.4)',  text: '#60a5fa' },
+    contract:            { bg: 'rgba(21,128,61,0.15)',   border: 'rgba(21,128,61,0.4)',   text: '#4ade80' },
+    financial_document:  { bg: 'rgba(22,163,74,0.12)',  border: 'rgba(22,163,74,0.35)',  text: '#86efac' },
+    medical_record:      { bg: 'rgba(236,72,153,0.12)', border: 'rgba(236,72,153,0.35)', text: '#f472b6' },
+    audio_recording:     { bg: 'rgba(124,58,237,0.12)', border: 'rgba(124,58,237,0.35)', text: '#a78bfa' },
+    other:               { bg: 'rgba(71,85,105,0.1)',   border: 'rgba(71,85,105,0.3)',   text: '#64748b' },
+  };
+
   const renderLinkedMaterials = () => {
     const record = records.find(r => r.id === selectedRecordId);
     if (!record?.items || record.items.length === 0) return null;
-    
+
     return (
       <div className="linked-items-section" style={{ borderTop: 'none', paddingTop: 0, marginTop: 0 }}>
-        <div className="section-title-small" style={{ marginBottom: '1rem' }}>Linked Materials</div>
-        <div className="items-grid" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem' }}>
-          {record.items.map((item: any, idx: number) => (
-            <div 
-              key={idx} 
-              className="linked-item-card" 
-              onClick={() => {
-                if (item.type === 'audio') {
-                  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-                  const fullUrl = item.url.startsWith('http') ? item.url : `${baseUrl}${item.url}`;
-                  if (audioUrl !== fullUrl) {
-                    setAudioUrl(fullUrl);
-                    if (audioRef.current) {
-                      audioRef.current.src = fullUrl;
-                      audioRef.current.load();
-                    }
-                  }
-                  setActiveResultTab('transcript');
-                  setTimeout(() => {
-                    audioRef.current?.play().catch(e => console.error(e));
-                  }, 100);
-                } else {
-                  // Open images and PDFs in a new tab
-                  const base = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-                  window.open(`${base}${item.url}`, '_blank');
-                }
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.75rem',
-                padding: '0.75rem',
-                borderRadius: '8px',
-                background: 'rgba(255, 255, 255, 0.03)',
-                border: '1px solid var(--border-color)',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                overflow: 'hidden'
-              }}
-            >
-              {item.type === 'image' ? <ImageIcon size={20} style={{ color: 'var(--accent-primary)' }} /> : item.type === 'audio' ? <PlayCircle size={20} style={{ color: 'var(--accent-primary)' }} /> : <FileIcon size={20} style={{ color: 'var(--accent-primary)' }} />}
-              <div className="item-meta" style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                <span className="item-name" title={item.name || `Item ${idx + 1}`} style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name || `Item ${idx + 1}`}</span>
-                <span className="item-type" style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{item.type.toUpperCase()}</span>
-              </div>
-            </div>
-          ))}
+        <div className="section-title-small" style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span>Linked Materials</span>
+          <button
+            onClick={handleReclassify}
+            disabled={isReclassifying || isAnalyzingFiles}
+            title="Re-classify all documents with AI"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.3rem',
+              padding: '0.25rem 0.6rem',
+              background: isReclassifying ? 'rgba(139,92,246,0.15)' : 'rgba(139,92,246,0.1)',
+              border: '1px solid rgba(139,92,246,0.35)',
+              borderRadius: '20px',
+              color: '#a78bfa',
+              fontSize: '0.7rem',
+              fontWeight: 600,
+              cursor: isReclassifying ? 'not-allowed' : 'pointer',
+              opacity: isReclassifying ? 0.7 : 1,
+              transition: 'all 0.2s',
+            }}
+          >
+            <Tag size={10} className={isReclassifying ? 'spin' : ''} />
+            {isReclassifying ? 'Classifying...' : 'Re-classify'}
+          </button>
         </div>
-        <button 
-          className="btn-add-more" 
-          onClick={() => docInputRef.current?.click()} 
+        <div className="items-grid" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem' }}>
+          {record.items.map((item: any, idx: number) => {
+            const cat = item.metadata?.category || 'other';
+            const catLabel = item.metadata?.categoryLabel || 'Other Document';
+            const suggestedName = item.metadata?.suggestedName || '';
+            const confidence = item.metadata?.classificationConfidence ?? 0;
+            const colors = CATEGORY_COLORS[cat] || CATEGORY_COLORS['other'];
+            const isLowConfidence = confidence > 0 && confidence < 0.6;
+
+            // Check if name is already applied to avoid redundant row display
+            const nameClean = item.name.replace(/\.[^/.]+$/, "");
+            const sugClean = suggestedName.replace(/\.[^/.]+$/, "");
+            const isAlreadyApplied = nameClean === sugClean || (sugClean && nameClean.includes(sugClean));
+
+            return (
+              <div
+                key={idx}
+                className="linked-item-card"
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'stretch',
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  gap: '0.4rem',
+                  padding: '0.75rem',
+                  borderRadius: '10px',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  border: '1px solid var(--border-color)',
+                  transition: 'all 0.2s',
+                  position: 'relative'
+                }}
+              >
+                {/* Top row: icon + name + badge + quick edit pencil */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0 }}>
+                  {item.type === 'image'
+                    ? <ImageIcon size={18} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
+                    : item.type === 'audio'
+                      ? <PlayCircle size={18} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
+                      : <FileIcon size={18} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />}
+                  
+                  <div
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'flex-start'
+                    }}
+                    onClick={() => {
+                      if (item.type === 'audio') {
+                        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+                        const fullUrl = item.url.startsWith('http') ? item.url : `${baseUrl}${item.url}`;
+                        if (audioUrl !== fullUrl) {
+                          setAudioUrl(fullUrl);
+                          if (audioRef.current) {
+                            audioRef.current.src = fullUrl;
+                            audioRef.current.load();
+                          }
+                        }
+                        setActiveResultTab('transcript');
+                        setTimeout(() => { audioRef.current?.play().catch(e => console.error(e)); }, 100);
+                      } else {
+                        const base = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+                        window.open(`${base}${item.url}`, '_blank');
+                      }
+                    }}
+                  >
+                    <span
+                      className="item-name"
+                      title={item.name || `Item ${idx + 1}`}
+                      style={{
+                        fontSize: '0.82rem',
+                        fontWeight: 600,
+                        color: 'var(--text-primary)',
+                        display: 'block',
+                        textAlign: 'left',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        width: '100%',
+                        maxWidth: '100%',
+                        direction: 'ltr'
+                      }}
+                    >
+                      {item.name || `Item ${idx + 1}`}
+                    </span>
+                  </div>
+
+                  {/* Manual Rename Trigger Pencil */}
+                  <button
+                    title="Rename file"
+                    onClick={() => {
+                      setRenameModal({
+                        isOpen: true,
+                        itemIndex: idx,
+                        oldName: item.name,
+                        suggestedName: suggestedName || item.name,
+                        inputName: suggestedName || item.name,
+                      });
+                    }}
+                    style={{
+                      background: 'none', border: 'none', color: '#64748b', cursor: 'pointer',
+                      padding: '0.2rem', borderRadius: '4px', display: 'flex', alignItems: 'center',
+                      transition: 'color 0.15s'
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = '#60a5fa')}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = '#64748b')}
+                  >
+                    <Pencil size={12} />
+                  </button>
+                </div>
+
+                {/* Category badge */}
+                {cat && cat !== 'other' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.1rem' }}>
+                    <span
+                      className="doc-category-badge"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.25rem',
+                        padding: '0.15rem 0.5rem',
+                        borderRadius: '20px',
+                        fontSize: '0.68rem',
+                        fontWeight: 600,
+                        background: colors.bg,
+                        border: `1px solid ${colors.border}`,
+                        color: colors.text,
+                      }}
+                    >
+                      <Tag size={9} />
+                      {catLabel}
+                      {isLowConfidence && <span title="Low confidence" style={{ opacity: 0.7 }}>?</span>}
+                    </span>
+                  </div>
+                )}
+
+                {/* Suggested name row ONLY displayed when NOT yet applied */}
+                {suggestedName && !isAlreadyApplied && (
+                  <div className="suggested-name-row" style={{ marginTop: '0.25rem' }}>
+                    <span
+                      className="suggested-name-text"
+                      title={`Suggested filename: ${suggestedName}`}
+                    >
+                      ✦ Suggested: {suggestedName}
+                    </span>
+                    <button
+                      className="rename-btn"
+                      title={`Apply name: ${suggestedName}`}
+                      onClick={() => {
+                        setRenameModal({
+                          isOpen: true,
+                          itemIndex: idx,
+                          oldName: item.name,
+                          suggestedName: suggestedName,
+                          inputName: suggestedName,
+                        });
+                      }}
+                    >
+                      <Pencil size={10} /> Apply
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <button
+          className="btn-add-more"
+          onClick={() => docInputRef.current?.click()}
           disabled={isAnalyzingFiles}
           style={{
             marginTop: '1.25rem',
@@ -1266,28 +1505,45 @@ function App() {
                     <span className="hide-mobile">Evidence Mapping</span>
                     <span className="show-mobile-inline">Evidence</span>
                   </button>
-                  <button
-                    className={`btn-tab ${activeResultTab === 'transcript' ? 'active' : ''}`}
-                    onClick={() => setActiveResultTab('transcript')}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.4rem',
-                      padding: '0.5rem 1rem',
-                      background: activeResultTab === 'transcript' ? 'rgba(59, 130, 246, 0.15)' : 'none',
-                      border: activeResultTab === 'transcript' ? '1px solid var(--accent-primary)' : '1px solid transparent',
-                      color: activeResultTab === 'transcript' ? 'var(--text-primary)' : 'var(--text-secondary)',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      fontSize: '0.9rem',
-                      transition: 'all 0.2s',
-                      whiteSpace: 'nowrap'
-                    }}
-                  >
-                    <PlayCircle size={16} />
-                    <span className="hide-mobile">Audio Transcript</span>
-                    <span className="show-mobile-inline">Transcript</span>
-                  </button>
+                  {(() => {
+                    const audioCount = record?.items?.filter((i: any) => i.type === 'audio').length || 0;
+                    return (
+                      <button
+                        className={`btn-tab ${activeResultTab === 'transcript' ? 'active' : ''}`}
+                        onClick={() => setActiveResultTab('transcript')}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.4rem',
+                          padding: '0.5rem 1rem',
+                          background: activeResultTab === 'transcript' ? 'rgba(59, 130, 246, 0.15)' : 'none',
+                          border: activeResultTab === 'transcript' ? '1px solid var(--accent-primary)' : '1px solid transparent',
+                          color: activeResultTab === 'transcript' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          fontSize: '0.9rem',
+                          transition: 'all 0.2s',
+                          whiteSpace: 'nowrap',
+                          opacity: audioCount === 0 && activeResultTab !== 'transcript' ? 0.75 : 1
+                        }}
+                      >
+                        <PlayCircle size={16} />
+                        <span className="hide-mobile">Audio Transcript</span>
+                        <span className="show-mobile-inline">Transcript</span>
+                        <span style={{
+                          fontSize: '0.7rem',
+                          padding: '0.1rem 0.4rem',
+                          borderRadius: '10px',
+                          background: audioCount > 0 ? 'rgba(139, 92, 246, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                          color: audioCount > 0 ? '#a78bfa' : '#64748b',
+                          fontWeight: 600,
+                          marginLeft: '0.15rem'
+                        }}>
+                          {audioCount}
+                        </span>
+                      </button>
+                    );
+                  })()}
                   <button
                     className={`btn-tab ${activeResultTab === 'assembly' ? 'active' : ''}`}
                     onClick={() => setActiveResultTab('assembly')}
@@ -1740,9 +1996,20 @@ function App() {
                                   {analysis.evidence.map((ev: any, idx: number) => {
                                     const strengthColor = ev.strength === 'high' ? 'var(--success)' : ev.strength === 'medium' ? '#F59E0B' : 'var(--danger)';
                                     
+                                    // Dynamically resolve renamed file name from record.items
+                                    const matchedItem = record.items?.find((it: any) => 
+                                      it.name === ev.file_name || 
+                                      it.metadata?.originalname === ev.file_name ||
+                                      (ev.file_name && (it.name?.includes(ev.file_name.substring(0, 10)) || (it.metadata?.originalname && ev.file_name?.includes(it.metadata.originalname.substring(0, 10)))))
+                                    ) || record.items?.[idx % (record.items?.length || 1)];
+
+                                    const displayName = matchedItem?.name || ev.file_name || 'Unknown File';
+
                                     return (
                                       <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                                        <td title={ev.file_name || 'Unknown File'} style={{ padding: '0.6rem 0.5rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }}>{ev.file_name || 'Unknown File'}</td>
+                                        <td title={`File: ${displayName}`} style={{ padding: '0.6rem 0.5rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '220px', fontFamily: 'monospace', fontSize: '0.78rem' }}>
+                                          {displayName}
+                                        </td>
                                         <td style={{ padding: '0.6rem 0.5rem', color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
                                           {ev.type.replace(/_/g, ' ')}
                                         </td>
@@ -1788,102 +2055,106 @@ function App() {
               {/* 4. Audio Transcript Tab */}
               {activeResultTab === 'transcript' && (
                 <>
-                  <div className="glass-card transcript-left-card" style={{ gridColumn: record?.items?.some((i: any) => i.type === 'audio') || transcript.utterances ? 'auto' : '1 / -1' }}>
-                    <div className="section-title">
-                      Consultation Audio Transcript
-                    </div>
+                  {/* If Audio exists: 2-Column Standard Grid */}
+                  {(record?.items?.some((i: any) => i.type === 'audio') || transcript.utterances) ? (
+                    <>
+                      <div className="glass-card transcript-left-card">
+                        <div className="section-title">
+                          Consultation Audio Transcript
+                        </div>
 
-                    {audioUrl && (
-                      <div className="audio-player-container" style={{ margin: '1rem 0', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                        <audio 
-                          ref={audioRef} 
-                          controls 
-                          src={audioUrl} 
-                          style={{ width: '100%' }}
-                          onLoadedMetadata={() => {
-                            if (pendingSeek !== null && audioRef.current) {
-                              const seekTime = pendingSeek;
-                              setPendingSeek(null);
-                              setTimeout(() => {
-                                if (audioRef.current) {
-                                  audioRef.current.currentTime = seekTime;
-                                  audioRef.current.play().catch(() => {});
+                        {audioUrl && (
+                          <div className="audio-player-container" style={{ margin: '1rem 0', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                            <audio 
+                              ref={audioRef} 
+                              controls 
+                              src={audioUrl} 
+                              style={{ width: '100%' }}
+                              onLoadedMetadata={() => {
+                                if (pendingSeek !== null && audioRef.current) {
+                                  const seekTime = pendingSeek;
+                                  setPendingSeek(null);
+                                  setTimeout(() => {
+                                    if (audioRef.current) {
+                                      audioRef.current.currentTime = seekTime;
+                                      audioRef.current.play().catch(() => {});
+                                    }
+                                  }, 50);
                                 }
-                              }, 50);
-                            }
-                          }}
-                        />
-                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.5rem', textAlign: 'center' }}>
-                          Click any word to jump to that timestamp in the recording
-                        </p>
-                      </div>
-                    )}
+                              }}
+                            />
+                            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.5rem', textAlign: 'center' }}>
+                              Click any word to jump to that timestamp in the recording
+                            </p>
+                          </div>
+                        )}
 
-                    <div className="transcript-card" style={{ maxHeight: '420px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '1rem', background: 'rgba(0,0,0,0.1)' }}>
-                      {record?.items?.filter((i: any) => i.type === 'audio').length > 0 || transcript.utterances ? (
-                        transcript.utterances ? (
-                          (() => {
-                            const audioItems = record?.items?.filter((i: any) => i.type === 'audio') || [];
-                            const hasAudioUrls = transcript.utterances.some((u: any) => u.audioUrl || u.fileUrl);
-                            
-                            const activeUtterances = (hasAudioUrls && audioUrl)
-                              ? transcript.utterances.filter((utt: any) => {
-                                  const targetUrl = utt.audioUrl || utt.fileUrl || audioItems[0]?.url;
-                                  return targetUrl && audioUrl.endsWith(targetUrl);
-                                })
-                              : transcript.utterances;
+                        <div className="transcript-card" style={{ maxHeight: '480px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '1rem', background: 'rgba(0,0,0,0.1)' }}>
+                          {transcript.utterances ? (
+                            (() => {
+                              const audioItems = record?.items?.filter((i: any) => i.type === 'audio') || [];
+                              const hasAudioUrls = transcript.utterances.some((u: any) => u.audioUrl || u.fileUrl);
+                              
+                              let activeUtterances = (hasAudioUrls && audioUrl)
+                                ? transcript.utterances.filter((utt: any) => {
+                                    const targetUrl = utt.audioUrl || utt.fileUrl || audioItems[0]?.url;
+                                    return targetUrl && (audioUrl.endsWith(targetUrl) || (targetUrl.split('/').pop() && audioUrl.includes(targetUrl.split('/').pop())));
+                                  })
+                                : transcript.utterances;
 
-                            return (
-                              <>
-                                {audioItems.length > 1 && (
-                                  <div className="audio-tabs" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem', flexWrap: 'wrap' }}>
-                                    {audioItems.map((item: any, idx: number) => {
-                                      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-                                      const fullUrl = item.url.startsWith('http') ? item.url : `${baseUrl}${item.url}`;
-                                      const isActive = audioUrl === fullUrl;
-                                      return (
-                                        <button
-                                          key={idx}
-                                          className={`btn-tab ${isActive ? 'active' : ''}`}
-                                          onClick={() => {
-                                            setAudioUrl(fullUrl);
-                                            if (audioRef.current) {
-                                              audioRef.current.src = fullUrl;
-                                              audioRef.current.load();
-                                              audioRef.current.play().catch(e => console.error(e));
-                                            }
-                                          }}
-                                          style={{
-                                            padding: '0.4rem 0.8rem',
-                                            borderRadius: '16px',
-                                            border: '1px solid',
-                                            borderColor: isActive ? 'var(--accent-primary)' : 'var(--border-color)',
-                                            background: isActive ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.05)',
-                                            color: isActive ? 'var(--accent-primary)' : 'var(--text-secondary)',
-                                            fontWeight: isActive ? '600' : 'normal',
-                                            cursor: 'pointer',
-                                            fontSize: '0.8rem',
-                                            transition: 'all 0.2s',
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            gap: '0.3rem'
-                                          }}
-                                        >
-                                          <PhoneCall size={12} />
-                                          {item.name || `Recording ${idx + 1}`}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                )}
+                              // Fallback if renaming caused exact url mismatch
+                              if (activeUtterances.length === 0 && transcript.utterances.length > 0) {
+                                activeUtterances = transcript.utterances;
+                              }
 
-                                {activeUtterances.length === 0 ? (
-                                  <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                                    No transcript text for this clip.
-                                  </div>
-                                ) : (
-                                  activeUtterances.map((utt: any, i: number) => {
-                                    return (
+                              return (
+                                <>
+                                  {audioItems.length > 1 && (
+                                    <div className="audio-selector-tabs" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>
+                                      {audioItems.map((item: any, idx: number) => {
+                                        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+                                        const fullUrl = item.url.startsWith('http') ? item.url : `${baseUrl}${item.url}`;
+                                        const isSelected = audioUrl === fullUrl || (!audioUrl && idx === 0);
+                                        return (
+                                          <button
+                                            key={idx}
+                                            onClick={() => {
+                                              setAudioUrl(fullUrl);
+                                              if (audioRef.current) {
+                                                audioRef.current.src = fullUrl;
+                                                audioRef.current.load();
+                                                setTimeout(() => audioRef.current?.play().catch(e => console.error(e)), 100);
+                                              }
+                                            }}
+                                            style={{
+                                              padding: '0.35rem 0.75rem',
+                                              borderRadius: '6px',
+                                              fontSize: '0.75rem',
+                                              fontWeight: 600,
+                                              background: isSelected ? 'var(--accent-primary)' : 'rgba(255,255,255,0.05)',
+                                              color: isSelected ? 'white' : 'var(--text-secondary)',
+                                              border: isSelected ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                                              cursor: 'pointer',
+                                              whiteSpace: 'nowrap',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              gap: '0.3rem'
+                                            }}
+                                          >
+                                            <PhoneCall size={12} />
+                                            {item.name || `Recording ${idx + 1}`}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+
+                                  {activeUtterances.length === 0 ? (
+                                    <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                                      No transcript text for this clip.
+                                    </div>
+                                  ) : (
+                                    activeUtterances.map((utt: any, i: number) => (
                                       <div className="utterance" key={i} style={{ marginBottom: '1.25rem' }}>
                                         <div className={`speaker-tag speaker-${utt.speaker}`} style={{
                                           fontSize: '0.75rem',
@@ -1916,30 +2187,94 @@ function App() {
                                           ))}
                                         </p>
                                       </div>
-                                    );
-                                  })
-                                )}
-                              </>
-                            );
-                          })()
-                        ) : (
-                          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                            No detailed transcript available for this audio.
-                          </div>
-                        )
-                      ) : (
-                        <div className="no-transcript-placeholder" style={{ textAlign: 'center', padding: '2rem' }}>
-                          <FileText size={48} style={{ opacity: 0.1, marginBottom: '1rem' }} />
-                          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>This matter collection focuses on document/image analysis.</p>
+                                    ))
+                                  )}
+                                </>
+                              );
+                            })()
+                          ) : (
+                            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                              No detailed transcript available for this audio.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Right Column: Linked Materials */}
+                      <div className="glass-card linked-materials-sidebar">
+                        {renderLinkedMaterials()}
+                      </div>
+                    </>
+                  ) : (
+                    /* If No Audio exists: Full Width Container Grid Span (gridColumn 1 / -1) */
+                    <div className="glass-card" style={{ gridColumn: '1 / -1', width: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                      <div className="section-title">
+                        Consultation Audio Transcript
+                      </div>
+
+                      <div
+                        className="no-transcript-placeholder"
+                        style={{
+                          textAlign: 'center',
+                          padding: '2.5rem 1.5rem',
+                          background: 'rgba(255, 255, 255, 0.01)',
+                          border: '1px dashed var(--border-color)',
+                          borderRadius: '12px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '0.75rem'
+                        }}
+                      >
+                        <div style={{
+                          width: '52px',
+                          height: '52px',
+                          borderRadius: '16px',
+                          background: 'rgba(59, 130, 246, 0.1)',
+                          border: '1px solid rgba(59, 130, 246, 0.25)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#60a5fa',
+                          marginBottom: '0.2rem'
+                        }}>
+                          <Mic size={26} />
+                        </div>
+                        <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 600, color: '#f8fafc' }}>
+                          No Consultation Audio Uploaded
+                        </h4>
+                        <p style={{ color: '#94a3b8', fontSize: '0.82rem', maxWidth: '440px', margin: 0, lineHeight: '1.5' }}>
+                          This matter collection currently focuses on document and image analysis. You can upload audio recordings or conduct phone intake anytime to generate transcripts.
+                        </p>
+                        <button
+                          onClick={() => docInputRef.current?.click()}
+                          style={{
+                            marginTop: '0.4rem',
+                            padding: '0.55rem 1.1rem',
+                            borderRadius: '8px',
+                            background: 'linear-gradient(135deg, rgba(59,130,246,0.2), rgba(139,92,246,0.2))',
+                            border: '1px solid rgba(59, 130, 246, 0.4)',
+                            color: '#60a5fa',
+                            fontSize: '0.82rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.4rem',
+                            transition: 'all 0.15s'
+                          }}
+                        >
+                          <Plus size={15} /> Add Audio File
+                        </button>
+                      </div>
+
+                      {/* Integrated Linked Materials inside the same full-width container */}
+                      {record?.items && record.items.length > 0 && (
+                        <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem', width: '100%', boxSizing: 'border-box' }}>
+                          {renderLinkedMaterials()}
                         </div>
                       )}
-                    </div>
-                  </div>
-
-                  {/* Right Column: Linked Materials */}
-                  {record?.items && record.items.length > 0 && (
-                    <div className="glass-card linked-materials-sidebar">
-                      {renderLinkedMaterials()}
                     </div>
                   )}
                 </>
@@ -2853,6 +3188,170 @@ function App() {
           )}
         </div>
       )}
+
+          {/* High-End Custom Rename Modal */}
+          {renameModal.isOpen && (
+            <div
+              className="modal-backdrop"
+              onClick={() => setRenameModal(prev => ({ ...prev, isOpen: false }))}
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: 'rgba(0, 0, 0, 0.75)',
+                backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
+                zIndex: 9999,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '1.5rem',
+                animation: 'fadeIn 0.2s ease-out'
+              }}
+            >
+              <div
+                className="custom-rename-modal"
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  width: '100%',
+                  maxWidth: '480px',
+                  background: '#0f172a',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  borderRadius: '16px',
+                  boxShadow: '0 20px 50px rgba(0, 0, 0, 0.6), 0 0 30px rgba(59, 130, 246, 0.15)',
+                  padding: '1.5rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '1.25rem',
+                  color: 'var(--text-primary)'
+                }}
+              >
+                {/* Header */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    <div style={{
+                      width: '36px', height: '36px', borderRadius: '10px',
+                      background: 'rgba(59, 130, 246, 0.15)', border: '1px solid rgba(59, 130, 246, 0.3)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#60a5fa'
+                    }}>
+                      <Pencil size={18} />
+                    </div>
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600, color: '#f8fafc' }}>
+                        Rename File
+                      </h3>
+                      <p style={{ margin: 0, fontSize: '0.75rem', color: '#94a3b8' }}>
+                        Updates metadata and physical file on disk
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setRenameModal(prev => ({ ...prev, isOpen: false }))}
+                    style={{
+                      background: 'none', border: 'none', color: '#64748b', cursor: 'pointer',
+                      padding: '0.4rem', borderRadius: '6px', display: 'flex', alignItems: 'center'
+                    }}
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {/* Body Comparison */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                  {/* Original Name */}
+                  <div style={{
+                    background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)',
+                    borderRadius: '8px', padding: '0.75rem'
+                  }}>
+                    <div style={{ fontSize: '0.7rem', color: '#64748b', marginBottom: '0.25rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Original Filename
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: '#cbd5e1', fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                      {renameModal.oldName}
+                    </div>
+                  </div>
+
+                  {/* Arrow Icon */}
+                  <div style={{ textAlign: 'center', color: '#60a5fa', fontSize: '0.85rem', margin: '-0.3rem 0' }}>
+                    ↓
+                  </div>
+
+                  {/* New Name Input */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    <label style={{ fontSize: '0.7rem', color: '#38bdf8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      New Filename (Standardized)
+                    </label>
+                    <input
+                      type="text"
+                      value={renameModal.inputName}
+                      onChange={(e) => setRenameModal(prev => ({ ...prev, inputName: e.target.value }))}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          renameItem(renameModal.itemIndex, renameModal.inputName);
+                          setRenameModal(prev => ({ ...prev, isOpen: false }));
+                        }
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '0.65rem 0.85rem',
+                        borderRadius: '8px',
+                        background: '#1e293b',
+                        border: '1px solid #3b82f6',
+                        color: '#f8fafc',
+                        fontFamily: 'monospace',
+                        fontSize: '0.9rem',
+                        outline: 'none',
+                        boxShadow: '0 0 12px rgba(59, 130, 246, 0.2)'
+                      }}
+                      autoFocus
+                    />
+                  </div>
+                </div>
+
+                {/* Footer Buttons */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+                  <button
+                    onClick={() => setRenameModal(prev => ({ ...prev, isOpen: false }))}
+                    style={{
+                      padding: '0.55rem 1rem',
+                      borderRadius: '8px',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      color: '#94a3b8',
+                      fontSize: '0.85rem',
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s'
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      renameItem(renameModal.itemIndex, renameModal.inputName);
+                      setRenameModal(prev => ({ ...prev, isOpen: false }));
+                    }}
+                    style={{
+                      padding: '0.55rem 1.25rem',
+                      borderRadius: '8px',
+                      background: 'linear-gradient(135deg, #2563eb, #3b82f6)',
+                      border: 'none',
+                      color: 'white',
+                      fontSize: '0.85rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 12px rgba(37, 99, 235, 0.35)',
+                      transition: 'all 0.15s'
+                    }}
+                  >
+                    Confirm Rename
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
     </div >
   );
 }

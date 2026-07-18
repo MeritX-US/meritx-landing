@@ -106,6 +106,11 @@
   padding: 2rem;
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
   transition: transform 0.3s ease, box-shadow 0.3s ease;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .glass-card:hover {
@@ -942,34 +947,43 @@ audio::-webkit-media-controls-time-remaining-display {
 }
 
 .items-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 1rem;
-  margin-bottom: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .linked-item-card {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 0.75rem;
   padding: 0.75rem;
-  background: var(--bg-primary);
+  background: rgba(255, 255, 255, 0.02);
   border: 1px solid var(--border-color);
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s ease;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .linked-item-card:hover {
   border-color: var(--accent-primary);
   background: rgba(59, 130, 246, 0.05);
-  transform: translateY(-2px);
+  transform: translateY(-1px);
 }
 
 .item-meta {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
 }
 
 .item-name {
@@ -978,6 +992,10 @@ audio::-webkit-media-controls-time-remaining-display {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-align: left !important;
+  color: var(--text-primary);
+  width: 100%;
+  display: block;
 }
 
 .item-type {
@@ -1202,6 +1220,129 @@ audio::-webkit-media-controls-time-remaining-display {
     padding: 0.45rem 0.6rem !important;
   }
 }
+
+/* ── Document Classification Styles ──────────────────────────────────────── */
+
+.linked-items-section {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+  text-align: left !important;
+}
+
+.items-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  text-align: left !important;
+}
+
+.linked-item-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start !important;
+  text-align: left !important;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.linked-item-card .item-name {
+  word-break: break-all;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  min-width: 0;
+  display: block;
+}
+
+.doc-category-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  user-select: none;
+  transition: opacity 0.15s;
+}
+
+.doc-category-badge:hover {
+  opacity: 0.85;
+}
+
+.suggested-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.suggested-name-text {
+  flex: 1;
+  font-size: 0.72rem;
+  font-family: monospace;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(255,255,255,0.04);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  min-width: 0;
+}
+
+.rename-btn {
+  flex-shrink: 0;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 6px;
+  color: #60a5fa;
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.rename-btn:hover {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.6);
+  transform: translateY(-1px);
+}
+
+.rename-btn:active {
+  transform: translateY(0);
+}
+
+.linked-item-card:hover {
+  border-color: rgba(59, 130, 246, 0.25) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+
 
  
  
