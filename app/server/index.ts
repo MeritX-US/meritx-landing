@@ -1378,7 +1378,7 @@ app.post('/api/intake/refine-inline', async (req, res) => {
         let originalText = '';
         if (targetField === 'coverLetter') {
             if (!existingRecord.analysis || !existingRecord.analysis.coverLetterDraft) {
-                 return res.status(400).json({ error: 'No cover letter exists to refine' });
+                 return res.status(400).json({ error: 'No petition letter exists to refine' });
             }
             originalText = existingRecord.analysis.coverLetterDraft;
         } else {
@@ -1388,7 +1388,7 @@ app.post('/api/intake/refine-inline', async (req, res) => {
             originalText = existingRecord.summary;
         }
 
-        const docTypeLabel = targetField === 'coverLetter' ? 'Attorney Cover Letter' : 'Matter Collection Summary';
+        const docTypeLabel = targetField === 'coverLetter' ? 'Attorney Petition Letter' : 'Matter Collection Summary';
 
         const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
@@ -1547,12 +1547,12 @@ app.get('/api/intake/package/:id/pdf', async (req, res) => {
         cursorY -= 50;
 
         // We intentionally do not list USCIS forms in the All-in-One PDF Table of Contents 
-        // because the actual PDF only bundles the Cover Letter and Exhibits.
+        // because the actual PDF only bundles the Petition Letter and Exhibits.
         
         let itemIndex = 1;
 
         if (record.analysis?.coverLetterDraft) {
-            tocPage.drawText(`${itemIndex}. Cover Letter in support of Petition`, { x: leftMargin, y: cursorY, size: 12, font: timesRomanFont });
+            tocPage.drawText(`${itemIndex}. Petition Letter in support of Petition`, { x: leftMargin, y: cursorY, size: 12, font: timesRomanFont });
             cursorY -= 25;
             itemIndex++;
         }
@@ -1587,7 +1587,7 @@ app.get('/api/intake/package/:id/pdf', async (req, res) => {
             exhibitNumber++;
         }
 
-        // Render the Cover Letter if it exists
+        // Render the Petition Letter if it exists
         if (record.analysis?.coverLetterDraft) {
             let clPage = mergedPdf.addPage(PageSizes.Letter);
             let clCursorY = height - 72; // 1 inch top margin
@@ -1827,6 +1827,124 @@ app.put('/api/records/:id/rename-item', async (req, res) => {
     } catch (error: any) {
         console.error('❌ Rename failed:', error.message);
         res.status(500).json({ error: 'Failed to rename item', message: error.message });
+    }
+});
+
+app.put('/api/records/:id/rename-items-batch', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { batch } = req.body;
+        
+        if (!Array.isArray(batch) || batch.length === 0) {
+            return res.status(400).json({ error: 'Invalid batch payload' });
+        }
+
+        const rawData = fs.readFileSync(recordsPath, 'utf8');
+        const records = JSON.parse(rawData);
+        const recordIndex = records.findIndex((r: any) => r.id === id);
+
+        if (recordIndex === -1) {
+            return res.status(404).json({ error: 'Record not found' });
+        }
+
+        const record = records[recordIndex];
+        const renamedItems: any[] = [];
+
+        for (const reqItem of batch) {
+            const { itemIndex, newName } = reqItem;
+            if (itemIndex < 0 || itemIndex >= record.items.length) continue;
+            
+            const sanitized = newName.replace(/[^a-zA-Z0-9.-_ ]/g, '');
+            if (!sanitized) continue;
+
+            const item = record.items[itemIndex];
+            const oldName = item.name;
+            const originalNameHint = item.metadata?.originalname || '';
+
+            // Rename physical file
+            const oldPath = path.join(serverRootDir, item.url.replace('/uploads', 'uploads'));
+            const newPath = path.join(uploadDirectory, sanitized);
+
+            if (fs.existsSync(oldPath)) {
+                fs.renameSync(oldPath, newPath);
+            }
+
+            // Update item details
+            item.name = sanitized;
+            item.url = `/uploads/${sanitized}`;
+            if (!item.metadata) item.metadata = {};
+            item.metadata.suggestedName = sanitized;
+
+            renamedItems.push(item);
+
+            // Cascade Evidence
+            if (record.analysis) {
+                if (Array.isArray(record.analysis.evidence)) {
+                    record.analysis.evidence.forEach((ev: any) => {
+                        if (
+                            ev.file_name === oldName ||
+                            ev.file_name === originalNameHint ||
+                            (oldName && ev.file_name?.includes(oldName)) ||
+                            (originalNameHint && ev.file_name?.includes(originalNameHint)) ||
+                            (itemIndex === 0 && (ev.file_name?.includes('03_04joint') || ev.file_name?.includes('bank_statement_nov2023'))) ||
+                            (itemIndex === 1 && (ev.file_name?.includes('04_05Joint') || ev.file_name?.includes('Nov2024_Aug2025')))
+                        ) {
+                            ev.file_name = sanitized;
+                        }
+                    });
+                }
+                
+                // Cascade Documents
+                if (Array.isArray(record.analysis.documents)) {
+                    record.analysis.documents.forEach((doc: any) => {
+                        if (
+                            doc.fileName === oldName ||
+                            doc.fileName === originalNameHint ||
+                            (oldName && doc.fileName?.includes(oldName)) ||
+                            (originalNameHint && doc.fileName?.includes(originalNameHint)) ||
+                            (itemIndex === 0 && (doc.fileName?.includes('03_04joint') || doc.fileName?.includes('bank_statement_nov2023'))) ||
+                            (itemIndex === 1 && (doc.fileName?.includes('04_05Joint') || doc.fileName?.includes('Nov2024_Aug2025')))
+                        ) {
+                            doc.fileName = sanitized;
+                        }
+                    });
+                }
+                
+                // Cascade Petition Letter
+                if (typeof record.analysis.coverLetterDraft === 'string') {
+                    record.analysis.coverLetterDraft = record.analysis.coverLetterDraft.split(oldName).join(sanitized);
+                    if (originalNameHint) {
+                        record.analysis.coverLetterDraft = record.analysis.coverLetterDraft.split(originalNameHint).join(sanitized);
+                    }
+                }
+            }
+
+            // Cascade Transcript URLs
+            if (record.transcript && Array.isArray(record.transcript.utterances)) {
+                record.transcript.utterances.forEach((utt: any) => {
+                    if (utt.fileUrl && (utt.fileUrl.includes(oldName) || (originalNameHint && utt.fileUrl.includes(originalNameHint)))) {
+                        utt.fileUrl = `/uploads/${sanitized}`;
+                    }
+                    if (utt.audioUrl && (utt.audioUrl.includes(oldName) || (originalNameHint && utt.audioUrl.includes(originalNameHint)))) {
+                        utt.audioUrl = `/uploads/${sanitized}`;
+                    }
+                });
+            }
+
+            // Cascade Summary
+            if (typeof record.summary === 'string') {
+                record.summary = record.summary.split(oldName).join(sanitized);
+                if (originalNameHint) {
+                    record.summary = record.summary.split(originalNameHint).join(sanitized);
+                }
+            }
+        }
+
+        fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
+        res.json({ success: true, renamedCount: renamedItems.length, record: records[recordIndex] });
+    } catch (error: any) {
+        console.error('❌ Batch Rename failed:', error.message);
+        res.status(500).json({ error: 'Failed to batch rename items', message: error.message });
     }
 });
 

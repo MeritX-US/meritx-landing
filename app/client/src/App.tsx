@@ -314,6 +314,7 @@ function App() {
 
   const [isAnalyzingFiles, setIsAnalyzingFiles] = useState(false);
   const [isReclassifying, setIsReclassifying] = useState(false);
+  const [isRenamingBatch, setIsRenamingBatch] = useState(false);
   const [analyzingStatus, setAnalyzingStatus] = useState<string>('Processing files and incorporating new insights...');
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -602,16 +603,16 @@ function App() {
 
   const handleAssemblePackage = async () => {
     setIsAssembling(true);
-    showNotification('Assembling Package', 'Generating Cover Letter, Form Mappings, and downloading files...', 'info');
+    showNotification('Assembling Package', 'Generating Petition Letter, Form Mappings, and downloading files...', 'info');
     try {
       const record = records.find(r => r.id === selectedRecordId);
       if (!record || !record.analysis) return;
       
       const zip = new JSZip();
       
-      // 1. Add Cover Letter
+      // 1. Add Petition Letter
       const coverLetterPdf = generatePDFBlob(record.analysis.coverLetterDraft);
-      zip.file("01_Cover_Letter.pdf", coverLetterPdf);
+      zip.file("01_Petition_Letter.pdf", coverLetterPdf);
       
       // 2. Add Exhibit Index
       const exhibitIndexPdf = generateExhibitIndexPDF(record.analysis.documents, record.caseType);
@@ -723,6 +724,57 @@ function App() {
     }
   };
 
+  const handleRenameItemsBatch = async () => {
+    if (!selectedRecordId) return;
+    const record = records.find(r => r.id === selectedRecordId);
+    if (!record?.items) return;
+
+    // Find all items that have a suggestedName that differs from their current name
+    const batch = record.items.map((item: any, idx: number) => {
+      const suggestedName = item.metadata?.suggestedName;
+      if (!suggestedName) return null;
+      
+      const nameClean = item.name.replace(/\.[^/.]+$/, "");
+      const sugClean = suggestedName.replace(/\.[^/.]+$/, "");
+      const isAlreadyApplied = nameClean === sugClean || (sugClean && nameClean.includes(sugClean));
+      
+      if (!isAlreadyApplied) {
+        return { itemIndex: idx, newName: suggestedName };
+      }
+      return null;
+    }).filter(Boolean);
+
+    if (batch.length === 0) {
+      showNotification('No Pending Names', 'All suggested names have already been applied.', 'info');
+      return;
+    }
+
+    setIsRenamingBatch(true);
+    showNotification('Batch Renaming', `Applying ${batch.length} suggested names...`, 'info');
+
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/records/${selectedRecordId}/rename-items-batch`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ batch }),
+        }
+      );
+      const data = await response.json();
+      if (response.ok) {
+        showNotification('Batch Renamed', `Successfully renamed ${data.renamedCount} items.`, 'success');
+        await fetchRecords();
+      } else {
+        showNotification('Batch Rename Failed', data.error || 'Unknown error', 'error');
+      }
+    } catch (err: any) {
+      showNotification('Batch Rename Failed', err.message, 'error');
+    } finally {
+      setIsRenamingBatch(false);
+    }
+  };
+
   const handleReclassify = async () => {
     if (!selectedRecordId) return;
     setIsReclassifying(true);
@@ -796,12 +848,7 @@ function App() {
       const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/intake/refine-inline`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          existingRecordId: selectedRecordId,
-          selectedText,
-          userPrompt: refinePrompt,
-          targetField: activeResultTab === 'assembly' && selectedAssemblyDocId === 'cover-letter' ? 'coverLetter' : 'summary'
-        }),
+        body: JSON.stringify(reqBody),
       });
 
       const data = await response.json();
@@ -809,7 +856,7 @@ function App() {
         showNotification('Refinement Complete', 'The document has been updated inline.', 'success');
         if (data.explanation) {
           setRefinementFeedback(data.explanation);
-          setRefinementTarget(activeResultTab === 'assembly' && selectedAssemblyDocId === 'cover-letter' ? 'coverLetter' : 'summary');
+          setRefinementTarget(activeResultTab === 'assembly' && selectedAssemblyDocId === 'petition-letter' ? 'coverLetter' : 'summary');
         }
         await fetchRecords();
         loadRecord(data.record, true);
@@ -915,6 +962,38 @@ function App() {
             <Tag size={10} className={isReclassifying ? 'spin' : ''} />
             {isReclassifying ? 'Classifying...' : 'Re-classify'}
           </button>
+          {record.items.some((item: any) => {
+             const suggestedName = item.metadata?.suggestedName;
+             if (!suggestedName) return false;
+             const nameClean = item.name.replace(/\.[^/.]+$/, "");
+             const sugClean = suggestedName.replace(/\.[^/.]+$/, "");
+             return !(nameClean === sugClean || (sugClean && nameClean.includes(sugClean)));
+          }) && (
+            <button
+              onClick={handleRenameItemsBatch}
+              disabled={isRenamingBatch}
+              title="Apply all suggested names at once"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                padding: '0.25rem 0.6rem',
+                background: 'rgba(59,130,246,0.15)',
+                border: '1px solid rgba(59,130,246,0.4)',
+                borderRadius: '20px',
+                color: '#60a5fa',
+                fontSize: '0.7rem',
+                fontWeight: 600,
+                cursor: isRenamingBatch ? 'not-allowed' : 'pointer',
+                opacity: isRenamingBatch ? 0.7 : 1,
+                transition: 'all 0.2s',
+                marginLeft: 'auto'
+              }}
+            >
+              <Wand2 size={12} className={isRenamingBatch ? 'spin' : ''} />
+              {isRenamingBatch ? 'Applying...' : 'Apply All Suggested Names'}
+            </button>
+          )}
         </div>
         <div className="items-grid" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem' }}>
           {record.items.map((item: any, idx: number) => {
@@ -2367,7 +2446,7 @@ function App() {
                             <div className="assembly-index-list">
                               {[
                                 { id: 'cover-sheet', label: '1. Cover Sheet', icon: <FileText size={14} /> },
-                                { id: 'cover-letter', label: '2. Cover Letter', icon: <FileText size={14} /> },
+                                { id: 'petition-letter', label: '2. Petition Letter', icon: <FileText size={14} /> },
                                 { id: 'form-mapping', label: '3. Forms Map', icon: <FileText size={14} /> },
                                 { id: 'exhibit-index', label: '4. Table of Contents', icon: <FileText size={14} /> },
                                 { id: 'exhibit-compilation', label: '5. Exhibits', icon: <FileText size={14} /> },
@@ -2475,7 +2554,7 @@ function App() {
 
                                   <h3 style={{ borderBottom: '1px solid #cbd5e1', paddingBottom: '0.4rem', fontSize: '1.05rem', color: '#0f172a', marginTop: '2rem' }}>Package Checklist Summary</h3>
                                   <ul style={{ paddingLeft: '1.25rem', margin: '0.75rem 0 0 0', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                    <li><strong>Filing Cover Letter:</strong> {hasCoverLetter ? 'Drafted and matching case facts (✓)' : <span style={{ color: '#dc2626' }}>Pending draft generation (⚠️)</span>}</li>
+                                    <li><strong>Filing Petition Letter:</strong> {hasCoverLetter ? 'Drafted and matching case facts (✓)' : <span style={{ color: '#dc2626' }}>Pending draft generation (⚠️)</span>}</li>
                                     <li><strong>USCIS Forms Mapping:</strong> {hasFormMapping ? 'Mapped and ready for field entry (✓)' : <span style={{ color: '#dc2626' }}>Pending USCIS mapping (⚠️)</span>}</li>
                                     <li><strong>Primary Civil Documents:</strong> {isCivilComplete ? (
                                       'All required primary civil documents uploaded & verified (✓)'
@@ -2497,8 +2576,8 @@ function App() {
                               );
                             })()}
 
-                            {/* Page 2: Attorney Cover Letter */}
-                            {selectedAssemblyDocId === 'cover-letter' && (
+                            {/* Page 2: Attorney Petition Letter */}
+                            {selectedAssemblyDocId === 'petition-letter' && (
                               <div className="legal-markdown-preview" onMouseUp={handleSelection} onTouchEnd={handleSelection} onKeyUp={handleSelection}>
                                 {refinementFeedback && refinementTarget === 'coverLetter' && (
                                   <div style={{
@@ -2527,11 +2606,10 @@ function App() {
                                     </button>
                                   </div>
                                 )}
-                                {analysis.coverLetterDraft ? (
-                                  <ReactMarkdown>{analysis.coverLetterDraft}</ReactMarkdown>
-                                ) : (
-                                  'No cover letter draft generated.'
-                                )}
+                                <div className="pdf-preview-content markdown-body" onMouseUp={handleSelection}>
+                                  {analysis.coverLetterDraft ? <ReactMarkdown>{analysis.coverLetterDraft}</ReactMarkdown> :
+                                  'No petition letter draft generated.'}
+                                </div>
                               </div>
                             )}
 
@@ -2659,15 +2737,14 @@ function App() {
                                     const isEb1a = record?.caseType === 'eb1a';
                                     const checklistItems = isEb1a ? [
                                       'Verify that petitioner and beneficiary legal names match biological passport pages.',
-                                      'Verify that the beneficiary meets at least 3 of the 10 extraordinary ability criteria.',
                                       'Review and reconcile any date gaps in the beneficiary\'s employment history.',
-                                      'Approve draft Cover Letter and Exhibit List mappings.',
+                                      'Approve draft Petition Letter and Exhibit List mappings.',
                                       'Authorize MeritX to compile all verified exhibit files and drafts into a single ZIP archive.'
                                     ] : [
                                       'Verify that petitioner and beneficiary legal names match biological passport pages.',
                                       'Review and reconcile any date gaps or address conflicts in address history timeline.',
                                       'Confirm that petitioner income meets or exceeds the required 125% Federal Poverty Line for sponsorship.',
-                                      'Approve draft Cover Letter and Exhibit List mappings.',
+                                      'Approve draft Petition Letter and Exhibit List mappings.',
                                       'Authorize MeritX to compile all verified exhibit files and drafts into a single ZIP archive.'
                                     ];
 
@@ -2740,7 +2817,7 @@ function App() {
                     <div className="assembly-index-list">
                       {[
                         { id: 'cover-sheet', label: '1. Filing Cover Sheet', icon: <FileText size={16} /> },
-                        { id: 'cover-letter', label: '2. Attorney Cover Letter', icon: <FileText size={16} /> },
+                        { id: 'petition-letter', label: '2. Attorney Petition Letter', icon: <FileText size={16} /> },
                         { id: 'form-mapping', label: '3. USCIS Form Mapping', icon: <FileText size={16} /> },
                         { id: 'exhibit-index', label: '4. Exhibit Index', icon: <FileText size={16} /> },
                         { id: 'checklist', label: '5. Attorney Sign-off & Export', icon: <CheckCircle size={16} /> },
@@ -3032,10 +3109,9 @@ function App() {
         isAssembling && (
           <div className="loading-overlay" style={{ zIndex: 2000 }}>
             <div className="glass-card loading-card" style={{ maxWidth: '480px', width: '90%', padding: '3rem 2rem', textAlign: 'center', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)' }}>
-              <div className="spinner" style={{ width: '48px', height: '48px', borderWidth: '5px' }}></div>
-              <h3 style={{ fontSize: '1.5rem', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '0.75rem' }}>Assembling Package</h3>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', marginTop: '0.5rem', lineHeight: '1.5' }}>
-                Compiling Cover Letter, Form Mappings, Exhibit Index, and downloading matched PDF/image attachments into a ZIP bundle...
+              <div className="progress-bar-container"><div className="progress-bar-fill slide-fill"></div></div>
+              <p className="loading-subtext mt-2" style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                Compiling Petition Letter, Form Mappings, Exhibit Index, and downloading matched PDF/image attachments into a ZIP bundle...
               </p>
             </div>
           </div>
@@ -3055,7 +3131,7 @@ function App() {
                 Petition Package Assembled!
               </h3>
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.75rem', lineHeight: '1.5' }}>
-                MeritX has successfully compiled the Filing Cover Letter, official Form Mappings, and all matching evidentiary exhibits into a single, structured zip archive.
+                MeritX has successfully compiled the Filing Petition Letter, official Form Mappings, and all matching evidentiary exhibits into a single, structured zip archive.
               </p>
               
               {(() => {
@@ -3067,7 +3143,7 @@ function App() {
                       ARCHIVE CONTENTS:
                     </div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      📄 <strong>01_Cover_Letter.pdf</strong> - Drafted Attorney Letter
+                      📄 <strong>01_Petition_Letter.pdf</strong> - Drafted Attorney Letter
                     </div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                       📑 <strong>02_Exhibit_Index.pdf</strong> - Mapped Exhibit List
