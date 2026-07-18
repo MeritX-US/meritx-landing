@@ -1260,6 +1260,25 @@ app.get('/api/intake/package/:id/pdf', async (req, res) => {
         let tocPage = mergedPdf.addPage(PageSizes.Letter);
         const { width, height } = tocPage.getSize();
         
+        const wrapText = (text: string, maxWidth: number, font: any, fontSize: number): string[] => {
+            const words = text.split(' ');
+            const lines: string[] = [];
+            let currentLine = '';
+            
+            for (const word of words) {
+                const testLine = currentLine ? `${currentLine} ${word}` : word;
+                const testWidth = font.widthOfTextAtSize(testLine, fontSize);
+                if (testWidth > maxWidth) {
+                    lines.push(currentLine);
+                    currentLine = word;
+                } else {
+                    currentLine = testLine;
+                }
+            }
+            if (currentLine) lines.push(currentLine);
+            return lines;
+        };
+        
         const isMarriage = record.caseType !== 'eb1a';
         const caseTypeLabel = isMarriage ? 'Marriage-Based Permanent Residence' : 'I-140, EB-1A, Alien of Extraordinary Ability - INA 203(b)(1)(A)';
         const petitionerNameRaw = record.analysis?.facts?.petitioner_identity?.value || 'Unknown Petitioner';
@@ -1278,19 +1297,32 @@ app.get('/api/intake/package/:id/pdf', async (req, res) => {
 
         let cursorY = height - 80;
         const leftMargin = 72; // 1 inch margin
+        const rightMargin = 72;
+        const maxTextWidth = width - leftMargin - rightMargin; // usable text width
         
-        // Helper to draw bold prefix + normal text
-        const drawPrefixLine = (prefix: string, text: string, y: number) => {
-            tocPage.drawText(prefix, { x: leftMargin, y, size: 12, font: timesRomanBold, color: rgb(0, 0, 0) });
+        // Helper to draw bold prefix + normal text, wrapping the value if too long
+        const drawPrefixLine = (prefix: string, text: string, y: number): number => {
             const prefixWidth = timesRomanBold.widthOfTextAtSize(prefix, 12);
-            tocPage.drawText(text, { x: leftMargin + prefixWidth, y, size: 12, font: timesRomanFont, color: rgb(0, 0, 0) });
+            const availWidth = maxTextWidth - prefixWidth;
+            const valueLines = wrapText(text, availWidth, timesRomanFont, 12);
+            
+            tocPage.drawText(prefix, { x: leftMargin, y, size: 12, font: timesRomanBold, color: rgb(0, 0, 0) });
+            tocPage.drawText(valueLines[0] || '', { x: leftMargin + prefixWidth, y, size: 12, font: timesRomanFont, color: rgb(0, 0, 0) });
+            
+            let lineY = y - 16;
+            for (let i = 1; i < valueLines.length; i++) {
+                tocPage.drawText(valueLines[i], { x: leftMargin + prefixWidth, y: lineY, size: 12, font: timesRomanFont, color: rgb(0, 0, 0) });
+                lineY -= 16;
+            }
+            // Return the new cursor Y after this block
+            return lineY;
         };
 
-        drawPrefixLine('Petitioner/Beneficiary: ', `${pName} / ${bName}`, cursorY);
-        cursorY -= 30;
+        cursorY = drawPrefixLine('Petitioner/Beneficiary: ', `${pName} / ${bName}`, cursorY);
+        cursorY -= 14;
 
-        drawPrefixLine('Petition: ', caseTypeLabel, cursorY);
-        cursorY -= 60;
+        cursorY = drawPrefixLine('Petition: ', caseTypeLabel, cursorY);
+        cursorY -= 30;
 
         const title = 'TABLE OF CONTENTS';
         const titleWidth = timesRomanBold.widthOfTextAtSize(title, 14);
@@ -1320,14 +1352,23 @@ app.get('/api/intake/package/:id/pdf', async (req, res) => {
 
         // Loop 1: Draw all exhibits on the Table of Contents (handles multi-page TOC)
         let exhibitNumber = 1;
+        const maxTocWidth = width - 144; // 72pt margins on each side
         for (const item of (record.items || [])) {
-            if (cursorY < 50) {
-                tocPage = mergedPdf.addPage(PageSizes.Letter);
-                cursorY = height - 50; // reset to top
-            }
+            const lineStr = `   Exhibit ${exhibitNumber}: ${item.name}`;
+            const wrappedLines = wrapText(lineStr, maxTocWidth, timesRomanFont, 11);
             
-            tocPage.drawText(`   Exhibit ${exhibitNumber}: ${item.name}`, { x: leftMargin + 10, y: cursorY, size: 11, font: timesRomanFont });
-            cursorY -= 20;
+            for (let i = 0; i < wrappedLines.length; i++) {
+                if (cursorY < 72) {
+                    tocPage = mergedPdf.addPage(PageSizes.Letter);
+                    cursorY = height - 72; // reset to top
+                }
+                
+                // Add a little extra indent for wrapped lines if desired, or just align
+                const indent = i === 0 ? 0 : 20;
+                tocPage.drawText(wrappedLines[i], { x: leftMargin + 10 + indent, y: cursorY, size: 11, font: timesRomanFont });
+                cursorY -= 16;
+            }
+            cursorY -= 4; // Add a small gap between different exhibits
             exhibitNumber++;
         }
 
@@ -1336,25 +1377,6 @@ app.get('/api/intake/package/:id/pdf', async (req, res) => {
             let clPage = mergedPdf.addPage(PageSizes.Letter);
             let clCursorY = height - 72; // 1 inch top margin
             
-            const wrapText = (text: string, maxWidth: number, font: any, fontSize: number): string[] => {
-                const words = text.split(' ');
-                const lines: string[] = [];
-                let currentLine = '';
-                
-                for (const word of words) {
-                    const testLine = currentLine ? `${currentLine} ${word}` : word;
-                    const width = font.widthOfTextAtSize(testLine, fontSize);
-                    if (width > maxWidth) {
-                        lines.push(currentLine);
-                        currentLine = word;
-                    } else {
-                        currentLine = testLine;
-                    }
-                }
-                if (currentLine) lines.push(currentLine);
-                return lines;
-            };
-
             const clLines = record.analysis.coverLetterDraft.split('\n');
             const clMaxWidth = width - 144; // 1 inch margins on both sides
 
@@ -1409,9 +1431,26 @@ app.get('/api/intake/package/:id/pdf', async (req, res) => {
                     const fileBytes = fs.readFileSync(filePath);
                     
                     if (item.type === 'pdf') {
-                        const pdfToMerge = await PDFDocument.load(fileBytes, { ignoreEncryption: true });
-                        const copiedPages = await mergedPdf.copyPages(pdfToMerge, pdfToMerge.getPageIndices());
-                        copiedPages.forEach(page => mergedPdf.addPage(page));
+                        const embeddedPages = await mergedPdf.embedPdf(fileBytes);
+                        for (const embeddedPage of embeddedPages) {
+                            const newPage = mergedPdf.addPage(PageSizes.Letter);
+                            const { width: pWidth, height: pHeight } = newPage.getSize();
+                            
+                            const availWidth = pWidth - 40;
+                            const availHeight = pHeight - 40;
+                            
+                            const origSize = embeddedPage.size();
+                            // Scale to fill the available area (both up and down)
+                            const finalScale = Math.min(availWidth / origSize.width, availHeight / origSize.height);
+                            const scaleDims = embeddedPage.scale(finalScale);
+                            
+                            newPage.drawPage(embeddedPage, {
+                                x: pWidth / 2 - scaleDims.width / 2,
+                                y: pHeight / 2 - scaleDims.height / 2,
+                                width: scaleDims.width,
+                                height: scaleDims.height,
+                            });
+                        }
                     } else if (item.type === 'image') {
                         let img;
                         if (filePath.toLowerCase().endsWith('.png')) {
