@@ -2440,8 +2440,32 @@ function App() {
                                       <td style={{ padding: '0.6rem 0.5rem', color: 'var(--text-primary)', fontWeight: 550 }}>{doc.label}</td>
                                       <td style={{ padding: '0.6rem 0.5rem', color: 'var(--text-secondary)', textTransform: 'capitalize' }}>{doc.category.replace(/_/g, ' ')}</td>
                                       <td style={{ padding: '0.6rem 0.5rem', color: statusColor, fontWeight: 'bold', fontSize: '0.75rem' }}>{statusLabel}</td>
-                                      <td style={{ padding: '0.6rem 0.5rem', color: isProvided ? 'var(--text-primary)' : 'var(--text-secondary)', fontStyle: isProvided ? 'normal' : 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }}>
-                                        {isProvided ? doc.fileName : 'Not Provided'}
+                                      <td 
+                                        style={{ padding: '0.6rem 0.5rem', color: isProvided ? 'var(--text-primary)' : 'var(--text-secondary)', fontStyle: isProvided ? 'normal' : 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }}
+                                        title={isProvided ? doc.fileName : 'Not Provided'}
+                                      >
+                                        {(() => {
+                                          if (!isProvided) return 'Not Provided';
+                                          const physicalItem = record.items?.find((i: any) => i.name === doc.fileName || i.file_name === doc.fileName || (doc.fileName && i.name && doc.fileName.includes(i.name)));
+                                          if (physicalItem && physicalItem.url) {
+                                            const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+                                            const fullUrl = physicalItem.url.startsWith('http') ? physicalItem.url : `${baseUrl}${physicalItem.url}`;
+                                            return (
+                                              <a 
+                                                href={fullUrl} 
+                                                target="_blank" 
+                                                rel="noopener noreferrer"
+                                                title={doc.fileName}
+                                                style={{ color: '#2563eb', textDecoration: 'none' }}
+                                                onMouseOver={(e) => e.currentTarget.style.textDecoration = 'underline'}
+                                                onMouseOut={(e) => e.currentTarget.style.textDecoration = 'none'}
+                                              >
+                                                {doc.fileName}
+                                              </a>
+                                            );
+                                          }
+                                          return doc.fileName;
+                                        })()}
                                       </td>
                                     </tr>
                                   );
@@ -2490,8 +2514,27 @@ function App() {
 
                                     return (
                                       <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                                        <td title={`File: ${displayName}`} style={{ padding: '0.6rem 0.5rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '220px', fontFamily: 'monospace', fontSize: '0.78rem' }}>
-                                          {displayName}
+                                        <td style={{ padding: '0.6rem 0.5rem', color: 'var(--text-primary)', fontWeight: 550, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }} title={displayName}>
+                                          {(() => {
+                                            if (matchedItem && matchedItem.url) {
+                                              const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+                                              const fullUrl = matchedItem.url.startsWith('http') ? matchedItem.url : `${baseUrl}${matchedItem.url}`;
+                                              return (
+                                                <a 
+                                                  href={fullUrl} 
+                                                  target="_blank" 
+                                                  rel="noopener noreferrer"
+                                                  title={displayName}
+                                                  style={{ color: '#2563eb', textDecoration: 'none' }}
+                                                  onMouseOver={(e) => e.currentTarget.style.textDecoration = 'underline'}
+                                                  onMouseOut={(e) => e.currentTarget.style.textDecoration = 'none'}
+                                                >
+                                                  {displayName}
+                                                </a>
+                                              );
+                                            }
+                                            return displayName;
+                                          })()}
                                         </td>
                                         <td style={{ padding: '0.6rem 0.5rem', color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
                                           {ev.type.replace(/_/g, ' ')}
