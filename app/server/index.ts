@@ -136,7 +136,7 @@ async function runAutoResearchForRecord(record: any, genAI: any) {
                     const summary = await researchEntity(entityType, String(name), genAI);
                     
                     if (summary) {
-                        const pdfPath = path.join(__dirname, 'uploads', pdfName);
+                        const pdfPath = path.join(uploadDirectory, pdfName);
                         await generateResearchPDF(String(name), summary, pdfPath);
                         
                         const categoryMap: any = {
@@ -1341,7 +1341,7 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
         } catch (err: any) {
             console.error('⚠️ Playbook analysis failed:', err.message);
             record.analysisError = err.message;
-            fs.appendFileSync(path.join(__dirname, 'error.log'), `[${new Date().toISOString()}] Playbook analysis failed: ${err.message}\n${err.stack}\n\n`);
+            fs.appendFileSync(path.join(serverRootDir, 'error.log'), `[${new Date().toISOString()}] Playbook analysis failed: ${err.message}\n${err.stack}\n\n`);
         }
 
         if (isNewRecord) {
@@ -1437,7 +1437,7 @@ app.post('/api/intake/regenerate', async (req, res) => {
         } catch (err: any) {
             console.error('⚠️ Playbook analysis failed (Regenerate):', err.message);
             records[recordIndex].analysisError = err.message;
-            fs.appendFileSync(path.join(__dirname, 'error.log'), `[${new Date().toISOString()}] Playbook analysis regeneration failed: ${err.message}\n${err.stack}\n\n`);
+            fs.appendFileSync(path.join(serverRootDir, 'error.log'), `[${new Date().toISOString()}] Playbook analysis regeneration failed: ${err.message}\n${err.stack}\n\n`);
         }
 
         fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
