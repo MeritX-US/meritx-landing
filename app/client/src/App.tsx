@@ -2447,6 +2447,9 @@ function App() {
                                         {(() => {
                                           if (!isProvided) return 'Not Provided';
                                           const physicalItem = record.items?.find((i: any) => i.name === doc.fileName || i.file_name === doc.fileName || (doc.fileName && i.name && doc.fileName.includes(i.name)));
+                                          
+                                          console.log(`[Core Filing Match] Target: ${doc.fileName}`, physicalItem ? `Found URL: ${physicalItem.url || physicalItem.fileUri}` : 'NOT FOUND IN record.items', physicalItem);
+                                          
                                           if (physicalItem && (physicalItem.url || physicalItem.fileUri)) {
                                             const fileUrl = physicalItem.url || physicalItem.fileUri;
                                             const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -2517,6 +2520,8 @@ function App() {
                                     }) || record.items?.[idx % (record.items?.length || 1)];
 
                                     const displayName = matchedItem?.name || targetFileName || 'Unknown File';
+                                    
+                                    console.log(`[Bona Fide Match] Target: ${targetFileName}`, matchedItem ? `Found URL: ${matchedItem.url || matchedItem.fileUri}` : 'NOT FOUND IN record.items (using fallback)', matchedItem);
 
                                     return (
                                       <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
