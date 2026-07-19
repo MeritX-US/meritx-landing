@@ -99,7 +99,7 @@ If there is not enough context to determine the case type, you MUST default to '
 Return EXACTLY the string 'eb1a', 'niw', 'marriage_green_card', or 'unknown' and nothing else.
 Files: ${JSON.stringify(existingItems.map(i => i.name))}
 Transcript: ${recordText.substring(0, 1500)}`;
-    const result = await model.generateContent(detectPrompt);
+    const result = await model.generateContent([detectPrompt, ...mediaParts]);
     const text = result.response.text().toLowerCase().trim();
     caseType = text === 'eb1a' ? 'eb1a' : (text === 'niw' ? 'niw' : (text === 'marriage_green_card' ? 'marriage_green_card' : 'unknown'));
     console.log(`Detected Case Type: ${caseType} (Model returned: ${text})`);
