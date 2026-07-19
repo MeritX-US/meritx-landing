@@ -1334,7 +1334,7 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
             // Auto-research entities
             await runAutoResearchForRecord(record, genAI);
 
-            if (caseType && caseType !== 'unknown' && !record.caseType) {
+            if (caseType && caseType !== 'unknown') {
                 record.caseType = caseType;
             }
             record.analysisError = undefined; // clear any previous errors
@@ -1427,7 +1427,7 @@ app.post('/api/intake/regenerate', async (req, res) => {
             console.log(`Running Playbook Analysis (Regenerate) for record: ${existingRecordId}`);
             const { analysis: analysisResult, caseType } = await runPlaybookAnalysis(transcriptText, parts, existingRecord.items || [], existingRecord.caseType);
             records[recordIndex].analysis = analysisResult;
-            if (caseType && caseType !== 'unknown' && !existingRecord.caseType) {
+            if (caseType && caseType !== 'unknown') {
                 records[recordIndex].caseType = caseType;
             }
             records[recordIndex].analysisError = undefined; // clear previous error
