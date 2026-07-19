@@ -50,3 +50,8 @@ AssemblyAI is a good alternative to Deepgram, even though it has built-in summar
 
 So we will use AssemblyAI for the MVP.
 
+## Dynamic Questionnaire Module (New)
+In addition to audio intake, the MVP will include a **Dynamic Questionnaire** module to collect structured client information (e.g., Identity, Education, Work, Awards).
+- **Playbook-Driven**: The questionnaire schema, categories, and questions are defined via a JSON Playbook.
+- **Complex Logic**: Supports conditional branching (e.g., asking for publication details only if the user answers "Yes" to having publications).
+- **UI Integration**: A new view in the client app to navigate categories, fill out answers, and save responses.

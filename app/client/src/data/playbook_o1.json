@@ -1,0 +1,69 @@
+{
+  "id": "pb_o1_001",
+  "name": "O-1 Visa Client Intake Playbook",
+  "version": "1.0",
+  "description": "Questionnaire for collecting O-1 Extraordinary Ability related background.",
+  "categories": [
+    {
+      "id": "cat_identity",
+      "title": "Identity (身份信息)",
+      "order": 1,
+      "questions": [
+        {
+          "id": "q_full_name",
+          "type": "text",
+          "label": "Full Name (姓名)",
+          "required": true
+        },
+        {
+          "id": "q_dob",
+          "type": "date",
+          "label": "Date of Birth (出生日期)",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "cat_extraordinary_ability",
+      "title": "Field of Extraordinary Ability (杰出能力领域)",
+      "order": 2,
+      "questions": [
+        {
+          "id": "q_field",
+          "type": "text",
+          "label": "What is your primary field of expertise? (您的主要专业领域是什么？)",
+          "required": true
+        },
+        {
+          "id": "q_has_press",
+          "type": "boolean",
+          "label": "Do you have any media coverage about you and your work? (是否有关于您或您工作的媒体报道？)",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "cat_sponsor",
+      "title": "Sponsor / Employer (担保人 / 雇主)",
+      "order": 3,
+      "questions": [
+        {
+          "id": "q_has_employer",
+          "type": "boolean",
+          "label": "Do you have a U.S. employer or agent sponsoring your visa? (是否有美国雇主或代理人为您担保？)",
+          "required": true
+        },
+        {
+          "id": "q_employer_name",
+          "type": "text",
+          "label": "Name of the Sponsor/Employer (担保人/雇主名称)",
+          "required": true,
+          "condition": {
+            "dependsOn": "q_has_employer",
+            "expectedValue": true
+          }
+        }
+      ]
+    }
+  ]
+}

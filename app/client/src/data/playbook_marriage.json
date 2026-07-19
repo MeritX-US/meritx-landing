@@ -1,0 +1,66 @@
+{
+  "id": "pb_marriage_001",
+  "name": "Marriage Green Card Intake",
+  "version": "1.0",
+  "description": "Questionnaire for collecting Marriage-based Green Card background (I-130/I-485).",
+  "categories": [
+    {
+      "id": "cat_petitioner",
+      "title": "Petitioner (申请人 / 美国公民或绿卡持有者)",
+      "order": 1,
+      "questions": [
+        {
+          "id": "q_petitioner_name",
+          "type": "text",
+          "label": "Full Name (姓名)",
+          "required": true
+        },
+        {
+          "id": "q_petitioner_status",
+          "type": "select",
+          "label": "Immigration Status (身份状态)",
+          "options": ["U.S. Citizen (美国公民)", "Permanent Resident (永久居民/绿卡)", "Other (其他)"],
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "cat_beneficiary",
+      "title": "Beneficiary (受益人 / 外籍配偶)",
+      "order": 2,
+      "questions": [
+        {
+          "id": "q_beneficiary_name",
+          "type": "text",
+          "label": "Full Name (姓名)",
+          "required": true
+        },
+        {
+          "id": "q_beneficiary_in_us",
+          "type": "boolean",
+          "label": "Is the beneficiary currently in the U.S.? (受益人目前在美国境内吗？)",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "cat_relationship",
+      "title": "Relationship History (关系证明)",
+      "order": 3,
+      "questions": [
+        {
+          "id": "q_marriage_date",
+          "type": "date",
+          "label": "Date of Marriage (结婚日期)",
+          "required": true
+        },
+        {
+          "id": "q_has_joint_assets",
+          "type": "boolean",
+          "label": "Do you have joint bank accounts, leases, or assets? (是否有共同银行账户、租约或财产？)",
+          "required": true
+        }
+      ]
+    }
+  ]
+}

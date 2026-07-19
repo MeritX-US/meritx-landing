@@ -126,11 +126,13 @@ Structured intake data can be reused to generate draft documents.
 **Current Workflow:**
 1. Intake process varies by staff member
 2. Knowledge lives in individual experience
+3. Law firms currently use static (often Chinese) questionnaires to collect client's basic information and EB-1A related experiences
 
 **Desired Outcome:**
-The firm can define repeatable intake workflows.
+The firm can define repeatable intake workflows and collect client information dynamically based on the case type and playbook.
 
 **System Capability:**
 - Define intake playbooks for specific case types
+- Playbook-driven dynamic questionnaire to collect client info and group questions by themes (e.g., identity, education, work, awards, media, peer review, papers, salary, etc. for EB-1A)
 - Standardize follow-up steps and document requests
 - Track workflow completion across cases

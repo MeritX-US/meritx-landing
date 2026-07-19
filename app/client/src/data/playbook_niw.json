@@ -1,0 +1,96 @@
+{
+  "id": "pb_niw_001",
+  "name": "NIW (National Interest Waiver) Playbook",
+  "version": "1.0",
+  "description": "Standard questionnaire for collecting NIW related evidence and background.",
+  "categories": [
+    {
+      "id": "cat_identity",
+      "title": "Identity (身份信息)",
+      "order": 1,
+      "questions": [
+        {
+          "id": "q_full_name",
+          "type": "text",
+          "label": "Full Name (姓名)",
+          "required": true
+        },
+        {
+          "id": "q_dob",
+          "type": "date",
+          "label": "Date of Birth (出生日期)",
+          "required": true
+        },
+        {
+          "id": "q_current_status",
+          "type": "select",
+          "label": "Current Immigration Status (当前身份状态)",
+          "options": ["H-1B", "F-1 (OPT)", "O-1", "L-1", "J-1", "Other (其他)"],
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "cat_education",
+      "title": "Education (教育背景)",
+      "order": 2,
+      "questions": [
+        {
+          "id": "q_highest_degree",
+          "type": "select",
+          "label": "Highest Degree (最高学历)",
+          "options": ["PhD (博士)", "Master (硕士)", "Bachelor (本科)", "Other (其他)"],
+          "required": true
+        },
+        {
+          "id": "q_major",
+          "type": "text",
+          "label": "Major/Field of Study (专业/研究领域)",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "cat_endeavor",
+      "title": "Proposed Endeavor (拟议计划)",
+      "order": 3,
+      "questions": [
+        {
+          "id": "q_endeavor_desc",
+          "type": "textarea",
+          "label": "Please briefly describe your proposed endeavor in the US (请简述您计划在美国从事的事业)",
+          "required": true
+        },
+        {
+          "id": "q_national_importance",
+          "type": "boolean",
+          "label": "Does your work have national importance? (您的工作是否具有国家级重要性？)",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "cat_past_record",
+      "title": "Past Record of Success (过往成功记录)",
+      "order": 4,
+      "questions": [
+        {
+          "id": "q_has_publications",
+          "type": "boolean",
+          "label": "Do you have publications or patents? (是否有论文或专利？)",
+          "required": true
+        },
+        {
+          "id": "q_record_details",
+          "type": "textarea",
+          "label": "Please describe your key achievements (请简述您的核心成就)",
+          "required": true,
+          "condition": {
+            "dependsOn": "q_has_publications",
+            "expectedValue": true
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -4,6 +4,7 @@ import { Upload, Mic, AlertCircle, FileText, PlayCircle, Square, History, ArrowL
 import ReactMarkdown from 'react-markdown';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import Questionnaire from './components/Questionnaire';
 import './App.css';
 
 const generatePDFBlob = (textContent: string): Blob => {
@@ -305,7 +306,7 @@ function App() {
   const [processingError, setProcessingError] = useState<string | null>(null);
 
   const [records, setRecords] = useState<any[]>([]);
-  const [view, setView] = useState<'home' | 'history' | 'results'>('history');
+  const [view, setView] = useState<'home' | 'history' | 'results' | 'questionnaire'>('history');
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
   const [activeResultTab, setActiveResultTab] = useState<'package' | 'completeness' | 'evidence' | 'transcript' | 'assembly'>('package');
   const [selectedAssemblyDocId, setSelectedAssemblyDocId] = useState<string>('cover-sheet');
@@ -925,7 +926,12 @@ function App() {
   };
 
   const loadRecord = (record: any, preserveTab: boolean = false) => {
-    if (!preserveTab) setActiveResultTab('package');
+    setSelectedRecordId(record.id);
+
+    if (!preserveTab) {
+      setActiveResultTab(record.type === 'questionnaire' ? 'questionnaire' : 'package');
+    }
+
     // For matter collections without audio, create a placeholder transcript
     if (record.transcript) {
       setTranscript(record.transcript);
@@ -953,7 +959,6 @@ function App() {
       setAudioUrl(null);
     }
 
-    setSelectedRecordId(record.id);
     setView('results');
   };
 
@@ -1516,7 +1521,7 @@ function App() {
             <h1>MeritX Intake</h1>
             <p>AI-powered consultation workflow & extraction</p>
           </div>
-          <div style={{ width: 'auto', display: 'flex', justifyContent: 'flex-end' }}>
+          <div style={{ width: 'auto', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
             <button
               className={`btn-history ${view === 'history' ? 'active' : ''}`}
               onClick={() => {
@@ -1592,13 +1597,16 @@ function App() {
                       <Calendar size={14} />
                       {new Date(record.timestamp).toLocaleDateString()} {new Date(record.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       <div className="matter-badge-group">
+                        {record.type === 'questionnaire' && <FileText size={12} className="badge-icon" style={{ color: 'var(--accent-primary)' }} />}
                         {record.items?.some((i: any) => i.type === 'audio') && <PhoneCall size={12} className="badge-icon" />}
                         {record.items?.filter((i: any) => i.type === 'image').length > 0 && <span><ImageIcon size={12} /> {record.items.filter((i: any) => i.type === 'image').length}</span>}
                         {record.items?.filter((i: any) => i.type === 'pdf').length > 0 && <span><FileIcon size={12} /> {record.items.filter((i: any) => i.type === 'pdf').length}</span>}
                       </div>
                     </div>
                     <div className="history-preview">
-                      {record.summary ? record.summary.substring(0, 80) + '...' : (record.transcript?.text?.substring(0, 80) || 'Processing...')}
+                      {record.type === 'questionnaire' 
+                        ? `Questionnaire: ${record.playbookName || 'Unknown Playbook'} (${Object.keys(record.answers || {}).length} categories answered)` 
+                        : (record.summary ? record.summary.substring(0, 80) + '...' : (record.transcript?.text?.substring(0, 80) || 'Processing...'))}
                     </div>
                   </div>
                   <button className="delete-btn" onClick={(e) => deleteRecord(record.id, e)} title="Delete Record">
@@ -1613,12 +1621,14 @@ function App() {
       }
 
       {
-        view === 'results' && transcript && (summary || records.find(r => r.id === selectedRecordId)?.items?.length > 0) && (() => {
+        view === 'results' && (summary || transcript || (record && record.type === 'questionnaire') || records.find(r => r.id === selectedRecordId)?.items?.length > 0) && (() => {
           const record = records.find(r => r.id === selectedRecordId);
           const analysis = record?.analysis;
           
           return (
-            <div className="results-container">
+            <div className="results-container" style={{ 
+              gridTemplateColumns: activeResultTab === 'questionnaire' ? '1fr' : undefined 
+            }}>
               {/* Tabs Nav bar */}
               <div className="results-tab-bar-container" style={{
                 gridColumn: '1 / -1',
@@ -1626,14 +1636,40 @@ function App() {
                 marginBottom: '1.25rem',
                 borderBottom: '1px solid var(--border-color)'
               }}>
-                <div className="results-tab-bar" style={{
+                <div className="results-tab-bar hide-scrollbar" style={{
                   display: 'flex',
-                  flexWrap: 'wrap',
+                  flexWrap: 'nowrap',
+                  overflowX: 'auto',
                   gap: '0.5rem',
                   width: '100%',
                   paddingBottom: '0.75rem',
-                  marginBottom: '-1px'
+                  marginBottom: '-1px',
+                  scrollbarWidth: 'none',
+                  msOverflowStyle: 'none'
                 }}>
+                  {record?.type === 'questionnaire' && (
+                    <button
+                      className={`btn-tab ${activeResultTab === 'questionnaire' ? 'active' : ''}`}
+                      onClick={() => setActiveResultTab('questionnaire')}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        padding: '0.5rem 1rem',
+                        background: activeResultTab === 'questionnaire' ? 'rgba(59, 130, 246, 0.15)' : 'none',
+                        border: activeResultTab === 'questionnaire' ? '1px solid var(--accent-primary)' : '1px solid transparent',
+                        color: activeResultTab === 'questionnaire' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontSize: '0.9rem',
+                        transition: 'all 0.2s',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      <FileText size={16} />
+                      <span className="hide-mobile">Questionnaire</span>
+                    </button>
+                  )}
                   <button
                     className={`btn-tab ${activeResultTab === 'package' ? 'active' : ''}`}
                     onClick={() => setActiveResultTab('package')}
@@ -1763,6 +1799,18 @@ function App() {
                   </button>
                 </div>
               </div>
+              
+              {/* Questionnaire Tab */}
+              {activeResultTab === 'questionnaire' && record?.type === 'questionnaire' && (
+                <div style={{ width: '100%', background: 'var(--bg-card)', borderRadius: '16px', overflow: 'hidden' }}>
+                  <Questionnaire 
+                    initialRecord={record}
+                    onSaveComplete={() => {
+                      fetchRecords();
+                    }}
+                  />
+                </div>
+              )}
 
               {/* 1. Intake Package Tab */}
               {activeResultTab === 'package' && (
@@ -1773,7 +1821,7 @@ function App() {
                         <FileText size={24} style={{ color: 'var(--success)' }} />
                         {record?.items ? 'Intake Summary Package' : 'Structured Intake Record'}
                       </div>
-                      {record?.items && (
+                      {record?.summary && (
                         <div style={{ display: 'flex', gap: '0.5rem' }}>
                           {isEditing ? (
                             <>
@@ -1843,8 +1891,36 @@ function App() {
                       )}
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border-color)' }}>
-                      <div style={{ fontWeight: '600', color: 'var(--text-secondary)', fontSize: '0.85rem', flexShrink: 0, letterSpacing: '0.05em' }}>CASE TYPE</div>
+                    {!summary && (
+                      <div style={{ padding: '4rem 2rem', textAlign: 'center', border: '1px dashed var(--border-color)', borderRadius: '12px', margin: '2rem 0' }}>
+                        <div style={{ background: 'rgba(139, 92, 246, 0.1)', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem auto' }}>
+                          <Wand2 size={32} color="var(--primary)" />
+                        </div>
+                        <h3 style={{ marginBottom: '1rem', color: 'var(--text-primary)', fontSize: '1.4rem' }}>No AI Analysis Generated Yet</h3>
+                        <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem', maxWidth: '400px', margin: '0 auto 2rem auto', lineHeight: '1.6' }}>
+                          Ready to synthesize the case? The AI will read your structured questionnaire answers and any uploaded evidence to write a comprehensive intake report.
+                        </p>
+                        <button 
+                          onClick={handleRegenerateSummary}
+                          disabled={isRegenerating}
+                          style={{
+                            background: 'linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))',
+                            color: 'white', border: 'none', padding: '0.8rem 1.5rem', borderRadius: '8px',
+                            fontWeight: 'bold', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
+                            opacity: isRegenerating ? 0.7 : 1,
+                            boxShadow: '0 4px 15px rgba(139, 92, 246, 0.3)'
+                          }}
+                        >
+                          <RefreshCw size={18} className={isRegenerating ? 'spin' : ''} />
+                          {isRegenerating ? 'Generating Analysis...' : 'Generate AI Intake Analysis'}
+                        </button>
+                      </div>
+                    )}
+
+                    {summary && (
+                      <>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border-color)' }}>
+                          <div style={{ fontWeight: '600', color: 'var(--text-secondary)', fontSize: '0.85rem', flexShrink: 0, letterSpacing: '0.05em' }}>CASE TYPE</div>
                       <div 
                         style={{ position: 'relative', display: 'inline-block' }}
                         tabIndex={0}
@@ -1978,6 +2054,8 @@ function App() {
                         <ReactMarkdown>{summary}</ReactMarkdown>
                       )}
                     </div>
+                    </>
+                    )}
                   </div>
 
                   {/* Checklist sidebar */}
@@ -2210,7 +2288,49 @@ function App() {
               {activeResultTab === 'evidence' && (
                 <>
                   <div className="glass-card evidence-mapping-card">
-                    <div className="section-title">Evidence & Document Mapping</div>
+                    <div className="section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>Evidence & Document Mapping</span>
+                      <button 
+                        onClick={() => document.getElementById('exhibit-upload-input')?.click()}
+                        style={{
+                          background: 'rgba(59, 130, 246, 0.1)', border: '1px solid var(--accent-primary)',
+                          color: 'var(--text-primary)', padding: '0.5rem 1rem', borderRadius: '8px',
+                          display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer',
+                          fontSize: '0.85rem'
+                        }}
+                      >
+                        <Upload size={14} />
+                        Upload Files
+                      </button>
+                      <input 
+                        type="file" 
+                        id="exhibit-upload-input" 
+                        multiple 
+                        style={{ display: 'none' }}
+                        onChange={async (e) => {
+                          if (!e.target.files?.length) return;
+                          
+                          const formData = new FormData();
+                          Array.from(e.target.files).forEach(f => formData.append('files', f));
+                          
+                          showNotification('Uploading...', 'Uploading files to case record.', 'info');
+                          try {
+                            const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/records/${selectedRecordId}/upload`, {
+                              method: 'POST',
+                              body: formData
+                            });
+                            if (res.ok) {
+                              showNotification('Success', 'Files uploaded successfully.', 'success');
+                              fetchRecords();
+                            } else {
+                              showNotification('Error', 'Upload failed.', 'error');
+                            }
+                          } catch (err) {
+                            showNotification('Error', 'Upload error.', 'error');
+                          }
+                        }}
+                      />
+                    </div>
                     {analysis ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                         
@@ -3324,6 +3444,20 @@ function App() {
                 />
               </div>
 
+              <div
+                className="action-card"
+                onClick={() => {
+                  setTranscript(null);
+                  setSummary(null);
+                  setSelectedRecordId(null);
+                  setView('questionnaire');
+                }}
+              >
+                <FileText className="icon" />
+                <h3>Questionnaire</h3>
+                <p className="text-secondary">Dynamic playbook intake form</p>
+              </div>
+
               <div className="action-card call-card">
                 <PhoneCall className="icon" />
                 <h3>Call Client</h3>
@@ -3414,18 +3548,34 @@ function App() {
                     </li>
                   ))}
                 </ul>
-                <div style={{ display: 'flex', gap: '1rem' }}>
-                  <button className="btn" onClick={() => fileInputRef.current?.click()} style={{ flex: 1, justifyContent: 'center', padding: '0.8rem', background: 'rgba(255, 255, 255, 0.05)', color: 'var(--text-primary)', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                  <button className="btn" onClick={() => fileInputRef.current?.click()} style={{ flex: '1 1 45%', justifyContent: 'center', padding: '0.8rem', background: 'rgba(255, 255, 255, 0.05)', color: 'var(--text-primary)', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
                     <Upload size={20} />
                     Add MORE Materials
                   </button>
-                  <button className="btn btn-primary" onClick={processAudio} style={{ flex: 2, justifyContent: 'center', padding: '0.8rem' }}>
-                    <FileText size={20} />
+                  <button className="btn btn-primary" onClick={processAudio} style={{ flex: '1 1 45%', justifyContent: 'center', padding: '0.8rem' }}>
+                    <Wand2 size={20} />
                     Generate Intake Record
                   </button>
                 </div>
               </div>
             )}
+          </main>
+        )
+      }
+
+      {
+        view === 'questionnaire' && !isProcessing && (
+          <main className="main-content" style={{ padding: '2rem', display: 'flex', justifyContent: 'center' }}>
+            <div style={{ width: '100%', maxWidth: '1000px', height: 'calc(100vh - 120px)' }}>
+              <Questionnaire 
+                initialRecord={selectedRecordId ? records.find(r => r.id === selectedRecordId) : null}
+                onSaveComplete={() => {
+                  fetchRecords();
+                  setView('history');
+                }}
+              />
+            </div>
           </main>
         )
       }

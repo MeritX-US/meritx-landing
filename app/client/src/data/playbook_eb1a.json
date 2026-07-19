@@ -1,0 +1,110 @@
+{
+  "id": "pb_eb1a_001",
+  "name": "EB-1A Client Intake Playbook",
+  "version": "1.0",
+  "description": "Standard questionnaire for collecting EB-1A related evidence and background.",
+  "categories": [
+    {
+      "id": "cat_identity",
+      "title": "Identity (身份信息)",
+      "order": 1,
+      "questions": [
+        {
+          "id": "q_full_name",
+          "type": "text",
+          "label": "Full Name (姓名)",
+          "required": true
+        },
+        {
+          "id": "q_dob",
+          "type": "date",
+          "label": "Date of Birth (出生日期)",
+          "required": true
+        },
+        {
+          "id": "q_current_status",
+          "type": "select",
+          "label": "Current Immigration Status (当前身份状态)",
+          "options": ["H-1B", "F-1 (OPT)", "O-1", "L-1", "Other (其他)"],
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "cat_education",
+      "title": "Education (教育背景)",
+      "order": 2,
+      "questions": [
+        {
+          "id": "q_highest_degree",
+          "type": "select",
+          "label": "Highest Degree (最高学历)",
+          "options": ["PhD (博士)", "Master (硕士)", "Bachelor (本科)", "Other (其他)"],
+          "required": true
+        },
+        {
+          "id": "q_major",
+          "type": "text",
+          "label": "Major/Field of Study (专业/研究领域)",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "cat_papers",
+      "title": "Papers & Publications (论文与出版物)",
+      "order": 3,
+      "questions": [
+        {
+          "id": "q_has_papers",
+          "type": "boolean",
+          "label": "Have you published any scholarly articles? (是否发表过学术论文？)",
+          "required": true
+        },
+        {
+          "id": "q_paper_count",
+          "type": "number",
+          "label": "Number of Publications (论文发表数量)",
+          "required": true,
+          "condition": {
+            "dependsOn": "q_has_papers",
+            "expectedValue": true
+          }
+        },
+        {
+          "id": "q_citations_count",
+          "type": "number",
+          "label": "Total Citations (总引用量)",
+          "required": true,
+          "condition": {
+            "dependsOn": "q_has_papers",
+            "expectedValue": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "cat_awards",
+      "title": "Awards (奖项)",
+      "order": 4,
+      "questions": [
+        {
+          "id": "q_has_awards",
+          "type": "boolean",
+          "label": "Have you received any major internationally or nationally recognized awards? (是否获得过国家级或国际级奖项？)",
+          "required": true
+        },
+        {
+          "id": "q_awards_details",
+          "type": "textarea",
+          "label": "Please list the awards (Name, Year, Awarding Body) / 请列出奖项详情",
+          "required": false,
+          "condition": {
+            "dependsOn": "q_has_awards",
+            "expectedValue": true
+          }
+        }
+      ]
+    }
+  ]
+}

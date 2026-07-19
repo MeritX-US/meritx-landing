@@ -1385,13 +1385,19 @@ app.post('/api/intake/regenerate', async (req, res) => {
         }
 
         const transcriptText = existingRecord.transcript ? existingRecord.transcript.text : "";
-        const contextPrompt = transcriptText ? `\n\nConsultation Transcript Context:\n${transcriptText}\n\n` : "";
+        let contextPrompt = transcriptText ? `\n\nConsultation Transcript Context:\n${transcriptText}\n\n` : "";
 
-        const prompt = `You are an expert legal intake specialist. You have been provided with ALL the historical documents, images, and audio transcripts for a "Matter Collection".
+        if (existingRecord.answers) {
+            contextPrompt += `\n\nClient Questionnaire Answers:\n${JSON.stringify(existingRecord.answers, null, 2)}\n\n`;
+        }
+
+        const prompt = `You are an expert legal intake specialist. You have been provided with ALL the historical documents, images, audio transcripts, and structured questionnaire answers for a "Matter Collection".
         
         ${contextPrompt}
         
         Please synthesize and analyze all provided materials holistically.
+        If there are Client Questionnaire Answers provided, treat them as the primary source of truth for structured data (like name, immigration status, facts). 
+        Use the uploaded documents to verify and enrich the claims made in the questionnaire.
         Provide a clean, unified, and structural summary in Markdown.
         
         CRITICAL INSTRUCTIONS:
@@ -2094,7 +2100,98 @@ app.put('/api/records/:id/rename-items-batch', async (req, res) => {
     }
 });
 
-// 10. Re-classify Endpoint – re-runs AI classification on existing record items
+// 10. Questionnaire Endpoints
+app.post('/api/records/:id/upload', upload.array('files'), async (req, res) => {
+    const { id } = req.params;
+    const files = req.files as Express.Multer.File[];
+
+    if (!files || files.length === 0) {
+        return res.status(400).json({ error: 'No files provided' });
+    }
+
+    try {
+        const records = getRecords();
+        const recordIndex = records.findIndex(r => r.id === id);
+        if (recordIndex === -1) {
+            return res.status(404).json({ error: 'Record not found' });
+        }
+
+        const existingRecord = records[recordIndex];
+        if (!existingRecord.items) {
+            existingRecord.items = [];
+        }
+
+        for (const file of files) {
+            // Note: In production you would do more robust type checking
+            const isAudio = file.mimetype.startsWith('audio/');
+            const type = isAudio ? 'audio' : (file.mimetype === 'application/pdf' ? 'pdf' : 'image');
+            
+            existingRecord.items.push({
+                id: `item_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+                type: type,
+                url: `/uploads/${file.filename}`,
+                name: file.originalname,
+                metadata: {
+                    mimetype: file.mimetype,
+                    size: file.size,
+                    hash: crypto.createHash('sha256').update(fs.readFileSync(file.path)).digest('hex')
+                }
+            });
+        }
+
+        fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
+        res.json({ success: true, record: existingRecord });
+    } catch (error: any) {
+        console.error('❌ Failed to upload files to record:', error.message);
+        res.status(500).json({ error: 'Failed to upload files', message: error.message });
+    }
+});
+app.post('/api/records/questionnaire', async (req, res) => {
+    try {
+        const { playbookId, playbookName, answers } = req.body;
+        const newRecord = {
+            id: `q_${Date.now()}`,
+            type: 'questionnaire',
+            timestamp: new Date().toISOString(),
+            playbookId,
+            playbookName,
+            answers
+        };
+        saveRecord(newRecord);
+        res.json({ success: true, record: newRecord });
+    } catch (error: any) {
+        console.error('❌ Failed to save questionnaire:', error.message);
+        res.status(500).json({ error: 'Failed to save questionnaire', message: error.message });
+    }
+});
+
+app.put('/api/records/questionnaire/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { answers, playbookId, playbookName } = req.body;
+        
+        const records = getRecords();
+        const recordIndex = records.findIndex(r => r.id === id);
+        if (recordIndex === -1) {
+            return res.status(404).json({ error: 'Record not found' });
+        }
+        
+        records[recordIndex] = {
+            ...records[recordIndex],
+            answers,
+            ...(playbookId && { playbookId }),
+            ...(playbookName && { playbookName })
+        };
+        
+        fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
+        res.json({ success: true, record: records[recordIndex] });
+    } catch (error: any) {
+        console.error('❌ Failed to update questionnaire:', error.message);
+        res.status(500).json({ error: 'Failed to update questionnaire', message: error.message });
+    }
+});
+
+// 11. Re-classify Endpoint – re-runs AI classification on existing record items
 app.post('/api/records/:id/reclassify', async (req, res) => {
     const { id } = req.params;
 
