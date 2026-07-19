@@ -30,6 +30,9 @@ export async function researchEntity(
     case 'exhibition_names':
       customPrompt = `Search for the artistic exhibition or venue "${entityName}". Identify its prestige, curator credentials, selection criteria, and national/international reach. Write a professional summary.`;
       break;
+    case 'paper_names':
+      customPrompt = `Search for the research paper or scholarly article "${entityName}". Identify its publication journal, citation count, and overall impact in the field. Write a professional summary of its significance.`;
+      break;
     default:
       return null;
   }
@@ -42,10 +45,12 @@ Provide the output in clean Markdown format with the following structure (if app
 # Background Research: ${entityName}
 ## Overview
 ## Prestige & Significance
-## Objective Criteria (e.g., selectivity, circulation, impact factor)
+## Objective Criteria (e.g., selectivity, circulation, impact factor, citations)
 ## Notable Affiliations (e.g., judges, members, winners)
+## Source Links
+- Provide the actual URL links to the official sources you used for this research.
 
-STRICT RULE: Base your summary entirely on actual search results. Do not hallucinate data. If you cannot find reliable information, state that clearly.
+STRICT RULE: Base your summary entirely on actual search results. Do not hallucinate data. If you cannot find reliable information, state that clearly. YOU MUST INCLUDE SOURCE URLs at the end.
 `;
 
   try {

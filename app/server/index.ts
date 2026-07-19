@@ -1259,7 +1259,7 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
             record.analysis = analysisResult;
 
             // Auto-research entities
-            const entitiesToResearch = ['award_names', 'media_names', 'association_names', 'journal_names', 'organization_names', 'exhibition_names'];
+            const entitiesToResearch = ['award_names', 'media_names', 'association_names', 'journal_names', 'organization_names', 'exhibition_names', 'paper_names'];
             
             for (const entityType of entitiesToResearch) {
                 if (record.analysis.facts[entityType] && record.analysis.facts[entityType].value) {
@@ -1285,7 +1285,8 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
                                     'association_names': 'memberships_elite',
                                     'journal_names': 'scholarly_articles',
                                     'organization_names': 'leading_critical_role',
-                                    'exhibition_names': 'exhibitions_showcases'
+                                    'exhibition_names': 'exhibitions_showcases',
+                                    'paper_names': 'scholarly_articles'
                                 };
                                 
                                 const cat = categoryMap[entityType] || 'other';
