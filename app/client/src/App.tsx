@@ -93,7 +93,41 @@ const generatePDFBlob = (textContent: string): Blob => {
   return doc.output('blob');
 };
 
-const generateExhibitIndexPDF = (documents: any[], caseType?: string): Blob => {
+const getExhibitMapping = (record: any) => {
+  if (!record || !record.analysis) return [];
+  const allDocs = [
+    ...(record.analysis.documents || []),
+    ...(record.analysis.evidence || []).map((e: any) => ({
+       ...e,
+       label: e.type || e.file_name,
+       fileName: e.file_name,
+       status: 'provided' // evidence is inherently provided if it's found
+    }))
+  ];
+
+  const categoryToLetter = new Map<string, string>();
+  const categoryCounters = new Map<string, number>();
+  let currentLetterCode = 65; // 'A'
+
+  return allDocs.map((doc: any) => {
+    const cat = doc.category || 'uncategorized';
+    if (!categoryToLetter.has(cat)) {
+      categoryToLetter.set(cat, String.fromCharCode(currentLetterCode));
+      currentLetterCode++;
+    }
+    const letter = categoryToLetter.get(cat)!;
+    const count = (categoryCounters.get(cat) || 0) + 1;
+    categoryCounters.set(cat, count);
+    
+    return {
+      ...doc,
+      exhibitLetter: letter,
+      exhibitNumber: `Exhibit ${letter}-${count}`
+    };
+  });
+};
+
+const generateExhibitIndexPDF = (mappedExhibits: any[], caseType?: string): Blob => {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'in',
@@ -113,12 +147,11 @@ const generateExhibitIndexPDF = (documents: any[], caseType?: string): Blob => {
   doc.text(subtitle, 4.25, 1.3, { align: 'center' });
   
   const head = [['Exhibit', 'Document Description', 'Status', 'Linked File']];
-  const body = documents.map((docItem: any, idx: number) => {
-    const letter = String.fromCharCode(65 + idx);
+  const body = mappedExhibits.map((docItem: any) => {
     const isProvided = docItem.status === 'provided';
     return [
-      `Exhibit ${letter}`,
-      docItem.label,
+      docItem.exhibitNumber,
+      docItem.label || 'Document',
       isProvided ? 'MATCHED' : 'MISSING',
       isProvided ? (docItem.fileName || 'Provided') : 'Not Provided'
     ];
@@ -630,7 +663,8 @@ function App() {
       zip.file("01_Petition_Letter.pdf", coverLetterPdf);
       
       // 2. Add Exhibit Index
-      const exhibitIndexPdf = generateExhibitIndexPDF(record.analysis.documents, record.caseType);
+      const mappedExhibits = getExhibitMapping(record);
+      const exhibitIndexPdf = generateExhibitIndexPDF(mappedExhibits, record.caseType);
       zip.file("02_Exhibit_Index.pdf", exhibitIndexPdf);
       
       // 3. Add USCIS Form Field Mappings
@@ -640,6 +674,13 @@ function App() {
       // 4. Download and add uploaded files to exhibits/ folder
       const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
       
+      const fileToExhibitMap = new Map<string, string>();
+      mappedExhibits.forEach(ex => {
+        if (ex.fileName) {
+           fileToExhibitMap.set(ex.fileName, ex.exhibitNumber.replace(' ', '_'));
+        }
+      });
+      
       const downloadPromises = (record.items || []).map(async (item: any, idx: number) => {
         if (item && item.url) {
           try {
@@ -648,7 +689,8 @@ function App() {
             if (res.ok) {
               const blob = await res.blob();
               const cleanDocLabel = item.name.replace(/[^a-zA-Z0-9.]/g, '_');
-              zip.file(`exhibits/Exhibit_${idx + 1}_${cleanDocLabel}`, blob);
+              const exhibitPrefix = fileToExhibitMap.get(item.name) || `Exhibit_Unmapped_${idx + 1}`;
+              zip.file(`exhibits/${exhibitPrefix}_${cleanDocLabel}`, blob);
             }
           } catch (e) {
             console.error(`Failed to download ${item.name} for ZIP assembly:`, e);
@@ -3026,12 +3068,11 @@ function App() {
                                       </tr>
                                     </thead>
                                     <tbody>
-                                      {(analysis?.documents || []).map((doc: any, index: number) => {
+                                      {getExhibitMapping(record).map((doc: any, index: number) => {
                                         const isProvided = doc.status === 'provided';
-                                        const letter = String.fromCharCode(65 + index);
                                         return (
                                           <tr key={doc.id || index} style={{ borderBottom: '1px solid #cbd5e1' }}>
-                                            <td style={{ padding: '0.6rem 0.5rem', fontWeight: 'bold', color: '#0f172a' }}>Exhibit {letter}</td>
+                                            <td style={{ padding: '0.6rem 0.5rem', fontWeight: 'bold', color: '#0f172a' }}>{doc.exhibitNumber}</td>
                                             <td style={{ padding: '0.6rem 0.5rem', color: '#334155', fontWeight: 550 }}>{doc.label}</td>
                                             <td style={{ padding: '0.6rem 0.5rem' }}>
                                               <span style={{
