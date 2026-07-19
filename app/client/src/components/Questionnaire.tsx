@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, CheckCircle, ChevronRight, ChevronLeft, Check } from 'lucide-react';
+import { Save, CheckCircle, ChevronRight, ChevronLeft } from 'lucide-react';
 import pbEb1a from '../data/playbook_eb1a.json';
 import pbNiw from '../data/playbook_niw.json';
 import pbO1 from '../data/playbook_o1.json';

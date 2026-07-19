@@ -308,7 +308,7 @@ function App() {
   const [records, setRecords] = useState<any[]>([]);
   const [view, setView] = useState<'home' | 'history' | 'results' | 'questionnaire'>('history');
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
-  const [activeResultTab, setActiveResultTab] = useState<'package' | 'completeness' | 'evidence' | 'transcript' | 'assembly'>('package');
+  const [activeResultTab, setActiveResultTab] = useState<'questionnaire' | 'package' | 'completeness' | 'evidence' | 'transcript' | 'assembly'>('package');
   const [selectedAssemblyDocId, setSelectedAssemblyDocId] = useState<string>('cover-sheet');
   const [isAssembling, setIsAssembling] = useState(false);
   const [showAssemblySuccessModal, setShowAssemblySuccessModal] = useState(false);
@@ -1621,7 +1621,7 @@ function App() {
       }
 
       {
-        view === 'results' && (summary || transcript || (record && record.type === 'questionnaire') || records.find(r => r.id === selectedRecordId)?.items?.length > 0) && (() => {
+        view === 'results' && (summary || transcript || (records.find(r => r.id === selectedRecordId)?.type === 'questionnaire') || records.find(r => r.id === selectedRecordId)?.items?.length > 0) && (() => {
           const record = records.find(r => r.id === selectedRecordId);
           const analysis = record?.analysis;
           
@@ -2463,7 +2463,7 @@ function App() {
               {activeResultTab === 'transcript' && (
                 <>
                   {/* If Audio exists: 2-Column Standard Grid */}
-                  {(record?.items?.some((i: any) => i.type === 'audio') || transcript.utterances) ? (
+                  {(record?.items?.some((i: any) => i.type === 'audio') || transcript?.utterances) ? (
                     <>
                       <div className="glass-card transcript-left-card">
                         <div className="section-title">
@@ -2497,21 +2497,22 @@ function App() {
                         )}
 
                         <div className="transcript-card" style={{ maxHeight: '480px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '1rem', background: 'rgba(0,0,0,0.1)' }}>
-                          {transcript.utterances ? (
+                          {transcript?.utterances ? (
                             (() => {
                               const audioItems = record?.items?.filter((i: any) => i.type === 'audio') || [];
-                              const hasAudioUrls = transcript.utterances.some((u: any) => u.audioUrl || u.fileUrl);
+                              const utterances = transcript?.utterances || [];
+                              const hasAudioUrls = utterances.some((u: any) => u.audioUrl || u.fileUrl);
                               
                               let activeUtterances = (hasAudioUrls && audioUrl)
-                                ? transcript.utterances.filter((utt: any) => {
+                                ? utterances.filter((utt: any) => {
                                     const targetUrl = utt.audioUrl || utt.fileUrl || audioItems[0]?.url;
                                     return targetUrl && (audioUrl.endsWith(targetUrl) || (targetUrl.split('/').pop() && audioUrl.includes(targetUrl.split('/').pop())));
                                   })
-                                : transcript.utterances;
+                                : utterances;
 
                               // Fallback if renaming caused exact url mismatch
-                              if (activeUtterances.length === 0 && transcript.utterances.length > 0) {
-                                activeUtterances = transcript.utterances;
+                              if (activeUtterances.length === 0 && utterances.length > 0) {
+                                activeUtterances = utterances;
                               }
 
                               return (
