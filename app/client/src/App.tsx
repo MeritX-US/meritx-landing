@@ -299,7 +299,7 @@ function App() {
   const [language, setLanguage] = useState<string>('auto');
   const [selectedCaseType, setSelectedCaseType] = useState<string>('auto');
   const [isPackageCaseTypeOpen, setIsPackageCaseTypeOpen] = useState(false);
-  const [isAssemblyCaseTypeOpen, setIsAssemblyCaseTypeOpen] = useState(false);
+
   const [isAudioLangOpen, setIsAudioLangOpen] = useState(false);
   const [isIntakeCaseTypeOpen, setIsIntakeCaseTypeOpen] = useState(false);
   const [processingError, setProcessingError] = useState<string | null>(null);
@@ -341,6 +341,13 @@ function App() {
     suggestedName: string;
     inputName: string;
   }>({ isOpen: false, itemIndex: -1, oldName: '', suggestedName: '', inputName: '' });
+
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean;
+    recordId: string;
+    itemIndex: number;
+    itemName: string;
+  }>({ isOpen: false, recordId: '', itemIndex: -1, itemName: '' });
 
   const docInputRef = useRef<HTMLInputElement>(null);
 
@@ -883,7 +890,12 @@ function App() {
       const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/intake/refine-inline`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(reqBody),
+        body: JSON.stringify({
+          existingRecordId: selectedRecordId,
+          selectedText: selectedText,
+          userPrompt: refinePrompt,
+          targetField: activeResultTab === 'assembly' && selectedAssemblyDocId === 'petition-letter' ? 'coverLetter' : 'summary'
+        }),
       });
 
       const data = await response.json();
@@ -966,9 +978,231 @@ function App() {
     other:               { bg: 'rgba(71,85,105,0.1)',   border: 'rgba(71,85,105,0.3)',   text: '#64748b' },
   };
 
+  const executeDeleteItem = async (recordId: string, itemIndex: number, itemName: string) => {
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/records/${recordId}/delete-item`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemIndex }),
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        showNotification('Item Deleted', `${itemName} has been deleted.`, 'success');
+        await fetchRecords();
+        if (selectedRecordId === recordId) {
+           loadRecord(data.record, true);
+        }
+      } else {
+        showNotification('Delete Failed', data.error || 'Unknown error', 'error');
+      }
+    } catch (error: any) {
+      showNotification('Delete Failed', error.message, 'error');
+    } finally {
+      setDeleteModal({ isOpen: false, recordId: '', itemIndex: -1, itemName: '' });
+    }
+  };
+
   const renderLinkedMaterials = () => {
     const record = records.find(r => r.id === selectedRecordId);
     if (!record?.items || record.items.length === 0) return null;
+
+    const renderItemCard = (item: any, idx: number) => {
+        const cat = item.metadata?.category || 'other';
+        const catLabel = item.metadata?.categoryLabel || 'Other Document';
+        const suggestedName = item.metadata?.suggestedName || '';
+        const confidence = item.metadata?.classificationConfidence ?? 0;
+        const colors = CATEGORY_COLORS[cat] || CATEGORY_COLORS['other'];
+        const isLowConfidence = confidence > 0 && confidence < 0.6;
+
+        // Check if name is already applied to avoid redundant row display
+        const nameClean = item.name.replace(/\.[^/.]+$/, "");
+        const sugClean = suggestedName.replace(/\.[^/.]+$/, "");
+        const isAlreadyApplied = nameClean === sugClean || (sugClean && nameClean.includes(sugClean));
+
+        return (
+          <div
+            key={idx}
+            className="linked-item-card"
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'stretch',
+              width: '100%',
+              boxSizing: 'border-box',
+              gap: '0.4rem',
+              padding: '0.75rem',
+              borderRadius: '10px',
+              background: 'rgba(255, 255, 255, 0.02)',
+              border: '1px solid var(--border-color)',
+              transition: 'all 0.2s',
+              position: 'relative'
+            }}
+          >
+            {/* Top row: icon + name + badge + quick edit pencil */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0 }}>
+              {item.type === 'image'
+                ? <ImageIcon size={18} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
+                : item.type === 'audio'
+                  ? <PlayCircle size={18} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
+                  : <FileIcon size={18} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />}
+              
+              <div
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'flex-start'
+                }}
+                onClick={() => {
+                  if (item.type === 'audio') {
+                    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+                    const fullUrl = item.url.startsWith('http') ? item.url : `${baseUrl}${item.url}`;
+                    if (audioUrl !== fullUrl) {
+                      setAudioUrl(fullUrl);
+                      if (audioRef.current) {
+                        audioRef.current.src = fullUrl;
+                        audioRef.current.load();
+                      }
+                    }
+                    setActiveResultTab('transcript');
+                    setTimeout(() => { audioRef.current?.play().catch(e => console.error(e)); }, 100);
+                  } else {
+                    const base = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+                    window.open(`${base}${item.url}`, '_blank');
+                  }
+                }}
+              >
+                <span
+                  className="item-name"
+                  title={item.name || `Item ${idx + 1}`}
+                  style={{
+                    fontSize: '0.82rem',
+                    fontWeight: 600,
+                    color: 'var(--text-primary)',
+                    display: 'block',
+                    textAlign: 'left',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    width: '100%',
+                    maxWidth: '100%',
+                    direction: 'ltr'
+                  }}
+                >
+                  {item.name || `Item ${idx + 1}`}
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                {/* Manual Rename Trigger Pencil */}
+                <button
+                  title="Rename file"
+                  onClick={() => {
+                    setRenameModal({
+                      isOpen: true,
+                      itemIndex: idx,
+                      oldName: item.name,
+                      suggestedName: suggestedName || item.name,
+                      inputName: suggestedName || item.name,
+                    });
+                  }}
+                  style={{
+                    background: 'none', border: 'none', color: '#64748b', cursor: 'pointer',
+                    padding: '0.2rem', borderRadius: '4px', display: 'flex', alignItems: 'center',
+                    transition: 'color 0.15s'
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = '#60a5fa')}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = '#64748b')}
+                >
+                  <Pencil size={12} />
+                </button>
+
+                {/* Delete File Button */}
+                <button
+                  title="Delete file"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDeleteModal({
+                      isOpen: true,
+                      recordId: record.id,
+                      itemIndex: idx,
+                      itemName: item.name
+                    });
+                  }}
+                  style={{
+                    background: 'none', border: 'none', color: '#64748b', cursor: 'pointer',
+                    padding: '0.2rem', borderRadius: '4px', display: 'flex', alignItems: 'center',
+                    transition: 'color 0.15s'
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = '#ef4444')}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = '#64748b')}
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            </div>
+
+            {/* Category badge */}
+            {cat && cat !== 'other' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.1rem' }}>
+                <span
+                  className="doc-category-badge"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.25rem',
+                    padding: '0.15rem 0.5rem',
+                    borderRadius: '20px',
+                    fontSize: '0.68rem',
+                    fontWeight: 600,
+                    background: colors.bg,
+                    border: `1px solid ${colors.border}`,
+                    color: colors.text,
+                  }}
+                >
+                  <Tag size={9} />
+                  {catLabel}
+                  {isLowConfidence && <span title="Low confidence" style={{ opacity: 0.7 }}>?</span>}
+                </span>
+              </div>
+            )}
+
+            {/* Suggested name row ONLY displayed when NOT yet applied */}
+            {suggestedName && !isAlreadyApplied && (
+              <div className="suggested-name-row" style={{ marginTop: '0.25rem' }}>
+                <span
+                  className="suggested-name-text"
+                  title={`Suggested filename: ${suggestedName}`}
+                >
+                  ✦ Suggested: {suggestedName}
+                </span>
+                <button
+                  className="rename-btn"
+                  title={`Apply name: ${suggestedName}`}
+                  onClick={() => {
+                    setRenameModal({
+                      isOpen: true,
+                      itemIndex: idx,
+                      oldName: item.name,
+                      suggestedName: suggestedName,
+                      inputName: suggestedName,
+                    });
+                  }}
+                >
+                  <Pencil size={10} /> Apply
+                </button>
+              </div>
+            )}
+          </div>
+        );
+    };
+
+    const regularItemsWithIdx = record.items.map((item: any, idx: number) => ({item, idx})).filter((x: any) => !x.item.name.startsWith('Research_'));
+    const researchItemsWithIdx = record.items.map((item: any, idx: number) => ({item, idx})).filter((x: any) => x.item.name.startsWith('Research_'));
 
     return (
       <div className="linked-items-section" style={{ borderTop: 'none', paddingTop: 0, marginTop: 0 }}>
@@ -1030,176 +1264,22 @@ function App() {
             </button>
           )}
         </div>
+
         <div className="items-grid" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem' }}>
-          {record.items.map((item: any, idx: number) => {
-            const cat = item.metadata?.category || 'other';
-            const catLabel = item.metadata?.categoryLabel || 'Other Document';
-            const suggestedName = item.metadata?.suggestedName || '';
-            const confidence = item.metadata?.classificationConfidence ?? 0;
-            const colors = CATEGORY_COLORS[cat] || CATEGORY_COLORS['other'];
-            const isLowConfidence = confidence > 0 && confidence < 0.6;
-
-            // Check if name is already applied to avoid redundant row display
-            const nameClean = item.name.replace(/\.[^/.]+$/, "");
-            const sugClean = suggestedName.replace(/\.[^/.]+$/, "");
-            const isAlreadyApplied = nameClean === sugClean || (sugClean && nameClean.includes(sugClean));
-
-            return (
-              <div
-                key={idx}
-                className="linked-item-card"
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'stretch',
-                  width: '100%',
-                  boxSizing: 'border-box',
-                  gap: '0.4rem',
-                  padding: '0.75rem',
-                  borderRadius: '10px',
-                  background: 'rgba(255, 255, 255, 0.02)',
-                  border: '1px solid var(--border-color)',
-                  transition: 'all 0.2s',
-                  position: 'relative'
-                }}
-              >
-                {/* Top row: icon + name + badge + quick edit pencil */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0 }}>
-                  {item.type === 'image'
-                    ? <ImageIcon size={18} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
-                    : item.type === 'audio'
-                      ? <PlayCircle size={18} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
-                      : <FileIcon size={18} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />}
-                  
-                  <div
-                    style={{
-                      flex: 1,
-                      minWidth: 0,
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'flex-start'
-                    }}
-                    onClick={() => {
-                      if (item.type === 'audio') {
-                        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-                        const fullUrl = item.url.startsWith('http') ? item.url : `${baseUrl}${item.url}`;
-                        if (audioUrl !== fullUrl) {
-                          setAudioUrl(fullUrl);
-                          if (audioRef.current) {
-                            audioRef.current.src = fullUrl;
-                            audioRef.current.load();
-                          }
-                        }
-                        setActiveResultTab('transcript');
-                        setTimeout(() => { audioRef.current?.play().catch(e => console.error(e)); }, 100);
-                      } else {
-                        const base = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-                        window.open(`${base}${item.url}`, '_blank');
-                      }
-                    }}
-                  >
-                    <span
-                      className="item-name"
-                      title={item.name || `Item ${idx + 1}`}
-                      style={{
-                        fontSize: '0.82rem',
-                        fontWeight: 600,
-                        color: 'var(--text-primary)',
-                        display: 'block',
-                        textAlign: 'left',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        width: '100%',
-                        maxWidth: '100%',
-                        direction: 'ltr'
-                      }}
-                    >
-                      {item.name || `Item ${idx + 1}`}
-                    </span>
-                  </div>
-
-                  {/* Manual Rename Trigger Pencil */}
-                  <button
-                    title="Rename file"
-                    onClick={() => {
-                      setRenameModal({
-                        isOpen: true,
-                        itemIndex: idx,
-                        oldName: item.name,
-                        suggestedName: suggestedName || item.name,
-                        inputName: suggestedName || item.name,
-                      });
-                    }}
-                    style={{
-                      background: 'none', border: 'none', color: '#64748b', cursor: 'pointer',
-                      padding: '0.2rem', borderRadius: '4px', display: 'flex', alignItems: 'center',
-                      transition: 'color 0.15s'
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = '#60a5fa')}
-                    onMouseLeave={(e) => (e.currentTarget.style.color = '#64748b')}
-                  >
-                    <Pencil size={12} />
-                  </button>
-                </div>
-
-                {/* Category badge */}
-                {cat && cat !== 'other' && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.1rem' }}>
-                    <span
-                      className="doc-category-badge"
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.25rem',
-                        padding: '0.15rem 0.5rem',
-                        borderRadius: '20px',
-                        fontSize: '0.68rem',
-                        fontWeight: 600,
-                        background: colors.bg,
-                        border: `1px solid ${colors.border}`,
-                        color: colors.text,
-                      }}
-                    >
-                      <Tag size={9} />
-                      {catLabel}
-                      {isLowConfidence && <span title="Low confidence" style={{ opacity: 0.7 }}>?</span>}
-                    </span>
-                  </div>
-                )}
-
-                {/* Suggested name row ONLY displayed when NOT yet applied */}
-                {suggestedName && !isAlreadyApplied && (
-                  <div className="suggested-name-row" style={{ marginTop: '0.25rem' }}>
-                    <span
-                      className="suggested-name-text"
-                      title={`Suggested filename: ${suggestedName}`}
-                    >
-                      ✦ Suggested: {suggestedName}
-                    </span>
-                    <button
-                      className="rename-btn"
-                      title={`Apply name: ${suggestedName}`}
-                      onClick={() => {
-                        setRenameModal({
-                          isOpen: true,
-                          itemIndex: idx,
-                          oldName: item.name,
-                          suggestedName: suggestedName,
-                          inputName: suggestedName,
-                        });
-                      }}
-                    >
-                      <Pencil size={10} /> Apply
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {regularItemsWithIdx.map(({item, idx}: any) => renderItemCard(item, idx))}
         </div>
+            
+        {researchItemsWithIdx.length > 0 && (
+          <details style={{ marginTop: '1rem', background: 'rgba(255,255,255,0.02)', padding: '0.75rem', borderRadius: '10px', border: '1px dashed var(--border-color)' }}>
+            <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-secondary)', userSelect: 'none', display: 'flex', alignItems: 'center' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>🤖 <span style={{ textDecoration: 'underline' }}>AI Auto-Generated Research Candidates ({researchItemsWithIdx.length})</span></span>
+            </summary>
+            <div className="items-grid" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem', marginTop: '0.75rem' }}>
+              {researchItemsWithIdx.map(({item, idx}: any) => renderItemCard(item, idx))}
+            </div>
+          </details>
+        )}
+
         <button
           className="btn-add-more"
           onClick={() => docInputRef.current?.click()}
@@ -3564,6 +3644,69 @@ function App() {
           )}
         </div>
       )}
+
+          {/* High-End Custom Delete Modal */}
+          {deleteModal.isOpen && (
+            <div
+              className="modal-backdrop"
+              onClick={() => setDeleteModal({ isOpen: false, recordId: '', itemIndex: -1, itemName: '' })}
+              style={{
+                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                backgroundColor: 'rgba(0, 0, 0, 0.4)', backdropFilter: 'blur(8px)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                zIndex: 9999, animation: 'fadeIn 0.2s ease-out'
+              }}
+            >
+              <div
+                className="custom-delete-modal"
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  background: 'linear-gradient(145deg, #1e293b, #0f172a)',
+                  borderRadius: '16px', padding: '2rem', width: '90%', maxWidth: '400px',
+                  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  animation: 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+                  display: 'flex', flexDirection: 'column', gap: '1.5rem', position: 'relative'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#ef4444' }}>
+                   <Trash2 size={24} />
+                   <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#f8fafc', fontWeight: 600 }}>Confirm Deletion</h3>
+                </div>
+                
+                <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.95rem', lineHeight: '1.5' }}>
+                  Are you sure you want to delete <strong style={{ color: '#e2e8f0' }}>{deleteModal.itemName}</strong>? This action cannot be undone.
+                </p>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+                  <button
+                    onClick={() => setDeleteModal({ isOpen: false, recordId: '', itemIndex: -1, itemName: '' })}
+                    style={{
+                      padding: '0.6rem 1.25rem', borderRadius: '8px', background: 'rgba(255, 255, 255, 0.05)',
+                      color: '#cbd5e1', border: '1px solid rgba(255, 255, 255, 0.1)', cursor: 'pointer',
+                      fontWeight: 500, transition: 'all 0.2s',
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)')}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => executeDeleteItem(deleteModal.recordId, deleteModal.itemIndex, deleteModal.itemName)}
+                    style={{
+                      padding: '0.6rem 1.25rem', borderRadius: '8px', background: 'linear-gradient(135deg, #ef4444, #b91c1c)',
+                      color: '#ffffff', border: 'none', cursor: 'pointer', fontWeight: 500,
+                      boxShadow: '0 4px 6px -1px rgba(239, 68, 68, 0.2)', transition: 'all 0.2s',
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.filter = 'brightness(1.1)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.filter = 'brightness(1)')}
+                  >
+                    Delete File
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* High-End Custom Rename Modal */}
           {renameModal.isOpen && (

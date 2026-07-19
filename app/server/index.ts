@@ -9,6 +9,8 @@ import crypto from 'crypto';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GoogleAIFileManager } from '@google/generative-ai/server';
 import { runPlaybookAnalysis } from './playbookEngine';
+import { researchEntity } from './contextResearcher';
+import { generateResearchPDF } from './pdfGenerator';
 import dns from 'dns';
 import { PDFDocument, rgb, StandardFonts, PageSizes } from 'pdf-lib';
 
@@ -1255,6 +1257,74 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
 
             const { analysis: analysisResult, caseType } = await runPlaybookAnalysis(recordText, allMediaParts, record.items || [], record.caseType);
             record.analysis = analysisResult;
+
+            // Auto-research entities
+            const entitiesToResearch = ['award_names', 'media_names', 'association_names', 'journal_names', 'organization_names', 'exhibition_names'];
+            
+            for (const entityType of entitiesToResearch) {
+                if (record.analysis.facts[entityType] && record.analysis.facts[entityType].value) {
+                    const names = Array.isArray(record.analysis.facts[entityType].value) 
+                        ? record.analysis.facts[entityType].value 
+                        : [record.analysis.facts[entityType].value];
+                        
+                    for (const name of names) {
+                        const safeName = String(name).replace(/[^a-zA-Z0-9]/g, '_');
+                        const pdfName = `Research_${safeName}.pdf`;
+                        
+                        if (!record.items.some((i: any) => i.name === pdfName)) {
+                            console.log(`[Research] Auto-researching ${entityType}: ${name}`);
+                            const summary = await researchEntity(entityType, String(name), genAI);
+                            
+                            if (summary) {
+                                const pdfPath = path.join(__dirname, 'uploads', pdfName);
+                                await generateResearchPDF(String(name), summary, pdfPath);
+                                
+                                const categoryMap: any = {
+                                    'award_names': 'awards_prizes',
+                                    'media_names': 'published_material_about_applicant',
+                                    'association_names': 'memberships_elite',
+                                    'journal_names': 'scholarly_articles',
+                                    'organization_names': 'leading_critical_role',
+                                    'exhibition_names': 'exhibitions_showcases'
+                                };
+                                
+                                const cat = categoryMap[entityType] || 'other';
+                                
+                                const newItem = {
+                                    type: 'pdf',
+                                    url: `/uploads/${pdfName}`,
+                                    name: pdfName,
+                                    metadata: {
+                                        size: fs.statSync(pdfPath).size,
+                                        mimetype: 'application/pdf',
+                                        category: cat,
+                                        categoryLabel: CATEGORY_LABELS[cat] || cat,
+                                        suggestedName: pdfName,
+                                        classificationConfidence: 1
+                                    }
+                                };
+                                record.items.push(newItem);
+                                
+                                record.analysis.documents.push({
+                                    id: cat,
+                                    label: CATEGORY_LABELS[cat] || cat,
+                                    category: 'evidence',
+                                    status: 'provided',
+                                    fileName: pdfName,
+                                    source: 'Auto-Research Bot'
+                                });
+                                record.analysis.evidence.push({
+                                    category: cat,
+                                    type: 'research_report',
+                                    fileName: pdfName,
+                                    strength: 'medium'
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
             if (caseType && caseType !== 'unknown' && !record.caseType) {
                 record.caseType = caseType;
             }
@@ -1856,6 +1926,55 @@ app.put('/api/records/:id/case-type', (req, res) => {
         res.status(500).json({ error: 'Failed to update case type', message: error.message });
     }
 });
+
+app.delete('/api/records/:id/delete-item', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { itemIndex } = req.body;
+
+        if (typeof itemIndex !== 'number') {
+            return res.status(400).json({ error: 'Missing required param: itemIndex (number)' });
+        }
+
+        const records = getRecords();
+        const recordIndex = records.findIndex(r => r.id === id);
+        if (recordIndex === -1) return res.status(404).json({ error: 'Record not found' });
+
+        const record = records[recordIndex];
+        if (!record.items || !record.items[itemIndex]) {
+            return res.status(404).json({ error: 'Item not found at given index' });
+        }
+
+        const item = record.items[itemIndex];
+        
+        // Delete the physical file on disk
+        const filePath = path.join(serverRootDir, item.url.replace('/uploads', 'uploads'));
+        if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            console.log(`[Delete] Removed file: ${path.basename(filePath)}`);
+        }
+
+        // Remove the item from the items array
+        record.items.splice(itemIndex, 1);
+        
+        // Also remove from analysis.documents and analysis.evidence if it's there
+        if (record.analysis) {
+             if (record.analysis.documents) {
+                 record.analysis.documents = record.analysis.documents.filter((d: any) => d.fileName !== item.name);
+             }
+             if (record.analysis.evidence) {
+                 record.analysis.evidence = record.analysis.evidence.filter((e: any) => e.fileName !== item.name);
+             }
+        }
+
+        fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
+        res.json({ success: true, record });
+    } catch (error: any) {
+        console.error('❌ Failed to delete item:', error.message);
+        res.status(500).json({ error: 'Failed to delete item', message: error.message });
+    }
+});
+
 
 app.put('/api/records/:id/rename-items-batch', async (req, res) => {
     try {

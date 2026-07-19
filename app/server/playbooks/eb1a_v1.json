@@ -52,6 +52,54 @@
   },
   "required_facts": [
     {
+      "id": "award_names",
+      "label": "Names of any awards or prizes mentioned",
+      "type": "array",
+      "required": false,
+      "priority": 2,
+      "applies_to": ["I140_Only", "Concurrent_AOS", "Consular_DS260"]
+    },
+    {
+      "id": "media_names",
+      "label": "Names of media outlets or publications covering the applicant",
+      "type": "array",
+      "required": false,
+      "priority": 2,
+      "applies_to": ["I140_Only", "Concurrent_AOS", "Consular_DS260"]
+    },
+    {
+      "id": "association_names",
+      "label": "Names of professional associations or memberships",
+      "type": "array",
+      "required": false,
+      "priority": 2,
+      "applies_to": ["I140_Only", "Concurrent_AOS", "Consular_DS260"]
+    },
+    {
+      "id": "journal_names",
+      "label": "Names of scholarly journals or peer-review platforms",
+      "type": "array",
+      "required": false,
+      "priority": 2,
+      "applies_to": ["I140_Only", "Concurrent_AOS", "Consular_DS260"]
+    },
+    {
+      "id": "organization_names",
+      "label": "Names of organizations where the applicant held a leading/critical role",
+      "type": "array",
+      "required": false,
+      "priority": 2,
+      "applies_to": ["I140_Only", "Concurrent_AOS", "Consular_DS260"]
+    },
+    {
+      "id": "exhibition_names",
+      "label": "Names of venues or artistic exhibitions",
+      "type": "array",
+      "required": false,
+      "priority": 2,
+      "applies_to": ["I140_Only", "Concurrent_AOS", "Consular_DS260"]
+    },
+    {
       "id": "beneficiary_identity",
       "label": "Beneficiary full legal name & DOB",
       "type": "entity",
