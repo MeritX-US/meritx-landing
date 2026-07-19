@@ -1726,7 +1726,7 @@ app.get('/api/intake/package/:id/pdf', async (req, res) => {
             let processedDraft = record.analysis.coverLetterDraft;
             
             if (mappedExhibits && mappedExhibits.length > 0) {
-                processedDraft = processedDraft.replace(/\[([^\]]+)\]\(cite:([^\)]+)\)/g, (match, linkText, citedFile) => {
+                processedDraft = processedDraft.replace(/\[([^\]]+)\]\(cite:([^\)]+)\)/g, (match: string, linkText: string, citedFile: string) => {
                     const decodedCitedFile = decodeURIComponent(citedFile).trim();
                     const ex = mappedExhibits.find((e: any) => {
                         if (!e.fileName) return false;

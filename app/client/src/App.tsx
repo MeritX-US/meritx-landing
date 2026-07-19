@@ -10,7 +10,7 @@ import './App.css';
 const generatePDFBlob = (textContent: string, mappedExhibits: any[] = []): Blob => {
   let processedText = textContent || '';
   if (mappedExhibits && mappedExhibits.length > 0) {
-    processedText = processedText.replace(/\[([^\]]+)\]\(cite:([^\)]+)\)/g, (match, linkText, citedFile) => {
+    processedText = processedText.replace(/\[([^\]]+)\]\(cite:([^\)]+)\)/g, (match: string, linkText: string, citedFile: string) => {
         const decodedCitedFile = decodeURIComponent(citedFile).trim();
         const ex = mappedExhibits.find((e: any) => {
             if (!e.fileName) return false;
