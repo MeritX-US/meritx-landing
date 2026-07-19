@@ -1342,6 +1342,48 @@ audio::-webkit-media-controls-time-remaining-display {
   background: rgba(255, 255, 255, 0.05) !important;
 }
 
+.exhibit-citation {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  margin: 0 0.15rem;
+  background-color: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 9999px;
+  font-size: 0.85em;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.exhibit-citation:hover {
+  background-color: rgba(59, 130, 246, 0.2);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.exhibit-citation-missing {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  margin: 0 0.15rem;
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: 1px dashed rgba(239, 68, 68, 0.3);
+  border-radius: 9999px;
+  font-size: 0.85em;
+  font-weight: 500;
+}
+
+@keyframes highlightFlash {
+  0% { background-color: rgba(234, 179, 8, 0.4); }
+  50% { background-color: rgba(234, 179, 8, 0.1); }
+  100% { background-color: transparent; }
+}
+
+.highlight-flash {
+  animation: highlightFlash 2s ease-out forwards;
+}
 
 
  

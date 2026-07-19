@@ -1533,6 +1533,41 @@ Deliver the response now.`;
     }
 });
 
+// Helper to get consistent Exhibit numbering across Frontend and Backend
+const getExhibitMapping = (record: any) => {
+  if (!record || !record.analysis) return [];
+  const allDocs = [
+    ...(record.analysis.documents || []),
+    ...(record.analysis.evidence || []).map((e: any) => ({
+       ...e,
+       label: e.type || e.file_name,
+       fileName: e.file_name,
+       status: 'provided'
+    }))
+  ];
+
+  const categoryToLetter = new Map<string, string>();
+  const categoryCounters = new Map<string, number>();
+  let currentLetterCode = 65; // 'A'
+
+  return allDocs.map((doc: any) => {
+    const cat = doc.category || 'uncategorized';
+    if (!categoryToLetter.has(cat)) {
+      categoryToLetter.set(cat, String.fromCharCode(currentLetterCode));
+      currentLetterCode++;
+    }
+    const letter = categoryToLetter.get(cat)!;
+    const count = (categoryCounters.get(cat) || 0) + 1;
+    categoryCounters.set(cat, count);
+    
+    return {
+      ...doc,
+      exhibitLetter: letter,
+      exhibitNumber: `Exhibit ${letter}-${count}`
+    };
+  });
+};
+
 // 8. PDF Compilation Endpoint
 app.get('/api/intake/package/:id/pdf', async (req, res) => {
     const { id } = req.params;
@@ -1644,11 +1679,16 @@ app.get('/api/intake/package/:id/pdf', async (req, res) => {
         tocPage.drawText(`${itemIndex}. Exhibits 1-${exhibitsCount}`, { x: leftMargin, y: cursorY, size: 12, font: timesRomanFont });
         cursorY -= 40;
 
+        const mappedExhibits = getExhibitMapping(record);
+
         // Loop 1: Draw all exhibits on the Table of Contents (handles multi-page TOC)
         let exhibitNumber = 1;
         const maxTocWidth = width - 144; // 72pt margins on each side
         for (const item of (record.items || [])) {
-            const lineStr = `   Exhibit ${exhibitNumber}: ${item.name}`;
+            const mappedEx = mappedExhibits.find(e => e.fileName === item.name || e.fileName === item.file_name || (e.fileName && item.name && e.fileName.includes(item.name)));
+            const exName = mappedEx ? mappedEx.exhibitNumber : `Exhibit ${exhibitNumber}`;
+            
+            const lineStr = `   ${exName}: ${item.name}`;
             const wrappedLines = wrapText(lineStr, maxTocWidth, timesRomanFont, 11);
             
             for (let i = 0; i < wrappedLines.length; i++) {
@@ -1671,7 +1711,29 @@ app.get('/api/intake/package/:id/pdf', async (req, res) => {
             let clPage = mergedPdf.addPage(PageSizes.Letter);
             let clCursorY = height - 72; // 1 inch top margin
             
-            const clLines = record.analysis.coverLetterDraft.split('\n');
+            let processedDraft = record.analysis.coverLetterDraft;
+            
+            if (mappedExhibits && mappedExhibits.length > 0) {
+                mappedExhibits.forEach((ex: any) => {
+                    if (ex.fileName) {
+                        const safeFileName = ex.fileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        const citeRegex = new RegExp(`\\[[^\\]]*\\]\\(cite:${safeFileName}\\)`, 'g');
+                        processedDraft = processedDraft.replace(citeRegex, `${ex.exhibitNumber}`);
+                        try {
+                            const rawRegex = new RegExp(`(?<!cite:)${safeFileName}`, 'g');
+                            processedDraft = processedDraft.replace(rawRegex, `${ex.exhibitNumber}`);
+                        } catch (e) {
+                            if (!processedDraft.includes(`cite:${ex.fileName}`)) {
+                                processedDraft = processedDraft.split(ex.fileName).join(`${ex.exhibitNumber}`);
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Clean up any remaining markdown cite links so they don't print raw in the PDF
+            processedDraft = processedDraft.replace(/\[([^\]]+)\]\(cite:[^\)]+\)/g, '$1');
+            const clLines = processedDraft.split('\n');
             const clMaxWidth = width - 144; // 1 inch margins on both sides
 
             for (const line of clLines) {

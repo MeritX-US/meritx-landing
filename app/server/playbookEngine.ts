@@ -408,6 +408,11 @@ STRICT ANTI-HALLUCINATION RULES:
 2. If the template asks for a specific detail (e.g., hard numbers, specific industry problems) that is NOT present in the EXTRACTED FACTS or EVIDENCE MAPPINGS, you MUST NOT make it up. Instead, insert a highly visible placeholder, such as: [MISSING FACT: Needs Client to Provide X] or [PENDING DATA: Quantifiable Metric Required].
 3. Only rely on the provided JSON payloads.
 
+CLAIM-TO-EVIDENCE TRACEABILITY:
+When stating a fact or argument that is supported by an item in the EVIDENCE MAPPINGS or EXTRACTED FACTS (if it refers to a specific document), you MUST insert an inline citation using the exact file name.
+Format the citation strictly as a Markdown link with 'cite:' as the protocol and the file name as the url. 
+Example: \`[Exhibit](cite:resume_2023.pdf)\`
+
 TEMPLATE:
 ${playbook.cover_letter_template}
 

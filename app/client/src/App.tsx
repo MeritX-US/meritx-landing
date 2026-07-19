@@ -7,7 +7,28 @@ import autoTable from 'jspdf-autotable';
 import Questionnaire from './components/Questionnaire';
 import './App.css';
 
-const generatePDFBlob = (textContent: string): Blob => {
+const generatePDFBlob = (textContent: string, mappedExhibits: any[] = []): Blob => {
+  let processedText = textContent || '';
+  if (mappedExhibits && mappedExhibits.length > 0) {
+    mappedExhibits.forEach((ex: any) => {
+      if (ex.fileName) {
+        const safeFileName = ex.fileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const citeRegex = new RegExp(`\\[[^\\]]*\\]\\(cite:${safeFileName}\\)`, 'g');
+        processedText = processedText.replace(citeRegex, `${ex.exhibitNumber}`);
+        try {
+          const rawRegex = new RegExp(`(?<!cite:)${safeFileName}`, 'g');
+          processedText = processedText.replace(rawRegex, `${ex.exhibitNumber}`);
+        } catch (e) {
+          if (!processedText.includes(`cite:${ex.fileName}`)) {
+            processedText = processedText.split(ex.fileName).join(`${ex.exhibitNumber}`);
+          }
+        }
+      }
+    });
+  }
+  // Strip remaining unmatched cite links
+  processedText = processedText.replace(/\[([^\]]+)\]\(cite:[^\)]+\)/g, '$1');
+
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'in',
@@ -17,7 +38,7 @@ const generatePDFBlob = (textContent: string): Blob => {
   doc.setFont('times', 'normal');
   doc.setFontSize(11);
   
-  const lines = textContent.split('\n');
+  const lines = processedText.split('\n');
   const margin = 1.0;
   const pageWidth = 8.5;
   const pageHeight = 11.0;
@@ -658,14 +679,14 @@ function App() {
       
       const zip = new JSZip();
       
-      // 1. Add Petition Letter
-      const coverLetterPdf = generatePDFBlob(record.analysis.coverLetterDraft);
-      zip.file("01_Petition_Letter.pdf", coverLetterPdf);
-      
-      // 2. Add Exhibit Index
+      // 1. Add Exhibit Index First so we have mappings
       const mappedExhibits = getExhibitMapping(record);
       const exhibitIndexPdf = generateExhibitIndexPDF(mappedExhibits, record.caseType);
       zip.file("02_Exhibit_Index.pdf", exhibitIndexPdf);
+
+      // 2. Add Petition Letter (now using mapped exhibits for PDF citations)
+      const coverLetterPdf = generatePDFBlob(record.analysis.coverLetterDraft, mappedExhibits);
+      zip.file("01_Petition_Letter.pdf", coverLetterPdf);
       
       // 3. Add USCIS Form Field Mappings
       const formMappingPdf = generateFormMappingPDF(record.analysis.uscisFormMapping, record.analysis.facts);
@@ -2987,8 +3008,77 @@ function App() {
                                   </div>
                                 )}
                                 <div className="pdf-preview-content markdown-body" onMouseUp={handleSelection}>
-                                  {analysis.coverLetterDraft ? <ReactMarkdown>{analysis.coverLetterDraft}</ReactMarkdown> :
-                                  'No petition letter draft generated.'}
+                                  {(() => {
+                                    if (!analysis.coverLetterDraft) return 'No petition letter draft generated.';
+                                    let processedDraft = analysis.coverLetterDraft;
+                                    
+                                    // Fallback: auto-wrap raw filenames into cite: links if LLM missed the prompt formatting
+                                    const mappedExhibits = getExhibitMapping(record);
+                                    mappedExhibits.forEach((ex: any) => {
+                                      if (ex.fileName) {
+                                        try {
+                                          const safeFileName = ex.fileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                                          const regex = new RegExp(`(?<!cite:)${safeFileName}`, 'g');
+                                          processedDraft = processedDraft.replace(regex, `[Exhibit](cite:${ex.fileName})`);
+                                        } catch (e) {
+                                          // Fallback for browsers without lookbehind support
+                                          if (!processedDraft.includes(`cite:${ex.fileName}`)) {
+                                            processedDraft = processedDraft.split(ex.fileName).join(`[Exhibit](cite:${ex.fileName})`);
+                                          }
+                                        }
+                                      }
+                                    });
+
+                                    // Fallback 2: If AI hallucinates "Exhibit B-1" plain text, convert it back to a cite link
+                                    processedDraft = processedDraft.replace(/Exhibit\s+([A-Z]-\d+)/gi, (match, exNum) => {
+                                      const mappedEx = mappedExhibits.find(e => e.exhibitNumber && e.exhibitNumber.toLowerCase() === `exhibit ${exNum.toLowerCase()}`);
+                                      if (mappedEx && mappedEx.fileName) {
+                                        return `[Exhibit](cite:${mappedEx.fileName})`;
+                                      }
+                                      return match;
+                                    });
+
+                                    return (
+                                      <ReactMarkdown
+                                        urlTransform={(url) => url}
+                                        components={{
+                                          a: ({node, ...props}) => {
+                                            if (props.href?.startsWith('cite:')) {
+                                              const fileName = decodeURIComponent(props.href.substring(5));
+                                              const exhibitInfo = mappedExhibits.find(e => e.fileName === fileName || (e.fileName && fileName.includes(e.fileName)));
+                                              
+                                              if (exhibitInfo) {
+                                                return (
+                                                  <span 
+                                                    className="exhibit-citation"
+                                                    title={`Source File: ${fileName}`}
+                                                    onClick={() => {
+                                                      setSelectedAssemblyDocId('exhibit-index');
+                                                      setTimeout(() => {
+                                                        const rowId = `exhibit-row-${exhibitInfo.id || exhibitInfo.fileName}`;
+                                                        const el = document.getElementById(rowId);
+                                                        if (el) {
+                                                          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                                          el.classList.add('highlight-flash');
+                                                          setTimeout(() => el.classList.remove('highlight-flash'), 2000);
+                                                        }
+                                                      }, 300);
+                                                    }}
+                                                  >
+                                                    {exhibitInfo.exhibitNumber}
+                                                  </span>
+                                                );
+                                              }
+                                              return <span className="exhibit-citation-missing" title={fileName}>[Missing Exhibit: {fileName}]</span>;
+                                            }
+                                            return <a {...props} />;
+                                          }
+                                        }}
+                                      >
+                                        {processedDraft}
+                                      </ReactMarkdown>
+                                    );
+                                  })()}
                                 </div>
                               </div>
                             )}
@@ -3071,7 +3161,7 @@ function App() {
                                       {getExhibitMapping(record).map((doc: any, index: number) => {
                                         const isProvided = doc.status === 'provided';
                                         return (
-                                          <tr key={doc.id || index} style={{ borderBottom: '1px solid #cbd5e1' }}>
+                                          <tr id={`exhibit-row-${doc.id || doc.fileName}`} key={doc.id || index} style={{ borderBottom: '1px solid #cbd5e1' }}>
                                             <td style={{ padding: '0.6rem 0.5rem', fontWeight: 'bold', color: '#0f172a' }}>{doc.exhibitNumber}</td>
                                             <td style={{ padding: '0.6rem 0.5rem', color: '#334155', fontWeight: 550 }}>{doc.label}</td>
                                             <td style={{ padding: '0.6rem 0.5rem' }}>
@@ -3088,7 +3178,28 @@ function App() {
                                               </span>
                                             </td>
                                             <td style={{ padding: '0.6rem 0.5rem', color: isProvided ? '#0f172a' : '#94a3b8', fontStyle: isProvided ? 'normal' : 'italic', fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' }}>
-                                              {isProvided ? doc.fileName : 'Not Provided'}
+                                              {(() => {
+                                                if (!isProvided) return 'Not Provided';
+                                                const physicalItem = record.items?.find((i: any) => i.name === doc.fileName || i.file_name === doc.fileName || (doc.fileName && i.name && doc.fileName.includes(i.name)));
+                                                if (physicalItem && physicalItem.url) {
+                                                  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+                                                  const fullUrl = physicalItem.url.startsWith('http') ? physicalItem.url : `${baseUrl}${physicalItem.url}`;
+                                                  return (
+                                                    <a 
+                                                      href={fullUrl} 
+                                                      target="_blank" 
+                                                      rel="noopener noreferrer"
+                                                      title={doc.fileName}
+                                                      style={{ color: '#2563eb', textDecoration: 'none' }}
+                                                      onMouseOver={(e) => e.currentTarget.style.textDecoration = 'underline'}
+                                                      onMouseOut={(e) => e.currentTarget.style.textDecoration = 'none'}
+                                                    >
+                                                      {doc.fileName}
+                                                    </a>
+                                                  );
+                                                }
+                                                return <span title={doc.fileName}>{doc.fileName}</span>;
+                                              })()}
                                             </td>
                                           </tr>
                                         );
