@@ -403,6 +403,11 @@ You must return a valid JSON object matching the following structure:
       });
       const draftPrompt = `You are an expert immigration attorney. Draft the Attorney Cover Letter in Markdown format using the provided template and extracted facts.
 
+STRICT ANTI-HALLUCINATION RULES:
+1. DO NOT invent, hallucinate, or fabricate any names, dates, metrics, percentages, revenues, achievements, or any other facts.
+2. If the template asks for a specific detail (e.g., hard numbers, specific industry problems) that is NOT present in the EXTRACTED FACTS or EVIDENCE MAPPINGS, you MUST NOT make it up. Instead, insert a highly visible placeholder, such as: [MISSING FACT: Needs Client to Provide X] or [PENDING DATA: Quantifiable Metric Required].
+3. Only rely on the provided JSON payloads.
+
 TEMPLATE:
 ${playbook.cover_letter_template}
 
@@ -412,7 +417,7 @@ ${JSON.stringify(extractedFacts, null, 2)}
 EVIDENCE MAPPINGS:
 ${JSON.stringify(evidence, null, 2)}
 
-Replace bracketed placeholders with actual extracted facts. DO NOT include boilerplate warnings or instructions from the template, just output the final drafted letter.`;
+Replace bracketed placeholders with actual extracted facts. DO NOT include boilerplate warnings or instructions from the template, just output the final drafted letter. Ensure compliance with the anti-hallucination rules above.`;
       
       const draftResponse = await textModel.generateContent(draftPrompt);
       coverLetterDraft = draftResponse.response.text();
