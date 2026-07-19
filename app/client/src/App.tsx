@@ -10,20 +10,33 @@ import './App.css';
 const generatePDFBlob = (textContent: string, mappedExhibits: any[] = []): Blob => {
   let processedText = textContent || '';
   if (mappedExhibits && mappedExhibits.length > 0) {
-    mappedExhibits.forEach((ex: any) => {
-      if (ex.fileName) {
-        const safeFileName = ex.fileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const citeRegex = new RegExp(`\\[[^\\]]*\\]\\(cite:${safeFileName}\\)`, 'g');
-        processedText = processedText.replace(citeRegex, `${ex.exhibitNumber}`);
-        try {
-          const rawRegex = new RegExp(`(?<!cite:)${safeFileName}`, 'g');
-          processedText = processedText.replace(rawRegex, `${ex.exhibitNumber}`);
-        } catch (e) {
-          if (!processedText.includes(`cite:${ex.fileName}`)) {
-            processedText = processedText.split(ex.fileName).join(`${ex.exhibitNumber}`);
-          }
+    processedText = processedText.replace(/\[([^\]]+)\]\(cite:([^\)]+)\)/g, (match, linkText, citedFile) => {
+        const decodedCitedFile = decodeURIComponent(citedFile).trim();
+        const ex = mappedExhibits.find((e: any) => {
+            if (!e.fileName) return false;
+            const eName = e.fileName;
+            const fName = decodedCitedFile;
+            const eBase = eName.split(/[\/\\]/).pop() || eName;
+            const fBase = fName.split(/[\/\\]/).pop() || fName;
+            return eName === fName || eName.includes(fName) || fName.includes(eName) || eBase === fBase;
+        });
+        if (ex) {
+            return ex.exhibitNumber;
         }
-      }
+        return match;
+    });
+    
+    mappedExhibits.forEach((ex: any) => {
+        if (ex.fileName) {
+            const baseName = ex.fileName.split(/[\/\\]/).pop() || ex.fileName;
+            const safeFileName = baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            try {
+                const rawRegex = new RegExp(`(?<!cite:)${safeFileName}`, 'g');
+                processedText = processedText.replace(rawRegex, `${ex.exhibitNumber}`);
+            } catch (e) {
+                processedText = processedText.split(baseName).join(`${ex.exhibitNumber}`);
+            }
+        }
     });
   }
   // Strip remaining unmatched cite links
@@ -3045,7 +3058,14 @@ function App() {
                                           a: ({node, ...props}) => {
                                             if (props.href?.startsWith('cite:')) {
                                               const fileName = decodeURIComponent(props.href.substring(5));
-                                              const exhibitInfo = mappedExhibits.find(e => e.fileName === fileName || (e.fileName && fileName.includes(e.fileName)));
+                                              const exhibitInfo = mappedExhibits.find(e => {
+                                                if (!e.fileName) return false;
+                                                const eName = e.fileName;
+                                                const fName = fileName;
+                                                const eBase = eName.split(/[/\\]/).pop() || eName;
+                                                const fBase = fName.split(/[/\\]/).pop() || fName;
+                                                return eName === fName || eName.includes(fName) || fName.includes(eName) || eBase === fBase;
+                                              });
                                               
                                               if (exhibitInfo) {
                                                 return (

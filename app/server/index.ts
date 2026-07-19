@@ -1726,18 +1726,31 @@ app.get('/api/intake/package/:id/pdf', async (req, res) => {
             let processedDraft = record.analysis.coverLetterDraft;
             
             if (mappedExhibits && mappedExhibits.length > 0) {
+                processedDraft = processedDraft.replace(/\[([^\]]+)\]\(cite:([^\)]+)\)/g, (match, linkText, citedFile) => {
+                    const decodedCitedFile = decodeURIComponent(citedFile).trim();
+                    const ex = mappedExhibits.find((e: any) => {
+                        if (!e.fileName) return false;
+                        const eName = e.fileName;
+                        const fName = decodedCitedFile;
+                        const eBase = eName.split(/[\/\\]/).pop() || eName;
+                        const fBase = fName.split(/[\/\\]/).pop() || fName;
+                        return eName === fName || eName.includes(fName) || fName.includes(eName) || eBase === fBase;
+                    });
+                    if (ex) {
+                        return ex.exhibitNumber;
+                    }
+                    return match;
+                });
+                
                 mappedExhibits.forEach((ex: any) => {
                     if (ex.fileName) {
-                        const safeFileName = ex.fileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                        const citeRegex = new RegExp(`\\[[^\\]]*\\]\\(cite:${safeFileName}\\)`, 'g');
-                        processedDraft = processedDraft.replace(citeRegex, `${ex.exhibitNumber}`);
+                        const baseName = ex.fileName.split(/[\/\\]/).pop() || ex.fileName;
+                        const safeFileName = baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
                         try {
                             const rawRegex = new RegExp(`(?<!cite:)${safeFileName}`, 'g');
                             processedDraft = processedDraft.replace(rawRegex, `${ex.exhibitNumber}`);
                         } catch (e) {
-                            if (!processedDraft.includes(`cite:${ex.fileName}`)) {
-                                processedDraft = processedDraft.split(ex.fileName).join(`${ex.exhibitNumber}`);
-                            }
+                            processedDraft = processedDraft.split(baseName).join(`${ex.exhibitNumber}`);
                         }
                     }
                 });
@@ -2378,4 +2391,4 @@ app.post('/api/records/:id/reclassify', async (req, res) => {
         res.status(500).json({ error: 'Failed to re-classify', message: error.message });
     }
 });
-
+
