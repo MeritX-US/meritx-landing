@@ -2447,9 +2447,10 @@ function App() {
                                         {(() => {
                                           if (!isProvided) return 'Not Provided';
                                           const physicalItem = record.items?.find((i: any) => i.name === doc.fileName || i.file_name === doc.fileName || (doc.fileName && i.name && doc.fileName.includes(i.name)));
-                                          if (physicalItem && physicalItem.url) {
+                                          if (physicalItem && (physicalItem.url || physicalItem.fileUri)) {
+                                            const fileUrl = physicalItem.url || physicalItem.fileUri;
                                             const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-                                            const fullUrl = physicalItem.url.startsWith('http') ? physicalItem.url : `${baseUrl}${physicalItem.url}`;
+                                            const fullUrl = fileUrl.startsWith('http') ? fileUrl : `${baseUrl}${fileUrl}`;
                                             return (
                                               <a 
                                                 href={fullUrl} 
@@ -2504,21 +2505,27 @@ function App() {
                                     const strengthColor = ev.strength === 'high' ? 'var(--success)' : ev.strength === 'medium' ? '#F59E0B' : 'var(--danger)';
                                     
                                     // Dynamically resolve renamed file name from record.items
-                                    const matchedItem = record.items?.find((it: any) => 
-                                      it.name === ev.file_name || 
-                                      it.metadata?.originalname === ev.file_name ||
-                                      (ev.file_name && (it.name?.includes(ev.file_name.substring(0, 10)) || (it.metadata?.originalname && ev.file_name?.includes(it.metadata.originalname.substring(0, 10)))))
-                                    ) || record.items?.[idx % (record.items?.length || 1)];
+                                    const targetFileName = ev.file_name || ev.fileName;
+                                    const matchedItem = record.items?.find((it: any) => {
+                                      if (!targetFileName) return false;
+                                      const itName = it.name || '';
+                                      const itOrig = it.metadata?.originalname || '';
+                                      return itName === targetFileName || 
+                                             itOrig === targetFileName ||
+                                             itName.includes(targetFileName.substring(0, 10)) ||
+                                             (itOrig && targetFileName.includes(itOrig.substring(0, 10)));
+                                    }) || record.items?.[idx % (record.items?.length || 1)];
 
-                                    const displayName = matchedItem?.name || ev.file_name || 'Unknown File';
+                                    const displayName = matchedItem?.name || targetFileName || 'Unknown File';
 
                                     return (
                                       <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
                                         <td style={{ padding: '0.6rem 0.5rem', color: 'var(--text-primary)', fontWeight: 550, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }} title={displayName}>
                                           {(() => {
-                                            if (matchedItem && matchedItem.url) {
+                                            if (matchedItem && (matchedItem.url || matchedItem.fileUri)) {
+                                              const fileUrl = matchedItem.url || matchedItem.fileUri;
                                               const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-                                              const fullUrl = matchedItem.url.startsWith('http') ? matchedItem.url : `${baseUrl}${matchedItem.url}`;
+                                              const fullUrl = fileUrl.startsWith('http') ? fileUrl : `${baseUrl}${fileUrl}`;
                                               return (
                                                 <a 
                                                   href={fullUrl} 
