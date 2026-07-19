@@ -18,7 +18,14 @@
 
   "required_facts": [
     { "id": "client_identity", "label": "Client full legal name & DOB", "type": "entity", "required": false, "priority": 1, "confirm_by_human": false, "applies_to": ["General_Inquiry"] },
-    { "id": "immigration_goals", "label": "Primary immigration goal or visa type sought", "type": "string", "required": true, "priority": 1, "confirm_by_human": true, "applies_to": ["General_Inquiry"] }
+    { "id": "immigration_goals", "label": "Primary immigration goal or visa type sought", "type": "string", "required": true, "priority": 1, "confirm_by_human": true, "applies_to": ["General_Inquiry"] },
+    { "id": "award_names", "label": "Names of any awards, prizes, or scholarships received by the applicant", "type": "array", "required": false, "priority": 3, "confirm_by_human": false, "applies_to": ["General_Inquiry"] },
+    { "id": "media_names", "label": "Names of any major media outlets or publications that have featured the applicant", "type": "array", "required": false, "priority": 3, "confirm_by_human": false, "applies_to": ["General_Inquiry"] },
+    { "id": "association_names", "label": "Names of any elite professional associations or memberships", "type": "array", "required": false, "priority": 3, "confirm_by_human": false, "applies_to": ["General_Inquiry"] },
+    { "id": "journal_names", "label": "Names of any journals or conferences where the applicant has published", "type": "array", "required": false, "priority": 3, "confirm_by_human": false, "applies_to": ["General_Inquiry"] },
+    { "id": "organization_names", "label": "Names of any organizations where the applicant held a leading or critical role", "type": "array", "required": false, "priority": 3, "confirm_by_human": false, "applies_to": ["General_Inquiry"] },
+    { "id": "exhibition_names", "label": "Names of any artistic exhibitions or showcases featuring the applicant's work", "type": "array", "required": false, "priority": 3, "confirm_by_human": false, "applies_to": ["General_Inquiry"] },
+    { "id": "paper_names", "label": "Exact titles of any scholarly articles or research papers authored by the applicant", "type": "array", "required": false, "priority": 3, "confirm_by_human": false, "applies_to": ["General_Inquiry"] }
   ],
 
   "required_documents": {
