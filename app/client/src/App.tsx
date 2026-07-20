@@ -10,7 +10,7 @@ import './App.css';
 const generatePDFBlob = (textContent: string, mappedExhibits: any[] = []): Blob => {
   let processedText = textContent || '';
   if (mappedExhibits && mappedExhibits.length > 0) {
-    processedText = processedText.replace(/\[([^\]]+)\]\(cite:([^\)]+)\)/g, (match: string, linkText: string, citedFile: string) => {
+    processedText = processedText.replace(/\[([^\]]+)\]\(cite:([^\)]+)\)/g, (_match: string, _linkText: string, citedFile: string) => {
         const decodedCitedFile = decodeURIComponent(citedFile).trim();
         const ex = mappedExhibits.find((e: any) => {
             if (!e.fileName) return false;
@@ -23,7 +23,7 @@ const generatePDFBlob = (textContent: string, mappedExhibits: any[] = []): Blob 
         if (ex) {
             return ex.exhibitNumber;
         }
-        return match;
+        return _match;
     });
     
     mappedExhibits.forEach((ex: any) => {
@@ -3098,7 +3098,7 @@ function App() {
                                     });
 
                                     // Fallback 2: If AI hallucinates "Exhibit B-1" plain text, convert it back to a cite link
-                                    processedDraft = processedDraft.replace(/Exhibit\s+([A-Z]-\d+)/gi, (match, exNum) => {
+                                    processedDraft = processedDraft.replace(/Exhibit\s+([A-Z]-\d+)/gi, (match: string, exNum: string) => {
                                       const mappedEx = mappedExhibits.find(e => e.exhibitNumber && e.exhibitNumber.toLowerCase() === `exhibit ${exNum.toLowerCase()}`);
                                       if (mappedEx && mappedEx.fileName) {
                                         return `[Exhibit](cite:${mappedEx.fileName})`;
