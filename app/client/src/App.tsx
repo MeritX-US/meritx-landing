@@ -142,8 +142,19 @@ const getExhibitMapping = (record: any) => {
   const categoryToLetter = new Map<string, string>();
   const categoryCounters = new Map<string, number>();
   let currentLetterCode = 65; // 'A'
+  
+  const assignedExhibitNumbers = new Map<string, { letter: string, number: string }>();
 
   return allDocs.map((doc: any) => {
+    if (doc.fileName && assignedExhibitNumbers.has(doc.fileName)) {
+        const assigned = assignedExhibitNumbers.get(doc.fileName)!;
+        return {
+            ...doc,
+            exhibitLetter: assigned.letter,
+            exhibitNumber: assigned.number
+        };
+    }
+
     const cat = doc.category || 'uncategorized';
     if (!categoryToLetter.has(cat)) {
       categoryToLetter.set(cat, String.fromCharCode(currentLetterCode));
@@ -153,10 +164,17 @@ const getExhibitMapping = (record: any) => {
     const count = (categoryCounters.get(cat) || 0) + 1;
     categoryCounters.set(cat, count);
     
+    const exLetter = letter;
+    const exNumber = `Exhibit ${letter}-${count}`;
+    
+    if (doc.fileName) {
+        assignedExhibitNumbers.set(doc.fileName, { letter: exLetter, number: exNumber });
+    }
+
     return {
       ...doc,
-      exhibitLetter: letter,
-      exhibitNumber: `Exhibit ${letter}-${count}`
+      exhibitLetter: exLetter,
+      exhibitNumber: exNumber
     };
   });
 };

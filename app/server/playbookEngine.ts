@@ -181,7 +181,7 @@ ${evidenceSchema.join('\n')}
 For each matched evidence item, specify:
 - "category": the category id (e.g. "bona_fide_marriage", "eb1a_criteria")
 - "type": the specific sub-type from the examples
-- "file_name": name of the file
+- "fileName": name of the file
 - "strength": "high", "medium", or "low" based on the playbook guidelines.
 
 4. Check for timeline conflicts (e.g. different move-in dates on different docs, or marriage date conflicts).
@@ -208,10 +208,10 @@ You must return a valid JSON object matching the following structure:
     "fact_id": { "value": "any", "confidence": "high | medium | low", "source": "string" }
   },
   "document_classifications": [
-    { "doc_type_id": "string", "file_name": "string", "status": "provided | needs_supplementation", "source": "string" }
+    { "doc_type_id": "string", "fileName": "string", "status": "provided | needs_supplementation", "source": "string" }
   ],
   "evidence_mappings": [
-    { "category": "string", "type": "string", "file_name": "string", "strength": "high | medium | low" }
+    { "category": "string", "type": "string", "fileName": "string", "strength": "high | medium | low" }
   ],
   "timeline_conflict_detected": false,
   "timeline_conflict_details": null,
@@ -310,7 +310,7 @@ You must return a valid JSON object matching the following structure:
             label: doc.label,
             category: category,
             status: matched ? matched.status || 'provided' : 'missing',
-            fileName: matched ? matched.file_name : undefined,
+            fileName: matched ? matched.fileName : undefined,
             source: matched ? matched.source : undefined
           });
         }
