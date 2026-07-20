@@ -117,76 +117,68 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-async function runAutoResearchForRecord(record: any, genAI: any) {
+async function runAutoResearchForRecord(record: any, targetEntities: { type: string, name: string }[], genAI: any) {
     if (!record.analysis || !record.analysis.facts) return;
-    const entitiesToResearch = ['award_names', 'media_names', 'association_names', 'journal_names', 'organization_names', 'exhibition_names', 'paper_names'];
     
-    for (const entityType of entitiesToResearch) {
-        if (record.analysis.facts[entityType] && record.analysis.facts[entityType].value) {
-            const names = Array.isArray(record.analysis.facts[entityType].value) 
-                ? record.analysis.facts[entityType].value 
-                : [record.analysis.facts[entityType].value];
+    for (const target of targetEntities) {
+        const entityType = target.type;
+        const name = target.name;
+        
+        const safeName = String(name).replace(/[^a-zA-Z0-9]/g, '_');
+        const pdfName = `Research_${safeName}.pdf`;
+        
+        if (!record.items.some((i: any) => i.name === pdfName)) {
+            console.log(`[Research] Auto-researching ${entityType}: ${name}`);
+            const summary = await researchEntity(entityType, String(name), genAI);
+            
+            if (summary) {
+                const pdfPath = path.join(uploadDirectory, pdfName);
+                await generateResearchPDF(String(name), summary, pdfPath);
                 
-            const limitedNames = names.slice(0, 2); // Limit to top 2 to avoid blocking too long
+                const categoryMap: any = {
+                    'award_names': 'awards_prizes',
+                    'media_names': 'published_material_about_applicant',
+                    'association_names': 'memberships_elite',
+                    'journal_names': 'scholarly_articles',
+                    'organization_names': 'leading_critical_role',
+                    'exhibition_names': 'exhibitions_showcases',
+                    'paper_names': 'scholarly_articles'
+                };
                 
-            for (const name of limitedNames) {
-                const safeName = String(name).replace(/[^a-zA-Z0-9]/g, '_');
-                const pdfName = `Research_${safeName}.pdf`;
+                const cat = categoryMap[entityType] || 'other';
                 
-                if (!record.items.some((i: any) => i.name === pdfName)) {
-                    console.log(`[Research] Auto-researching ${entityType}: ${name}`);
-                    const summary = await researchEntity(entityType, String(name), genAI);
-                    
-                    if (summary) {
-                        const pdfPath = path.join(uploadDirectory, pdfName);
-                        await generateResearchPDF(String(name), summary, pdfPath);
-                        
-                        const categoryMap: any = {
-                            'award_names': 'awards_prizes',
-                            'media_names': 'published_material_about_applicant',
-                            'association_names': 'memberships_elite',
-                            'journal_names': 'scholarly_articles',
-                            'organization_names': 'leading_critical_role',
-                            'exhibition_names': 'exhibitions_showcases',
-                            'paper_names': 'scholarly_articles'
-                        };
-                        
-                        const cat = categoryMap[entityType] || 'other';
-                        
-                        const newItem = {
-                            type: 'pdf',
-                            url: `/uploads/${pdfName}`,
-                            name: pdfName,
-                            metadata: {
-                                size: fs.statSync(pdfPath).size,
-                                mimetype: 'application/pdf',
-                                category: cat,
-                                categoryLabel: CATEGORY_LABELS[cat] || cat,
-                                suggestedName: pdfName,
-                                classificationConfidence: 1
-                            }
-                        };
-                        record.items.push(newItem);
-                        
-                        if (!record.analysis.documents) record.analysis.documents = [];
-                        record.analysis.documents.push({
-                            id: cat,
-                            label: CATEGORY_LABELS[cat] || cat,
-                            category: 'evidence',
-                            status: 'provided',
-                            fileName: pdfName,
-                            source: 'Auto-Research Bot'
-                        });
-                        
-                        if (!record.analysis.evidence) record.analysis.evidence = [];
-                        record.analysis.evidence.push({
-                            category: cat,
-                            type: 'research_report',
-                            fileName: pdfName,
-                            strength: 'medium'
-                        });
+                const newItem = {
+                    type: 'pdf',
+                    url: `/uploads/${pdfName}`,
+                    name: pdfName,
+                    metadata: {
+                        size: fs.statSync(pdfPath).size,
+                        mimetype: 'application/pdf',
+                        category: cat,
+                        categoryLabel: CATEGORY_LABELS[cat] || cat,
+                        suggestedName: pdfName,
+                        classificationConfidence: 1
                     }
-                }
+                };
+                record.items.push(newItem);
+                
+                if (!record.analysis.documents) record.analysis.documents = [];
+                record.analysis.documents.push({
+                    id: cat,
+                    label: CATEGORY_LABELS[cat] || cat,
+                    category: 'evidence',
+                    status: 'provided',
+                    fileName: pdfName,
+                    source: 'Auto-Research Bot'
+                });
+                
+                if (!record.analysis.evidence) record.analysis.evidence = [];
+                record.analysis.evidence.push({
+                    category: cat,
+                    type: 'research_report',
+                    fileName: pdfName,
+                    strength: 'medium'
+                });
             }
         }
     }
@@ -1334,7 +1326,7 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
             record.analysis = analysisResult;
 
             // Auto-research entities
-            await runAutoResearchForRecord(record, genAI);
+            // We no longer trigger automatic research here. The user triggers it via a dedicated endpoint.
 
             if (caseType && caseType !== 'unknown') {
                 record.caseType = caseType;
@@ -1435,7 +1427,8 @@ app.post('/api/intake/regenerate', async (req, res) => {
             records[recordIndex].analysisError = undefined; // clear previous error
 
             // Trigger background research based on the newly regenerated analysis
-            await runAutoResearchForRecord(records[recordIndex], genAI);
+            // We no longer trigger automatic research here.
+
         } catch (err: any) {
             console.error('⚠️ Playbook analysis failed (Regenerate):', err.message);
             records[recordIndex].analysisError = err.message;
@@ -2419,8 +2412,36 @@ app.post('/api/records/:id/reclassify', async (req, res) => {
 
         res.json({ success: true, classifiedCount: updatedCount, record: records[recordIndex] });
     } catch (error: any) {
-        console.error('❌ Reclassify failed:', error.message);
+        console.error('Failed to re-classify:', error);
         res.status(500).json({ error: 'Failed to re-classify', message: error.message });
     }
 });
 
+app.post('/api/records/:id/auto-research', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { targetEntities } = req.body;
+        
+        if (!targetEntities || !Array.isArray(targetEntities)) {
+            return res.status(400).json({ error: 'targetEntities array is required' });
+        }
+        
+        const records = getRecords();
+        const recordIndex = records.findIndex((r: any) => r.id === id);
+        
+        if (recordIndex === -1) {
+            return res.status(404).json({ error: 'Record not found' });
+        }
+        
+        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+        
+        await runAutoResearchForRecord(records[recordIndex], targetEntities, genAI);
+        
+        fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
+        
+        res.json({ success: true, record: records[recordIndex] });
+    } catch (error: any) {
+        console.error('Failed to run auto-research:', error);
+        res.status(500).json({ error: 'Failed to run auto-research', message: error.message });
+    }
+});

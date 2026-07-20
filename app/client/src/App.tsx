@@ -435,6 +435,10 @@ function App() {
     itemName: string;
   }>({ isOpen: false, recordId: '', itemIndex: -1, itemName: '' });
 
+  const [showAutoResearchModal, setShowAutoResearchModal] = useState(false);
+  const [researchableEntities, setResearchableEntities] = useState<{type: string, name: string, checked: boolean}[]>([]);
+  const [isAutoResearching, setIsAutoResearching] = useState(false);
+
   const docInputRef = useRef<HTMLInputElement>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -935,6 +939,75 @@ function App() {
       }
     } catch (err: any) {
       showNotification('Error', err.message, 'error');
+    }
+  };
+
+  const openAutoResearchModal = () => {
+    const record = records.find(r => r.id === selectedRecordId);
+    if (!record || !record.analysis || !record.analysis.facts) return;
+
+    const entitiesToResearch = ['award_names', 'media_names', 'association_names', 'journal_names', 'organization_names', 'exhibition_names', 'paper_names'];
+    
+    const entities: {type: string, name: string, checked: boolean}[] = [];
+    for (const entityType of entitiesToResearch) {
+        if (record.analysis.facts[entityType] && record.analysis.facts[entityType].value) {
+            const names = Array.isArray(record.analysis.facts[entityType].value) 
+                ? record.analysis.facts[entityType].value 
+                : [record.analysis.facts[entityType].value];
+                
+            for (const name of names) {
+                const safeName = String(name).replace(/[^a-zA-Z0-9]/g, '_');
+                const pdfName = `Research_${safeName}.pdf`;
+                if (!record.items.some((i: any) => i.name === pdfName)) {
+                    entities.push({ type: entityType, name: String(name), checked: true });
+                }
+            }
+        }
+    }
+    
+    if (entities.length === 0) {
+        showNotification('No Missing Entities', 'All extracted entities already have documentation or research.', 'info');
+        return;
+    }
+    
+    setResearchableEntities(entities);
+    setShowAutoResearchModal(true);
+  };
+
+  const executeAutoResearch = async () => {
+    if (!selectedRecordId) return;
+    
+    const targetEntities = researchableEntities.filter(e => e.checked).map(e => ({ type: e.type, name: e.name }));
+    if (targetEntities.length === 0) {
+        setShowAutoResearchModal(false);
+        return;
+    }
+    
+    setIsAutoResearching(true);
+    showNotification('Researching', `Starting AI background research for ${targetEntities.length} entities...`, 'info');
+    
+    try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/records/${selectedRecordId}/auto-research`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetEntities })
+        });
+        
+        const data = await response.json();
+        if (response.ok) {
+            showNotification('Research Complete', 'Generated Research Reports have been added to the case.', 'success');
+            await fetchRecords();
+            if (selectedRecordId === data.record.id) {
+                loadRecord(data.record, true);
+            }
+            setShowAutoResearchModal(false);
+        } else {
+            showNotification('Research Failed', data.error || 'Unknown error', 'error');
+        }
+    } catch (err: any) {
+        showNotification('Research Failed', err.message, 'error');
+    } finally {
+        setIsAutoResearching(false);
     }
   };
 
@@ -2384,18 +2457,32 @@ function App() {
                   <div className="glass-card evidence-mapping-card">
                     <div className="section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span>Evidence & Document Mapping</span>
-                      <button 
-                        onClick={() => document.getElementById('exhibit-upload-input')?.click()}
-                        style={{
-                          background: 'rgba(59, 130, 246, 0.1)', border: '1px solid var(--accent-primary)',
-                          color: 'var(--text-primary)', padding: '0.5rem 1rem', borderRadius: '8px',
-                          display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer',
-                          fontSize: '0.85rem'
-                        }}
-                      >
-                        <Upload size={14} />
-                        Upload Files
-                      </button>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button 
+                          onClick={openAutoResearchModal}
+                          style={{
+                            background: 'rgba(139, 92, 246, 0.1)', border: '1px solid #8b5cf6',
+                            color: '#a78bfa', padding: '0.5rem 1rem', borderRadius: '8px',
+                            display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer',
+                            fontSize: '0.85rem'
+                          }}
+                        >
+                          <Wand2 size={14} />
+                          AI Auto-Research
+                        </button>
+                        <button 
+                          onClick={() => document.getElementById('exhibit-upload-input')?.click()}
+                          style={{
+                            background: 'rgba(59, 130, 246, 0.1)', border: '1px solid var(--accent-primary)',
+                            color: 'var(--text-primary)', padding: '0.5rem 1rem', borderRadius: '8px',
+                            display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer',
+                            fontSize: '0.85rem'
+                          }}
+                        >
+                          <Upload size={14} />
+                          Upload Files
+                        </button>
+                      </div>
                       <input 
                         type="file" 
                         id="exhibit-upload-input" 
@@ -4105,6 +4192,76 @@ function App() {
           )}
 
           {/* High-End Custom Rename Modal */}
+          {showAutoResearchModal && (
+            <div className="modal-overlay" onClick={() => !isAutoResearching && setShowAutoResearchModal(false)}>
+              <div className="modal-content" onClick={e => e.stopPropagation()} style={{ width: '500px', maxWidth: '90vw' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                  <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Wand2 size={18} style={{ color: 'var(--accent-primary)' }}/>
+                    AI Background Research
+                  </h3>
+                  <button onClick={() => !isAutoResearching && setShowAutoResearchModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                    <X size={18} />
+                  </button>
+                </div>
+                
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem', lineHeight: '1.4' }}>
+                  The AI has identified the following entities in your uploaded documents. Select the ones you want the AI to automatically research on the web and compile into evidence reports.
+                </p>
+
+                <div style={{ 
+                  display: 'flex', flexDirection: 'column', gap: '0.5rem', 
+                  maxHeight: '300px', overflowY: 'auto', marginBottom: '1.5rem',
+                  background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '8px',
+                  border: '1px solid var(--border-color)'
+                }}>
+                  {researchableEntities.map((entity, idx) => (
+                    <label key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', fontSize: '0.9rem' }}>
+                      <input 
+                        type="checkbox"
+                        checked={entity.checked}
+                        onChange={(e) => {
+                          const newEntities = [...researchableEntities];
+                          newEntities[idx].checked = e.target.checked;
+                          setResearchableEntities(newEntities);
+                        }}
+                        style={{ accentColor: 'var(--accent-primary)', width: '16px', height: '16px' }}
+                      />
+                      <span style={{ fontWeight: 600 }}>{entity.name}</span>
+                      <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginLeft: 'auto', textTransform: 'capitalize' }}>
+                        {entity.type.replace('_names', '')}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                  <button 
+                    className="btn-secondary"
+                    onClick={() => setShowAutoResearchModal(false)}
+                    disabled={isAutoResearching}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    className="btn-primary"
+                    onClick={executeAutoResearch}
+                    disabled={isAutoResearching || researchableEntities.filter(e => e.checked).length === 0}
+                    style={{ minWidth: '140px', display: 'flex', justifyContent: 'center' }}
+                  >
+                    {isAutoResearching ? (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <RefreshCw size={14} className="spin" /> Researching...
+                      </span>
+                    ) : (
+                      `Research ${researchableEntities.filter(e => e.checked).length} Items`
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {renameModal.isOpen && (
             <div
               className="modal-backdrop"
