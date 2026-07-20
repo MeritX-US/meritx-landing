@@ -127,7 +127,9 @@ async function runAutoResearchForRecord(record: any, genAI: any) {
                 ? record.analysis.facts[entityType].value 
                 : [record.analysis.facts[entityType].value];
                 
-            for (const name of names) {
+            const limitedNames = names.slice(0, 2); // Limit to top 2 to avoid blocking too long
+                
+            for (const name of limitedNames) {
                 const safeName = String(name).replace(/[^a-zA-Z0-9]/g, '_');
                 const pdfName = `Research_${safeName}.pdf`;
                 
