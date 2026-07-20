@@ -4193,66 +4193,116 @@ function App() {
 
           {/* High-End Custom Rename Modal */}
           {showAutoResearchModal && (
-            <div className="modal-overlay" onClick={() => !isAutoResearching && setShowAutoResearchModal(false)}>
-              <div className="modal-content" onClick={e => e.stopPropagation()} style={{ width: '500px', maxWidth: '90vw' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                  <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <Wand2 size={18} style={{ color: 'var(--accent-primary)' }}/>
+            <div 
+              className="modal-backdrop" 
+              onClick={() => !isAutoResearching && setShowAutoResearchModal(false)}
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: 'rgba(0, 0, 0, 0.75)',
+                backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
+                zIndex: 9999,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '1.5rem',
+                animation: 'fadeIn 0.2s ease-out'
+              }}
+            >
+              <div 
+                className="custom-research-modal" 
+                onClick={e => e.stopPropagation()} 
+                style={{ 
+                  width: '100%', 
+                  maxWidth: '550px',
+                  background: 'var(--bg-card)',
+                  borderRadius: '16px',
+                  border: '1px solid rgba(139, 92, 246, 0.3)',
+                  boxShadow: '0 20px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05) inset',
+                  overflow: 'hidden',
+                  display: 'flex',
+                  flexDirection: 'column'
+                }}
+              >
+                <div style={{ padding: '1.5rem 1.5rem 1rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.01)' }}>
+                  <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '1.1rem', fontWeight: 600 }}>
+                    <div style={{ background: 'rgba(139, 92, 246, 0.2)', padding: '0.4rem', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Wand2 size={16} style={{ color: '#a78bfa' }}/>
+                    </div>
                     AI Background Research
                   </h3>
-                  <button onClick={() => !isAutoResearching && setShowAutoResearchModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                  <button onClick={() => !isAutoResearching && setShowAutoResearchModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '0.4rem', display: 'flex', borderRadius: '50%' }} onMouseOver={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'} onMouseOut={e => e.currentTarget.style.background = 'none'}>
                     <X size={18} />
                   </button>
                 </div>
                 
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem', lineHeight: '1.4' }}>
-                  The AI has identified the following entities in your uploaded documents. Select the ones you want the AI to automatically research on the web and compile into evidence reports.
-                </p>
+                <div style={{ padding: '1.5rem', overflowY: 'auto', maxHeight: '60vh' }}>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: '0 0 1.5rem 0', lineHeight: '1.5' }}>
+                    The AI has identified the following entities in your uploaded documents. Select the ones you want the AI to automatically research on the web and compile into evidence reports.
+                  </p>
 
-                <div style={{ 
-                  display: 'flex', flexDirection: 'column', gap: '0.5rem', 
-                  maxHeight: '300px', overflowY: 'auto', marginBottom: '1.5rem',
-                  background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '8px',
-                  border: '1px solid var(--border-color)'
-                }}>
-                  {researchableEntities.map((entity, idx) => (
-                    <label key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', fontSize: '0.9rem' }}>
-                      <input 
-                        type="checkbox"
-                        checked={entity.checked}
-                        onChange={(e) => {
-                          const newEntities = [...researchableEntities];
-                          newEntities[idx].checked = e.target.checked;
-                          setResearchableEntities(newEntities);
-                        }}
-                        style={{ accentColor: 'var(--accent-primary)', width: '16px', height: '16px' }}
-                      />
-                      <span style={{ fontWeight: 600 }}>{entity.name}</span>
-                      <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginLeft: 'auto', textTransform: 'capitalize' }}>
-                        {entity.type.replace('_names', '')}
-                      </span>
-                    </label>
-                  ))}
+                  <div style={{ 
+                    display: 'flex', flexDirection: 'column', gap: '0.5rem'
+                  }}>
+                    {researchableEntities.map((entity, idx) => (
+                      <label key={idx} style={{ 
+                        display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer', 
+                        padding: '1rem', borderRadius: '8px', background: entity.checked ? 'rgba(139, 92, 246, 0.08)' : 'rgba(255,255,255,0.03)',
+                        border: `1px solid ${entity.checked ? 'rgba(139, 92, 246, 0.4)' : 'transparent'}`,
+                        transition: 'all 0.2s ease'
+                      }}>
+                        <input 
+                          type="checkbox"
+                          checked={entity.checked}
+                          onChange={(e) => {
+                            const newEntities = [...researchableEntities];
+                            newEntities[idx].checked = e.target.checked;
+                            setResearchableEntities(newEntities);
+                          }}
+                          style={{ accentColor: '#a78bfa', width: '18px', height: '18px', marginTop: '2px', cursor: 'pointer' }}
+                        />
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', flex: 1 }}>
+                          <span style={{ fontWeight: 600, color: entity.checked ? 'var(--text-primary)' : 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: '1.4' }}>{entity.name}</span>
+                          <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', opacity: 0.7 }}>
+                            {entity.type.replace('_names', '').replace('_', ' ')}
+                          </span>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', background: 'rgba(0,0,0,0.1)' }}>
                   <button 
-                    className="btn-secondary"
                     onClick={() => setShowAutoResearchModal(false)}
                     disabled={isAutoResearching}
+                    style={{
+                      background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-primary)',
+                      padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 500,
+                      opacity: isAutoResearching ? 0.5 : 1
+                    }}
                   >
                     Cancel
                   </button>
                   <button 
-                    className="btn-primary"
                     onClick={executeAutoResearch}
                     disabled={isAutoResearching || researchableEntities.filter(e => e.checked).length === 0}
-                    style={{ minWidth: '140px', display: 'flex', justifyContent: 'center' }}
+                    style={{ 
+                      minWidth: '140px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem',
+                      background: 'linear-gradient(135deg, #8b5cf6, #6366f1)', border: 'none', color: 'white',
+                      padding: '0.5rem 1rem', borderRadius: '8px', cursor: isAutoResearching ? 'not-allowed' : 'pointer', 
+                      fontSize: '0.9rem', fontWeight: 600, boxShadow: '0 4px 12px rgba(139, 92, 246, 0.3)',
+                      opacity: (isAutoResearching || researchableEntities.filter(e => e.checked).length === 0) ? 0.6 : 1
+                    }}
                   >
                     {isAutoResearching ? (
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <>
                         <RefreshCw size={14} className="spin" /> Researching...
-                      </span>
+                      </>
                     ) : (
                       `Research ${researchableEntities.filter(e => e.checked).length} Items`
                     )}
