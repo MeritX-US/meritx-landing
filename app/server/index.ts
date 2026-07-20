@@ -1552,8 +1552,8 @@ const getExhibitMapping = (record: any) => {
     ...(record.analysis.documents || []),
     ...(record.analysis.evidence || []).map((e: any) => ({
        ...e,
-       label: e.type || e.file_name,
-       fileName: e.file_name,
+       label: e.type || e.file_name || e.fileName,
+       fileName: e.file_name || e.fileName,
        status: 'provided'
     }))
   ];
@@ -1697,7 +1697,19 @@ app.get('/api/intake/package/:id/pdf', async (req, res) => {
         let exhibitNumber = 1;
         const maxTocWidth = width - 144; // 72pt margins on each side
         for (const item of (record.items || [])) {
-            const mappedEx = mappedExhibits.find(e => e.fileName === item.name || e.fileName === item.file_name || (e.fileName && item.name && e.fileName.includes(item.name)));
+            const mappedEx = mappedExhibits.find(e => {
+                if (!e.fileName) return false;
+                const eName = e.fileName;
+                const origHint = item.metadata?.originalname;
+                const sugHint = item.metadata?.suggestedName;
+                return eName === item.name || 
+                       eName === item.file_name || 
+                       eName === origHint ||
+                       eName === sugHint ||
+                       (item.name && eName.includes(item.name)) ||
+                       (origHint && eName.includes(origHint)) ||
+                       (sugHint && eName.includes(sugHint));
+            });
             const exName = mappedEx ? mappedEx.exhibitNumber : `Exhibit ${exhibitNumber}`;
             
             const lineStr = `   ${exName}: ${item.name}`;

@@ -133,8 +133,8 @@ const getExhibitMapping = (record: any) => {
     ...(record.analysis.documents || []),
     ...(record.analysis.evidence || []).map((e: any) => ({
        ...e,
-       label: e.type || e.file_name,
-       fileName: e.file_name,
+       label: e.type || e.file_name || e.fileName,
+       fileName: e.file_name || e.fileName,
        status: 'provided' // evidence is inherently provided if it's found
     }))
   ];
