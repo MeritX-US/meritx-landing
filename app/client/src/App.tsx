@@ -131,12 +131,27 @@ const getExhibitMapping = (record: any) => {
   if (!record || !record.analysis) return [];
   const allDocs = [
     ...(record.analysis.documents || []),
-    ...(record.analysis.evidence || []).map((e: any) => ({
-       ...e,
-       label: e.type || e.file_name || e.fileName,
-       fileName: e.file_name || e.fileName,
-       status: 'provided' // evidence is inherently provided if it's found
-    }))
+    ...(record.analysis.evidence || []).map((e: any, idx: number) => {
+       const targetFileName = e.file_name || e.fileName || e.filename || e.name || e.source;
+       const matchedItem = record.items?.find((it: any) => {
+         if (!targetFileName) return false;
+         const itName = it.name || '';
+         const itOrig = it.metadata?.originalname || '';
+         return itName === targetFileName || 
+                itOrig === targetFileName ||
+                itName.includes(targetFileName.substring(0, 10)) ||
+                (itOrig && targetFileName.includes(itOrig.substring(0, 10)));
+       }) || record.items?.[idx % (record.items?.length || 1)];
+       
+       const resolvedFileName = matchedItem?.name || targetFileName;
+
+       return {
+         ...e,
+         label: e.type || resolvedFileName,
+         fileName: resolvedFileName,
+         status: 'provided' // evidence is inherently provided if it's found
+       };
+    })
   ];
 
   const categoryToLetter = new Map<string, string>();
