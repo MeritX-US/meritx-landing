@@ -410,8 +410,8 @@ STRICT ANTI-HALLUCINATION RULES:
 
 CLAIM-TO-EVIDENCE TRACEABILITY:
 When stating a fact or argument that is supported by an item in the EVIDENCE MAPPINGS or EXTRACTED FACTS (if it refers to a specific document), you MUST insert an inline citation using the exact file name.
-Format the citation strictly as a Markdown link with 'cite:' as the protocol and the file name as the url. 
-Example: \`[Exhibit](cite:resume_2023.pdf)\`
+Format the citation strictly as a Markdown link with 'cite:' as the protocol, the file name as the url, and if you know the specific page number, append '#page=N'. 
+Example: \`[Exhibit](cite:resume_2023.pdf#page=2)\` or if no page is specified \`[Exhibit](cite:resume_2023.pdf)\`
 
 TEMPLATE:
 ${playbook.cover_letter_template}

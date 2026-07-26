@@ -12,16 +12,17 @@ const generatePDFBlob = (textContent: string, mappedExhibits: any[] = []): Blob 
   if (mappedExhibits && mappedExhibits.length > 0) {
     processedText = processedText.replace(/\[([^\]]+)\]\(cite:([^\)]+)\)/g, (_match: string, _linkText: string, citedFile: string) => {
         const decodedCitedFile = decodeURIComponent(citedFile).trim();
+        const [fileName, pageHash] = decodedCitedFile.split('#page=');
         const ex = mappedExhibits.find((e: any) => {
             if (!e.fileName) return false;
             const eName = e.fileName;
-            const fName = decodedCitedFile;
+            const fName = fileName;
             const eBase = eName.split(/[\/\\]/).pop() || eName;
             const fBase = fName.split(/[\/\\]/).pop() || fName;
             return eName === fName || eName.includes(fName) || fName.includes(eName) || eBase === fBase;
         });
         if (ex) {
-            return ex.exhibitNumber;
+            return pageHash ? `${ex.exhibitNumber} (p.${pageHash})` : ex.exhibitNumber;
         }
         return _match;
     });
@@ -3232,7 +3233,8 @@ function App() {
                                         components={{
                                           a: ({node, ...props}) => {
                                             if (props.href?.startsWith('cite:')) {
-                                              const fileName = decodeURIComponent(props.href.substring(5));
+                                              const fullUrl = decodeURIComponent(props.href.substring(5));
+                                              const [fileName, pageHash] = fullUrl.split('#page=');
                                               const exhibitInfo = mappedExhibits.find(e => {
                                                 if (!e.fileName) return false;
                                                 const eName = e.fileName;
@@ -3243,11 +3245,23 @@ function App() {
                                               });
                                               
                                               if (exhibitInfo) {
+                                                const displayText = pageHash ? `${exhibitInfo.exhibitNumber} (p.${pageHash})` : exhibitInfo.exhibitNumber;
                                                 return (
                                                   <span 
                                                     className="exhibit-citation"
-                                                    title={`Source File: ${fileName}`}
-                                                    onClick={() => {
+                                                    title={`Source File: ${fileName}${pageHash ? ` Page ${pageHash}` : ''}`}
+                                                    onClick={(e) => {
+                                                      e.preventDefault();
+                                                      // Open PDF to specific page
+                                                      const physicalItem = record?.items?.find((i: any) => i.name === exhibitInfo.fileName || i.file_name === exhibitInfo.fileName || (exhibitInfo.fileName && i.name && exhibitInfo.fileName.includes(i.name)));
+                                                      if (physicalItem && physicalItem.url) {
+                                                        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+                                                        let pdfUrl = physicalItem.url.startsWith('http') ? physicalItem.url : `${baseUrl}${physicalItem.url}`;
+                                                        if (pageHash) pdfUrl += `#page=${pageHash}`;
+                                                        window.open(pdfUrl, '_blank');
+                                                      }
+
+                                                      // Scroll Exhibit Index as fallback/indicator
                                                       setSelectedAssemblyDocId('exhibit-index');
                                                       setTimeout(() => {
                                                         const rowId = `exhibit-row-${exhibitInfo.id || exhibitInfo.fileName}`;
@@ -3260,7 +3274,7 @@ function App() {
                                                       }, 300);
                                                     }}
                                                   >
-                                                    {exhibitInfo.exhibitNumber}
+                                                    {displayText}
                                                   </span>
                                                 );
                                               }
