@@ -671,7 +671,29 @@ app.put('/api/playbook/:id', (req, res) => {
         if (filePath.indexOf(playbooksDir) !== 0) {
             return res.status(403).json({ error: 'Invalid path' });
         }
-        fs.writeFileSync(filePath, JSON.stringify(req.body, null, 2), 'utf8');
+        
+        const updatedData = req.body;
+
+        // If setting this playbook as default, unset is_default on all other playbooks of the same case_type
+        if (updatedData.is_default && updatedData.case_type) {
+            const targetCaseType = (updatedData.case_type || '').toLowerCase();
+            const files = fs.readdirSync(playbooksDir).filter(f => f.endsWith('.json') && f !== `${req.params.id}.json`);
+            files.forEach(file => {
+                try {
+                    const fileP = path.join(playbooksDir, file);
+                    const content = fs.readFileSync(fileP, 'utf8');
+                    const parsed = JSON.parse(content);
+                    if ((parsed.case_type || '').toLowerCase() === targetCaseType && parsed.is_default) {
+                        parsed.is_default = false;
+                        fs.writeFileSync(fileP, JSON.stringify(parsed, null, 2), 'utf8');
+                    }
+                } catch (e) {
+                    // ignore
+                }
+            });
+        }
+
+        fs.writeFileSync(filePath, JSON.stringify(updatedData, null, 2), 'utf8');
         res.json({ success: true });
     } catch (err) {
         console.error(err);
