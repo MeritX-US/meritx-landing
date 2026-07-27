@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import JSZip from 'jszip';
-import { Upload, Mic, AlertCircle, FileText, PlayCircle, Square, History, ArrowLeft, Trash2, Calendar, RefreshCw, X, CheckCircle, Plus, PhoneCall, Copy, FileIcon, ImageIcon, Edit3, Save, Wand2, Send, HelpCircle, Download, Tag, Pencil, FileJson } from 'lucide-react';
+import { Upload, Mic, AlertCircle, FileText, PlayCircle, Square, History, ArrowLeft, Trash2, Calendar, RefreshCw, X, CheckCircle, Plus, PhoneCall, Copy, FileIcon, ImageIcon, Edit3, Save, Wand2, Send, HelpCircle, Download, Tag, Pencil, FileJson, Sparkles } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -403,6 +403,10 @@ function App() {
   const [selectedCaseType, setSelectedCaseType] = useState<string>('auto');
   const [availablePlaybooks, setAvailablePlaybooks] = useState<{ id: string; name: string; description: string; case_type: string }[]>([]);
   const [isPackageCaseTypeOpen, setIsPackageCaseTypeOpen] = useState(false);
+  const [saveToPlaybook, setSaveToPlaybook] = useState(true);
+  const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
+  const [feedbackInputText, setFeedbackInputText] = useState('');
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
 
   const [isAudioLangOpen, setIsAudioLangOpen] = useState(false);
   const [isIntakeCaseTypeOpen, setIsIntakeCaseTypeOpen] = useState(false);
@@ -1080,11 +1084,31 @@ function App() {
   const handleInlineRefine = async () => {
     if (!selectedRecordId || !selectedText || !refinePrompt.trim()) return;
     
+    const currentPrompt = refinePrompt;
     setIsRefining(true);
     setShowRefineInput(false);
     setSelectionRect(null);
     showNotification('Refining Selection', 'Applying your instructions to the selected text...', 'info');
     
+    // Background Feedback Loop trigger if checked
+    const currentRecord = records.find(r => r.id === selectedRecordId);
+    if (saveToPlaybook) {
+      fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/playbook/feedback-loop`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          playbookId: currentRecord?.caseType || 'eb1a',
+          refinePrompt: currentPrompt,
+          editedText: selectedText,
+          caseFacts: currentRecord?.analysis?.facts || {}
+        })
+      }).then(r => r.json()).then(res => {
+        if (res.success) {
+          showNotification('Playbook Refined!', res.summary || 'Permanently saved rule to Playbook configuration.', 'success');
+        }
+      }).catch(err => console.error('Playbook feedback loop error:', err));
+    }
+
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/intake/refine-inline`, {
         method: 'POST',
@@ -1092,7 +1116,7 @@ function App() {
         body: JSON.stringify({
           existingRecordId: selectedRecordId,
           selectedText: selectedText,
-          userPrompt: refinePrompt,
+          userPrompt: currentPrompt,
           targetField: activeResultTab === 'assembly' && selectedAssemblyDocId === 'petition-letter' ? 'coverLetter' : 'summary'
         }),
       });
@@ -2216,6 +2240,28 @@ function App() {
                           {analysis.scenarioLabel}
                         </span>
                       ) : null}
+
+                      <button
+                        onClick={() => setIsFeedbackModalOpen(true)}
+                        style={{
+                          marginLeft: 'auto',
+                          background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(59, 130, 246, 0.2))',
+                          border: '1px solid rgba(168, 85, 247, 0.4)',
+                          color: '#c084fc',
+                          padding: '0.4rem 0.9rem',
+                          borderRadius: '20px',
+                          fontSize: '0.85rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.4rem',
+                          transition: 'all 0.2s',
+                          boxShadow: '0 2px 10px rgba(168, 85, 247, 0.15)'
+                        }}
+                      >
+                        <Sparkles size={14} /> 💡 Feed Back to Playbook
+                      </button>
                     </div>
 
                     <div className="markdown-body" onMouseUp={handleSelection} onTouchEnd={handleSelection} onKeyUp={handleSelection}>
@@ -4156,44 +4202,174 @@ function App() {
               <Wand2 size={14} /> Refine Selection
             </button>
           ) : (
-            <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }} onClick={e => e.stopPropagation()}>
-              <input 
-                autoFocus
-                type="text"
-                value={refinePrompt}
-                onChange={(e) => setRefinePrompt(e.target.value)}
-                placeholder="e.g. Make this more formal..."
-                onKeyDown={(e) => { if (e.key === 'Enter') handleInlineRefine(); }}
-                style={{
-                  flex: 1, padding: '0.5rem', borderRadius: '6px',
-                  border: '1px solid var(--border-color)', background: 'var(--card-bg)',
-                  color: 'var(--text-primary)', outline: 'none', fontSize: '0.85rem'
-                }}
-              />
-              <button 
-                onClick={handleInlineRefine}
-                style={{
-                  background: 'var(--primary)', border: 'none', borderRadius: '6px',
-                  padding: '0.5rem', color: 'white', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center'
-                }}
-              >
-                <Send size={14} />
-              </button>
-              <button 
-                onClick={() => { setShowRefineInput(false); setSelectionRect(null); }}
-                style={{
-                  background: 'none', border: '1px solid var(--border-color)', borderRadius: '6px',
-                  padding: '0.5rem', color: 'var(--text-secondary)', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center'
-                }}
-              >
-                <X size={14} />
-              </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }} onClick={e => e.stopPropagation()}>
+              <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                <input 
+                  autoFocus
+                  type="text"
+                  value={refinePrompt}
+                  onChange={(e) => setRefinePrompt(e.target.value)}
+                  placeholder="e.g. Add IEEE senior membership certificate requirement..."
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleInlineRefine(); }}
+                  style={{
+                    flex: 1, padding: '0.5rem 0.75rem', borderRadius: '6px',
+                    border: '1px solid var(--border-color)', background: 'var(--card-bg)',
+                    color: 'var(--text-primary)', outline: 'none', fontSize: '0.85rem'
+                  }}
+                />
+                <button 
+                  onClick={handleInlineRefine}
+                  style={{
+                    background: 'var(--primary)', border: 'none', borderRadius: '6px',
+                    padding: '0.5rem 0.8rem', color: 'white', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', fontSize: '0.85rem', fontWeight: 600
+                  }}
+                >
+                  <Send size={14} /> Send
+                </button>
+                <button 
+                  onClick={() => { setShowRefineInput(false); setSelectionRect(null); }}
+                  style={{
+                    background: 'none', border: '1px solid var(--border-color)', borderRadius: '6px',
+                    padding: '0.5rem', color: 'var(--text-secondary)', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  }}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.78rem', color: '#c084fc', cursor: 'pointer', userSelect: 'none', fontWeight: 500 }}>
+                <input 
+                  type="checkbox" 
+                  checked={saveToPlaybook} 
+                  onChange={(e) => setSaveToPlaybook(e.target.checked)} 
+                  style={{ cursor: 'pointer', accentColor: '#a855f7' }}
+                />
+                <span>💡 Save this refinement to Playbook as a permanent rule</span>
+              </label>
             </div>
           )}
         </div>
       )}
+
+          {/* Playbook Feedback Modal */}
+          {isFeedbackModalOpen && (
+            <div
+              className="modal-backdrop"
+              onClick={() => setIsFeedbackModalOpen(false)}
+              style={{
+                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                backgroundColor: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(8px)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                zIndex: 9999, animation: 'fadeIn 0.2s ease-out'
+              }}
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  background: 'linear-gradient(145deg, #1e293b, #0f172a)',
+                  border: '1px solid rgba(168, 85, 247, 0.3)',
+                  borderRadius: '16px',
+                  padding: '2rem',
+                  maxWidth: '560px',
+                  width: '90%',
+                  boxShadow: '0 20px 50px rgba(0,0,0,0.6)',
+                  color: 'var(--text-primary)'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem' }}>
+                  <Sparkles size={22} style={{ color: '#c084fc' }} />
+                  <h3 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--text-primary)' }}>Feed Back to Playbook</h3>
+                </div>
+                <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: '1.25rem' }}>
+                  Provide case corrections, new evidence requirements, or USCIS RFE learnings. AI will analyze your feedback and permanently refine the target Playbook <strong>[{records.find(r => r.id === selectedRecordId)?.caseType || 'eb1a'}]</strong>.
+                </p>
+                
+                <textarea
+                  autoFocus
+                  rows={4}
+                  value={feedbackInputText}
+                  onChange={(e) => setFeedbackInputText(e.target.value)}
+                  placeholder="e.g. For IEEE Senior Members, require evidence of 50+ citations and 3 independent reference letters. Also flag RFE risk if no patents are listed."
+                  style={{
+                    width: '100%',
+                    padding: '0.8rem',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-color)',
+                    background: 'rgba(0, 0, 0, 0.2)',
+                    color: 'var(--text-primary)',
+                    fontSize: '0.9rem',
+                    fontFamily: 'inherit',
+                    marginBottom: '1.5rem',
+                    outline: 'none',
+                    resize: 'vertical'
+                  }}
+                />
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                  <button
+                    onClick={() => setIsFeedbackModalOpen(false)}
+                    style={{
+                      padding: '0.6rem 1.2rem',
+                      borderRadius: '8px',
+                      border: '1px solid var(--border-color)',
+                      background: 'transparent',
+                      color: 'var(--text-secondary)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    disabled={isSubmittingFeedback || !feedbackInputText.trim()}
+                    onClick={async () => {
+                      setIsSubmittingFeedback(true);
+                      showNotification('Processing Feedback', 'AI is updating the Playbook rules...', 'info');
+                      try {
+                        const targetRec = records.find(r => r.id === selectedRecordId);
+                        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/playbook/feedback-loop`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            playbookId: targetRec?.caseType || 'eb1a',
+                            refinePrompt: feedbackInputText,
+                            caseFacts: targetRec?.analysis?.facts || {}
+                          })
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                          showNotification('Playbook Updated!', data.summary || 'Learnings saved to Playbook configuration.', 'success');
+                          setIsFeedbackModalOpen(false);
+                          setFeedbackInputText('');
+                        } else {
+                          showNotification('Feedback Failed', data.error || 'Failed to update playbook', 'error');
+                        }
+                      } catch (err: any) {
+                        showNotification('Feedback Error', err.message, 'error');
+                      } finally {
+                        setIsSubmittingFeedback(false);
+                      }
+                    }}
+                    style={{
+                      padding: '0.6rem 1.2rem',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: 'linear-gradient(135deg, #a855f7, #6366f1)',
+                      color: 'white',
+                      fontWeight: 600,
+                      cursor: isSubmittingFeedback || !feedbackInputText.trim() ? 'default' : 'pointer',
+                      opacity: isSubmittingFeedback || !feedbackInputText.trim() ? 0.6 : 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.4rem'
+                    }}
+                  >
+                    <Send size={14} /> Submit & Update Playbook
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* High-End Custom Delete Modal */}
           {deleteModal.isOpen && (

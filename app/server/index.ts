@@ -863,6 +863,84 @@ Do not include markdown code blocks, just the raw JSON object string.`;
     }
 });
 
+app.post('/api/playbook/feedback-loop', async (req, res) => {
+    console.log("=== [Feedback Loop] Received request ===");
+    try {
+        const { playbookId, refinePrompt, caseFacts, editedText, rfeText } = req.body;
+        console.log("[Feedback Loop] Target Playbook ID:", playbookId);
+        console.log("[Feedback Loop] Refine Prompt / Notes:", refinePrompt);
+
+        const playbooksDir = path.join(serverRootDir, 'playbooks');
+        let targetFile = `${playbookId || 'eb1a_v1'}.json`;
+        let filePath = path.join(playbooksDir, targetFile);
+
+        if (!fs.existsSync(filePath)) {
+            const files = fs.readdirSync(playbooksDir).filter(f => f.endsWith('.json'));
+            const matched = files.find(f => f.toLowerCase().includes((playbookId || '').toLowerCase()));
+            if (matched) {
+                filePath = path.join(playbooksDir, matched);
+            } else {
+                filePath = path.join(playbooksDir, 'eb1a_v1.json');
+            }
+        }
+
+        const currentPlaybook = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+
+        const systemInstruction = `You are an AI Immigration Expert and Playbook Optimizer.
+You analyze real-world case refinements, attorney corrections, and RFE (Request for Evidence) responses, and translate them into permanent, high-value rules for a Playbook JSON configuration.
+
+Given:
+1. Attorney Refine Instruction / Feedback: "${refinePrompt || ''}"
+2. RFE Text / Case Context Snippet: "${(rfeText || editedText || '').slice(0, 800)}"
+3. Existing Playbook configuration
+
+Your job:
+Determine what specific additions or updates should be made to the Playbook JSON to prevent similar gaps or improve petition quality for ALL future cases.
+You can update:
+- 'evidence_map': adding missing document requirements or adjusting criteria
+- 'escalation_flags': adding new warning/critical risk flags
+- 'required_facts': adding required facts to collect during intake
+
+Return ONLY a JSON object with:
+1. "summary": A 1-2 sentence human-readable explanation of what rules were added/refined and why.
+2. "suggested_changes": An object containing ONLY the modified top-level keys (e.g. { "evidence_map": ..., "escalation_flags": ... }).
+3. "updated_playbook": The complete updated Playbook object with the changes merged.
+
+Do not include markdown blocks, output raw JSON only.`;
+
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash', systemInstruction });
+        const slimContext = {
+            playbook_id: currentPlaybook.playbook_id,
+            case_type: currentPlaybook.case_type,
+            evidence_map: currentPlaybook.evidence_map,
+            escalation_flags: currentPlaybook.escalation_flags,
+            required_facts: currentPlaybook.required_facts
+        };
+
+        const result = await model.generateContent(`Current Playbook Context:\n${JSON.stringify(slimContext, null, 2)}\n\nAttorney Feedback & Case Refinements:\nPrompt: ${refinePrompt}\nContext: ${JSON.stringify(caseFacts || {})}`);
+        const rawText = result.response.text();
+        const cleanJson = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+        const parsed = JSON.parse(cleanJson);
+
+        const updatedPlaybook = {
+            ...currentPlaybook,
+            ...(parsed.suggested_changes || parsed.updated_playbook || {})
+        };
+
+        fs.writeFileSync(filePath, JSON.stringify(updatedPlaybook, null, 2), 'utf8');
+
+        res.json({
+            success: true,
+            summary: parsed.summary || 'Playbook updated with case feedback learning.',
+            suggestedChanges: parsed.suggested_changes || {},
+            updatedPlaybook
+        });
+    } catch (err: any) {
+        console.error("Feedback Loop error:", err);
+        res.status(500).json({ error: "Failed to process feedback loop", details: err?.message });
+    }
+});
+
 /**
  * CONSULTATION RECORDS ENDPOINTS
  */
