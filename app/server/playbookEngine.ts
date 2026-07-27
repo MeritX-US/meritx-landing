@@ -57,19 +57,54 @@ export interface PlaybookAnalysis {
   coverLetterDraft: string;
 }
 
-export function loadPlaybook(caseType: string = 'unknown'): any {
-  let fileName = 'general_intake_v1.json';
-  if (caseType === 'eb1a' || caseType === 'niw') {
-    fileName = 'eb1a_v1.json'; // using EB-1A playbook as a base for NIW temporarily
-  } else if (caseType === 'marriage_green_card') {
-    fileName = 'marriage_gc_v1.json';
+export function loadPlaybook(identifier: string = 'unknown'): any {
+  const playbooksDir = path.join(__dirname, 'playbooks');
+  if (!fs.existsSync(playbooksDir)) {
+    throw new Error('Playbooks directory not found at: ' + playbooksDir);
   }
-  const filePath = path.join(__dirname, `playbooks/${fileName}`);
-  if (!fs.existsSync(filePath)) {
-    throw new Error('Playbook file not found at: ' + filePath);
+
+  const files = fs.readdirSync(playbooksDir).filter(f => f.endsWith('.json'));
+
+  // 1. Direct match by exact file ID (e.g. "l1a_multinational_executive" or "eb1a_v1")
+  const exactFile = files.find(f => f === `${identifier}.json` || f.replace('.json', '') === identifier);
+  if (exactFile) {
+    const data = fs.readFileSync(path.join(playbooksDir, exactFile), 'utf8');
+    return JSON.parse(data);
   }
-  const data = fs.readFileSync(filePath, 'utf8');
-  return JSON.parse(data);
+
+  // 2. Find matching playbooks by case_type
+  const matchingPlaybooks: { file: string; data: any }[] = [];
+  files.forEach(file => {
+    try {
+      const content = fs.readFileSync(path.join(playbooksDir, file), 'utf8');
+      const parsed = JSON.parse(content);
+      const ct = (parsed.case_type || '').toLowerCase();
+      const targetCt = identifier.toLowerCase();
+      if (ct === targetCt || (targetCt.includes('l1') && ct.includes('l-1')) || (targetCt.includes('niw') && ct.includes('niw')) || (targetCt.includes('eb1') && ct.includes('eb1'))) {
+        matchingPlaybooks.push({ file, data: parsed });
+      }
+    } catch (e) {
+      // ignore
+    }
+  });
+
+  if (matchingPlaybooks.length > 0) {
+    // 3. Prefer the one marked as default (is_default: true)
+    const defaultPb = matchingPlaybooks.find(p => p.data.is_default === true);
+    if (defaultPb) return defaultPb.data;
+    // Otherwise return the first matching playbook for that case type
+    return matchingPlaybooks[0].data;
+  }
+
+  // 4. Fallback to general intake
+  const fallbackPath = path.join(playbooksDir, 'general_intake_v1.json');
+  if (fs.existsSync(fallbackPath)) {
+    return JSON.parse(fs.readFileSync(fallbackPath, 'utf8'));
+  }
+
+  // 5. Ultimate fallback to eb1a_v1
+  const ultimatePath = path.join(playbooksDir, 'eb1a_v1.json');
+  return JSON.parse(fs.readFileSync(ultimatePath, 'utf8'));
 }
 
 export async function runPlaybookAnalysis(

@@ -1,5 +1,6 @@
 {
   "playbook_id": "eb1a_v1",
+  "is_default": true,
   "version": "1.0.0",
   "case_type": "eb1a",
   "jurisdiction": "US-Federal",

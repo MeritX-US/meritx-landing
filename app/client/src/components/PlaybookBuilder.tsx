@@ -853,8 +853,33 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                   <input type="text" value={playbookData.playbook_id || ''} readOnly style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)' }} />
                 </div>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Case Type</label>
-                  <input type="text" value={playbookData.case_type || ''} readOnly style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)' }} />
+                  <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Associated Visa / Case Category</label>
+                  <select
+                    value={playbookData.case_type || 'eb1a'}
+                    onChange={e => updateData(['case_type'], e.target.value)}
+                    style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid var(--border-color)', background: '#0f172a', color: 'var(--text-primary)', fontSize: '0.9rem' }}
+                  >
+                    <option value="eb1a">EB-1A (Extraordinary Ability)</option>
+                    <option value="eb2_niw">EB-2 NIW (National Interest Waiver)</option>
+                    <option value="L-1A Visa">L-1A (Multinational Executive / Manager)</option>
+                    <option value="marriage_green_card">Marriage Green Card (I-130 / I-485)</option>
+                    <option value="o1a">O-1A (Extraordinary Ability Sciences/Biz)</option>
+                    <option value="h1b">H-1B (Specialty Occupation)</option>
+                    <option value="general_intake">General Intake / Custom</option>
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.6rem 0.8rem', background: 'rgba(59, 130, 246, 0.08)', borderRadius: '6px', border: '1px solid rgba(59, 130, 246, 0.25)' }}>
+                  <input
+                    type="checkbox"
+                    id="is_default_checkbox"
+                    checked={!!playbookData.is_default}
+                    onChange={e => updateData(['is_default'], e.target.checked)}
+                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                  />
+                  <label htmlFor="is_default_checkbox" style={{ fontSize: '0.85rem', color: '#93c5fd', cursor: 'pointer', fontWeight: 600 }}>
+                    Set as Default Playbook for this Case Category (Auto-loaded when AI detects case)
+                  </label>
                 </div>
                 <div>
                   <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Target Audience</label>

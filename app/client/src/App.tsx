@@ -401,6 +401,7 @@ function App() {
   const [currentTime, setCurrentTime] = useState(0);
   const [language, setLanguage] = useState<string>('auto');
   const [selectedCaseType, setSelectedCaseType] = useState<string>('auto');
+  const [availablePlaybooks, setAvailablePlaybooks] = useState<{ id: string; name: string; description: string; case_type: string }[]>([]);
   const [isPackageCaseTypeOpen, setIsPackageCaseTypeOpen] = useState(false);
 
   const [isAudioLangOpen, setIsAudioLangOpen] = useState(false);
@@ -493,7 +494,20 @@ function App() {
   useEffect(() => {
     fetchRecords();
     fetchConfig();
+    fetchPlaybooks();
   }, []);
+
+  const fetchPlaybooks = async () => {
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/playbooks`);
+      if (response.ok) {
+        const data = await response.json();
+        setAvailablePlaybooks(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch playbooks:', err);
+    }
+  };
 
   const fetchConfig = async () => {
     try {
@@ -2149,9 +2163,7 @@ function App() {
                           onMouseLeave={(e) => !isPackageCaseTypeOpen && (e.currentTarget.style.borderColor = 'var(--border-color)')}
                         >
                           <span>
-                            {record?.caseType === 'eb1a' ? 'EB-1A Extraordinary Ability' :
-                             record?.caseType === 'niw' ? 'National Interest Waiver (NIW)' :
-                             record?.caseType === 'marriage_green_card' ? 'Marriage-Based Permanent Residence' : 'Auto-detect (AI)'}
+                            {availablePlaybooks.find(p => p.id === record?.caseType || p.case_type === record?.caseType)?.name || record?.caseType || 'Auto-detect (AI)'}
                           </span>
                           <div style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}>
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isPackageCaseTypeOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}><polyline points="6 9 12 15 18 9"></polyline></svg>
@@ -2168,33 +2180,32 @@ function App() {
                             borderRadius: '12px',
                             boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)',
                             overflow: 'hidden',
+                            overflowY: 'auto',
+                            maxHeight: '280px',
                             zIndex: 100
                           }}>
-                            {[
-                              { id: 'auto', label: 'Auto-detect (AI)', disabled: true },
-                              { id: 'eb1a', label: 'EB-1A Extraordinary Ability' },
-                              { id: 'niw', label: 'National Interest Waiver (NIW)' },
-                              { id: 'marriage_green_card', label: 'Marriage-Based Permanent Residence' }
-                            ].map(opt => (
+                            {availablePlaybooks.map(pb => (
                               <div
-                                key={opt.id}
+                                key={pb.id}
                                 onClick={() => {
-                                  if (opt.disabled) return;
-                                  handleCaseTypeChange(opt.id);
+                                  handleCaseTypeChange(pb.case_type || pb.id);
                                   setIsPackageCaseTypeOpen(false);
                                 }}
-                                onMouseEnter={(e) => !opt.disabled && (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)')}
+                                onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)')}
                                 onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                                 style={{
                                   padding: '0.6rem 1rem',
                                   fontSize: '0.85rem',
-                                  color: opt.disabled ? 'var(--text-secondary)' : 'var(--text-primary)',
-                                  cursor: opt.disabled ? 'not-allowed' : 'pointer',
+                                  color: 'var(--text-primary)',
+                                  cursor: 'pointer',
                                   transition: 'background 0.2s',
-                                  borderBottom: opt.id === 'auto' ? '1px solid rgba(255, 255, 255, 0.05)' : 'none'
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  alignItems: 'center'
                                 }}
                               >
-                                {opt.label}
+                                <span>{pb.name}</span>
+                                <span style={{ fontSize: '0.72rem', opacity: 0.6, fontFamily: 'monospace' }}>[{pb.id}]</span>
                               </div>
                             ))}
                           </div>
@@ -3116,9 +3127,7 @@ function App() {
                                   <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: '0.75rem 1rem', marginBottom: '2rem', fontSize: '0.85rem' }}>
                                     <div style={{ fontWeight: 'bold', color: '#475569' }}>CASE TYPE:</div>
                                     <div style={{ color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                      {record?.caseType === 'eb1a' ? 'EB-1A Extraordinary Ability' :
-                                       record?.caseType === 'niw' ? 'National Interest Waiver (NIW)' :
-                                       record?.caseType === 'marriage_green_card' ? 'Marriage-Based Permanent Residence' : 'Auto-detect (AI)'}
+                                      {availablePlaybooks.find(p => p.id === record?.caseType || p.case_type === record?.caseType)?.name || record?.caseType || 'Auto-detect (AI)'}
                                       {analysis?.scenarioLabel && record?.caseType !== 'auto' ? (
                                         <span style={{ color: '#64748b', fontSize: '0.8rem' }}>
                                           ({analysis.scenarioLabel})
@@ -3737,9 +3746,8 @@ function App() {
                   onMouseLeave={(e) => !isIntakeCaseTypeOpen && (e.currentTarget.style.borderColor = 'var(--border-color)')}
                 >
                   <span>
-                    {selectedCaseType === 'eb1a' ? 'EB-1A Extraordinary Ability' :
-                     selectedCaseType === 'niw' ? 'National Interest Waiver (NIW)' :
-                     selectedCaseType === 'marriage_green_card' ? 'Marriage-Based Permanent Residence' : 'Auto-detect (AI)'}
+                    {selectedCaseType === 'auto' ? 'Auto-detect (AI)' :
+                     availablePlaybooks.find(p => p.id === selectedCaseType || p.case_type === selectedCaseType)?.name || selectedCaseType}
                   </span>
                   <div style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isIntakeCaseTypeOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}><polyline points="6 9 12 15 18 9"></polyline></svg>
@@ -3756,18 +3764,26 @@ function App() {
                     borderRadius: '16px',
                     boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)',
                     overflow: 'hidden',
+                    overflowY: 'auto',
+                    maxHeight: '300px',
                     zIndex: 100
                   }}>
-                    {[
-                      { id: 'auto', label: 'Auto-detect (AI)' },
-                      { id: 'eb1a', label: 'EB-1A Extraordinary Ability' },
-                      { id: 'niw', label: 'National Interest Waiver (NIW)' },
-                      { id: 'marriage_green_card', label: 'Marriage-Based Permanent Residence' }
-                    ].map(opt => (
+                    <div
+                      onClick={() => {
+                        setSelectedCaseType('auto');
+                        setIsIntakeCaseTypeOpen(false);
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                      style={{ padding: '0.7rem 1.2rem', fontSize: '0.95rem', color: 'var(--text-primary)', cursor: 'pointer', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}
+                    >
+                      ✨ Auto-detect (AI)
+                    </div>
+                    {availablePlaybooks.map(pb => (
                       <div
-                        key={opt.id}
+                        key={pb.id}
                         onClick={() => {
-                          setSelectedCaseType(opt.id);
+                          setSelectedCaseType(pb.case_type || pb.id);
                           setIsIntakeCaseTypeOpen(false);
                         }}
                         onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)')}
@@ -3777,11 +3793,13 @@ function App() {
                           fontSize: '0.95rem',
                           color: 'var(--text-primary)',
                           cursor: 'pointer',
-                          transition: 'background 0.2s',
-                          borderBottom: opt.id === 'auto' ? '1px solid rgba(255, 255, 255, 0.05)' : 'none'
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center'
                         }}
                       >
-                        {opt.label}
+                        <span>{pb.name}</span>
+                        <span style={{ fontSize: '0.75rem', opacity: 0.6, fontFamily: 'monospace' }}>[{pb.id}]</span>
                       </div>
                     ))}
                   </div>

@@ -637,7 +637,8 @@ app.get('/api/playbooks', (req, res) => {
             return {
                 id: file.replace('.json', ''),
                 name: data.metadata?.title || file,
-                description: data.metadata?.description || ''
+                description: data.metadata?.description || '',
+                case_type: data.case_type || 'eb1a'
             };
         });
         res.json(playbooks);
@@ -716,6 +717,7 @@ app.post('/api/playbook/create', async (req, res) => {
                 newPlaybook = JSON.parse(sourceContent);
             }
             newPlaybook.playbook_id = cleanId;
+            newPlaybook.is_default = false;
             newPlaybook.metadata = {
                 title: title || `${newPlaybook.metadata?.title || cloneFromId} (Copy)`,
                 description: `Playbook cloned from ${cloneFromId}`
