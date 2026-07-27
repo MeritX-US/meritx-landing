@@ -622,6 +622,224 @@ app.post('/api/summarize', async (req, res) => {
 });
 
 /**
+ * PLAYBOOK CONFIGURATION ENDPOINTS
+ */
+app.get('/api/playbooks', (req, res) => {
+    try {
+        const playbooksDir = path.join(serverRootDir, 'playbooks');
+        if (!fs.existsSync(playbooksDir)) {
+            return res.json([]);
+        }
+        const files = fs.readdirSync(playbooksDir).filter(f => f.endsWith('.json'));
+        const playbooks = files.map(file => {
+            const content = fs.readFileSync(path.join(playbooksDir, file), 'utf8');
+            const data = JSON.parse(content);
+            return {
+                id: file.replace('.json', ''),
+                name: data.metadata?.title || file,
+                description: data.metadata?.description || ''
+            };
+        });
+        res.json(playbooks);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Failed to list playbooks' });
+    }
+});
+
+app.get('/api/playbook/:id', (req, res) => {
+    try {
+        const playbooksDir = path.join(serverRootDir, 'playbooks');
+        const filePath = path.join(playbooksDir, `${req.params.id}.json`);
+        // Basic path traversal prevention
+        if (filePath.indexOf(playbooksDir) !== 0 || !fs.existsSync(filePath)) {
+            return res.status(404).json({ error: 'Playbook not found' });
+        }
+        const content = fs.readFileSync(filePath, 'utf8');
+        res.json(JSON.parse(content));
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Failed to read playbook' });
+    }
+});
+
+app.put('/api/playbook/:id', (req, res) => {
+    try {
+        const playbooksDir = path.join(serverRootDir, 'playbooks');
+        const filePath = path.join(playbooksDir, `${req.params.id}.json`);
+        if (filePath.indexOf(playbooksDir) !== 0) {
+            return res.status(403).json({ error: 'Invalid path' });
+        }
+        fs.writeFileSync(filePath, JSON.stringify(req.body, null, 2), 'utf8');
+        res.json({ success: true });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Failed to update playbook' });
+    }
+});
+
+app.delete('/api/playbook/:id', (req, res) => {
+    try {
+        const playbooksDir = path.join(serverRootDir, 'playbooks');
+        const filePath = path.join(playbooksDir, `${req.params.id}.json`);
+        if (filePath.indexOf(playbooksDir) !== 0) {
+            return res.status(403).json({ error: 'Invalid path' });
+        }
+        if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            res.json({ success: true });
+        } else {
+            res.status(404).json({ error: 'Playbook not found' });
+        }
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Failed to delete playbook' });
+    }
+});
+
+app.post('/api/playbook/create', async (req, res) => {
+    try {
+        const { id, title, cloneFromId, prompt } = req.body;
+        const playbooksDir = path.join(serverRootDir, 'playbooks');
+        
+        let cleanId = id ? String(id).trim().toLowerCase().replace(/[^a-z0-9_]/g, '_') : '';
+        if (!cleanId) {
+            cleanId = cloneFromId ? `${cloneFromId}_copy_${Date.now()}` : `custom_pb_${Date.now()}`;
+        }
+
+        let newPlaybook: any = {};
+
+        if (cloneFromId) {
+            const sourcePath = path.join(playbooksDir, `${cloneFromId}.json`);
+            if (fs.existsSync(sourcePath)) {
+                const sourceContent = fs.readFileSync(sourcePath, 'utf8');
+                newPlaybook = JSON.parse(sourceContent);
+            }
+            newPlaybook.playbook_id = cleanId;
+            newPlaybook.metadata = {
+                title: title || `${newPlaybook.metadata?.title || cloneFromId} (Copy)`,
+                description: `Playbook cloned from ${cloneFromId}`
+            };
+        } else if (prompt) {
+            console.log("=== [Create Playbook AI] Start ===");
+            console.log("[Create Playbook AI] User Prompt:", prompt);
+            
+            const baseTemplatePath = path.join(playbooksDir, 'eb1a_v1.json');
+            let baseData: any = {};
+            if (fs.existsSync(baseTemplatePath)) {
+                baseData = JSON.parse(fs.readFileSync(baseTemplatePath, 'utf8'));
+            }
+
+            const systemInstruction = `You are an AI Playbook creator for immigration lawyers.
+Receiving a user prompt to create a new Playbook for a specific visa type or case category.
+Generate a JSON object containing:
+1. "playbook_id": clean snake_case ID (e.g. "o1a_v1" or "h1b_v1")
+2. "metadata": { "title": "Display Title", "description": "Short description" }
+3. "case_type": "Visa Category Code"
+4. "evidence_map": Relevant criteria/category structure tailored to this visa
+5. "escalation_flags": Critical & Warning risk flags tailored to this visa
+
+Return ONLY raw JSON object. Do not include markdown code blocks.`;
+
+            console.log("[Create Playbook AI] Calling Gemini 2.5 Flash...");
+            const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash', systemInstruction });
+            const result = await model.generateContent(`User Request: ${prompt}\n\nReference Structure:\n${JSON.stringify({ case_type: 'EB-1A', evidence_map: baseData.evidence_map, escalation_flags: baseData.escalation_flags }, null, 2)}`);
+            
+            console.log("[Create Playbook AI] Gemini responded successfully.");
+            const rawText = result.response.text();
+            const cleanJson = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+            
+            try {
+                const aiGenerated = JSON.parse(cleanJson);
+                newPlaybook = { ...baseData, ...aiGenerated };
+                if (aiGenerated.playbook_id) cleanId = aiGenerated.playbook_id;
+                newPlaybook.playbook_id = cleanId;
+            } catch (pErr) {
+                console.error("[Create Playbook AI] JSON Parse error, falling back to base template");
+                newPlaybook = { ...baseData, playbook_id: cleanId, metadata: { title: prompt, description: prompt } };
+            }
+        }
+
+        const finalPath = path.join(playbooksDir, `${cleanId}.json`);
+        fs.writeFileSync(finalPath, JSON.stringify(newPlaybook, null, 2), 'utf8');
+        res.json({ success: true, id: cleanId, playbook: newPlaybook });
+    } catch (err: any) {
+        console.error("Create Playbook Error:", err);
+        res.status(500).json({ error: 'Failed to create playbook', details: err?.message });
+    }
+});
+
+app.post('/api/playbook/simulate', async (req, res) => {
+    try {
+        const { playbook, sampleFacts } = req.body;
+        console.log("=== [Simulate Playbook] Start ===");
+        console.log("[Simulate Playbook] Client Facts:", sampleFacts);
+
+        const systemInstruction = `You are an AI Immigration Case Audit Engine.
+Analyze the provided client facts against the provided Playbook rules (evidence_map, escalation_flags, cover_letter_template).
+Generate a JSON object with:
+1. "triggered_flags": array of objects [{ "severity": "critical"|"warning", "rule": "short reason why triggered" }]
+2. "evidence_passed": array of satisfied category names
+3. "petition_draft_preview": a realistic 2-paragraph excerpt of the legal argument Cover Letter for this client.
+
+Return ONLY valid raw JSON object. Do not include markdown code blocks.`;
+
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash', systemInstruction });
+        const result = await model.generateContent(`Playbook Title: ${playbook.metadata?.title || playbook.playbook_id}\nPlaybook Subset: ${JSON.stringify({ evidence_map: playbook.evidence_map, escalation_flags: playbook.escalation_flags, cover_letter_template: playbook.cover_letter_template?.slice(0, 500) })}\n\nClient Facts: ${JSON.stringify(sampleFacts)}`);
+        const rawText = result.response.text();
+        const cleanJson = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+        const simData = JSON.parse(cleanJson);
+        res.json({ success: true, ...simData });
+    } catch (err: any) {
+        console.error("Simulation error:", err);
+        res.status(500).json({ error: "Failed simulation", details: err?.message });
+    }
+});
+
+app.post('/api/playbook/copilot', async (req, res) => {
+    console.log("=== [Copilot] Received request ===");
+    try {
+        const { prompt, currentPlaybook } = req.body;
+        console.log("[Copilot] User Prompt:", prompt);
+        console.log("[Copilot] Playbook ID:", currentPlaybook?.playbook_id);
+        
+        const systemInstruction = `You are an AI Playbook configuration assistant for immigration lawyers. 
+You will receive a JSON playbook and a user request. 
+Determine which top-level keys in the Playbook JSON need to be modified to fulfill the request.
+Return ONLY a JSON object containing the modified keys and their full updated values. 
+For example, if adding a risk flag, return { "escalation_flags": [ ...all existing flags + new flag... ] }.
+If modifying evidence, return { "evidence_map": { ...all existing evidence + modified... } }.
+Do not return the entire playbook, only the keys that changed.
+Do not include markdown code blocks, just the raw JSON object string.`;
+        
+        console.log("[Copilot] Preparing slim context (evidence_map & escalation_flags)...");
+        const slimContext = {
+            playbook_id: currentPlaybook.playbook_id,
+            case_type: currentPlaybook.case_type,
+            evidence_map: currentPlaybook.evidence_map,
+            escalation_flags: currentPlaybook.escalation_flags
+        };
+
+        console.log("[Copilot] Calling Gemini 2.5 Flash...");
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash', systemInstruction });
+        const result = await model.generateContent(`User Request: ${prompt}\n\nCurrent Playbook Subset:\n${JSON.stringify(slimContext, null, 2)}`);
+        
+        console.log("[Copilot] Gemini responded.");
+        const rawText = result.response.text();
+        console.log("[Copilot] Raw response snippet:", rawText.slice(0, 100));
+        const cleanJson = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        const partialUpdate = JSON.parse(cleanJson);
+        const updatedPlaybook = { ...currentPlaybook, ...partialUpdate };
+        console.log("[Copilot] Successfully merged update.");
+        res.json({ updatedPlaybook });
+    } catch (err: any) {
+        console.error("=== [Copilot Error] ===", err);
+        res.status(500).json({ error: 'Failed to process copilot request', details: err?.message });
+    }
+});
+
+/**
  * CONSULTATION RECORDS ENDPOINTS
  */
 

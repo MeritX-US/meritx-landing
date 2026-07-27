@@ -1,0 +1,9 @@
+{
+  "ignore": [
+    "playbooks/*",
+    "uploads/*",
+    "records.json",
+    "*.log"
+  ],
+  "ext": "ts,js"
+}

@@ -1385,6 +1385,42 @@ audio::-webkit-media-controls-time-remaining-display {
   animation: highlightFlash 2s ease-out forwards;
 }
 
+/* Premium Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
 
- 
- 
+/* Premium Select Box for Builder */
+.builder-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.7)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 0.6rem center;
+  background-size: 1em;
+  padding-right: 2rem !important; /* Make room for the arrow */
+  transition: all 0.2s ease;
+}
+.builder-select:hover {
+  filter: brightness(1.1);
+}
+.builder-select:focus {
+  outline: 2px solid rgba(59, 130, 246, 0.5);
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+}
+.builder-select option {
+  background-color: #0f172a;
+  color: #f8fafc;
+  font-weight: normal;
+}

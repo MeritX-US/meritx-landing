@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import JSZip from 'jszip';
-import { Upload, Mic, AlertCircle, FileText, PlayCircle, Square, History, ArrowLeft, Trash2, Calendar, RefreshCw, X, CheckCircle, Plus, PhoneCall, Copy, FileIcon, ImageIcon, Edit3, Save, Wand2, Send, HelpCircle, Download, Tag, Pencil } from 'lucide-react';
+import { Upload, Mic, AlertCircle, FileText, PlayCircle, Square, History, ArrowLeft, Trash2, Calendar, RefreshCw, X, CheckCircle, Plus, PhoneCall, Copy, FileIcon, ImageIcon, Edit3, Save, Wand2, Send, HelpCircle, Download, Tag, Pencil, FileJson } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import Questionnaire from './components/Questionnaire';
+import PlaybookBuilder from './components/PlaybookBuilder';
 import './App.css';
 
 const generatePDFBlob = (textContent: string, mappedExhibits: any[] = []): Blob => {
@@ -407,7 +408,7 @@ function App() {
   const [processingError, setProcessingError] = useState<string | null>(null);
 
   const [records, setRecords] = useState<any[]>([]);
-  const [view, setView] = useState<'home' | 'history' | 'results' | 'questionnaire'>('history');
+  const [view, setView] = useState<'home' | 'history' | 'results' | 'questionnaire' | 'playbook-builder'>('history');
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
   const [activeResultTab, setActiveResultTab] = useState<'questionnaire' | 'package' | 'completeness' | 'evidence' | 'transcript' | 'assembly'>('package');
   const [selectedAssemblyDocId, setSelectedAssemblyDocId] = useState<string>('cover-sheet');
@@ -1705,6 +1706,19 @@ function App() {
             <p>AI-powered consultation workflow & extraction</p>
           </div>
           <div style={{ width: 'auto', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+            <button
+              className={`btn-history ${view === 'playbook-builder' ? 'active' : ''}`}
+              onClick={() => {
+                if (view === 'playbook-builder') {
+                  setView('home');
+                } else {
+                  setView('playbook-builder');
+                }
+              }}
+            >
+              <FileJson size={20} />
+              <span className="hide-mobile">Playbooks</span>
+            </button>
             <button
               className={`btn-history ${view === 'history' ? 'active' : ''}`}
               onClick={() => {
@@ -3555,6 +3569,12 @@ function App() {
             </div>
           );
         })()
+      }
+
+      {
+        view === 'playbook-builder' && (
+          <PlaybookBuilder onBack={() => setView('home')} />
+        )
       }
 
       {

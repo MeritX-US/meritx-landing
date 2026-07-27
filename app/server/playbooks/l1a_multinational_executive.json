@@ -1,0 +1,227 @@
+{
+  "playbook_id": "l1a_multinational_executive",
+  "metadata": {
+    "title": "L-1A Multinational Executive/Manager Visa",
+    "description": "Comprehensive playbook for preparing L-1A petitions for multinational executives and managers, with a focus on documenting overseas work experience and executive/managerial duties.",
+    "version": "1.0",
+    "last_updated": "2023-10-27"
+  },
+  "case_type": "L-1A Visa",
+  "evidence_map": {
+    "beneficiary_personal_documents": {
+      "category_title": "受益人个人文件",
+      "description": "用于识别受益人及其资质的基本文件。",
+      "required_documents": [
+        {
+          "name": "受益人护照复印件 (所有页)",
+          "description": "包括个人信息页和所有签证/盖章页。"
+        },
+        {
+          "name": "受益人简历 (Curriculum Vitae)",
+          "description": "详细列出教育背景、工作经历和职责。"
+        },
+        {
+          "name": "结婚证复印件 (如适用)",
+          "description": "L-2 随行家属申请需要。"
+        },
+        {
+          "name": "子女出生证明复印件 (如适用)",
+          "description": "L-2 随行家属申请需要。"
+        }
+      ]
+    },
+    "proof_of_overseas_employment": {
+      "category_title": "海外一年工作经历证明",
+      "description": "证明受益人在递交申请前的三年内，在海外关联公司连续工作至少一年的证据。这是L-1A申请的关键要求。",
+      "required_documents": [
+        {
+          "name": "海外公司雇佣函/在职证明",
+          "description": "由海外公司出具，注明受益人的全职雇佣起始日期、职位、职责及薪资，需明确指出在递交申请前三年内至少连续工作一年。",
+          "priority": "high"
+        },
+        {
+          "name": "海外公司工资单/薪资记录",
+          "description": "涵盖受益人在海外工作至少一年的完整工资单，证明全职受薪。"
+        },
+        {
+          "name": "海外国家纳税记录",
+          "description": "证明受益人在海外公司受雇期间的纳税记录，通常为一年或以上。"
+        },
+        {
+          "name": "海外雇佣合同复印件",
+          "description": "如果适用，提供受益人与海外公司的雇佣合同。"
+        },
+        {
+          "name": "离职证明 (如已离职)",
+          "description": "如受益人已从海外公司离职，需提供离职证明，证明其在离职前符合一年工作要求。"
+        }
+      ]
+    },
+    "proof_of_executive_managerial_capacity": {
+      "category_title": "高管或经理职责证明",
+      "description": "证明受益人在海外公司和美国公司中均担任高管或经理职位，并对其职责进行详细描述。这是L-1A申请的核心。",
+      "required_documents": [
+        {
+          "name": "海外公司组织架构图",
+          "description": "显示受益人在海外公司的位置、直接下属、汇报关系，以及该职位在高层决策中的作用。需注明部门和员工人数。",
+          "priority": "high"
+        },
+        {
+          "name": "美国公司组织架构图",
+          "description": "显示受益人调任后在美国公司的位置、直接下属、汇报关系，以及该职位在高层决策中的作用。需注明部门和员工人数。"
+        },
+        {
+          "name": "海外职位职责描述函",
+          "description": "详细描述受益人在海外公司的日常职责、决策权、对员工的监督管理职责，以及在公司中的战略性作用。避免列举非管理性或执行性工作。",
+          "priority": "high"
+        },
+        {
+          "name": "美国职位职责描述函",
+          "description": "详细描述受益人来美后在公司的日常职责、决策权、对员工的监督管理职责，以及在公司中的战略性作用。重点强调其作为高管或经理的性质。",
+          "priority": "high"
+        },
+        {
+          "name": "受益人下属员工名单及职位",
+          "description": "列出受益人在海外和美国直接管理的员工姓名、职位和简要职责。"
+        },
+        {
+          "name": "公司内部邮件、备忘录、项目计划书等 (可选)",
+          "description": "辅助证明受益人参与高层决策或管理活动的证据。"
+        }
+      ]
+    },
+    "proof_of_qualifying_relationship": {
+      "category_title": "关联公司关系证明",
+      "description": "证明美国公司与海外公司之间存在合格的关联关系（母公司、子公司、分公司或联属公司）。",
+      "required_documents": [
+        {
+          "name": "公司章程/注册文件",
+          "description": "美国公司和海外公司的注册文件，证明成立和所有权。"
+        },
+        {
+          "name": "股权证明/股票证书",
+          "description": "证明两家公司股权结构的文件，显示控制权。"
+        },
+        {
+          "name": "年度报告/财务报表",
+          "description": "两家公司的年度报告或经审计的财务报表，以验证所有权和运营。"
+        },
+        {
+          "name": "董事会决议",
+          "description": "关于设立美国实体、股权投资或受益人调动到美国的董事会决议。"
+        }
+      ]
+    },
+    "petitioner_company_information": {
+      "category_title": "申请公司信息",
+      "description": "关于美国申请公司运营和财务状况的信息。",
+      "required_documents": [
+        {
+          "name": "美国公司联邦税号 (EIN) 证明",
+          "description": "IRS 出具的 EIN 确认函。"
+        },
+        {
+          "name": "美国公司营业执照",
+          "description": "美国公司所在州的营业执照。"
+        },
+        {
+          "name": "美国公司银行对账单",
+          "description": "证明美国公司的资金运营状况。"
+        },
+        {
+          "name": "美国公司办公室租赁合同",
+          "description": "证明美国公司拥有实际运营场所。"
+        },
+        {
+          "name": "美国公司员工花名册/工资单",
+          "description": "如已有员工，提供员工列表和工资记录。"
+        },
+        {
+          "name": "美国公司商业计划书 (Business Plan)",
+          "description": "尤其对于新成立的美国公司，需详细说明其业务范围、市场分析、人员配置、财务预测等。"
+        }
+      ]
+    },
+    "company_financials_and_operations": {
+      "category_title": "公司财务与运营状况",
+      "description": "证明美国和海外公司的财务稳定性和运营能力。",
+      "required_documents": [
+        {
+          "name": "海外公司财务报表/年度报告",
+          "description": "经审计或认证的海外公司最近三年的财务报表。"
+        },
+        {
+          "name": "美国公司财务报表/联邦税表",
+          "description": "如美国公司已运营，提供最近的财务报表或联邦税表。"
+        },
+        {
+          "name": "市场宣传材料 (公司手册、网站截图等)",
+          "description": "展示两家公司业务和市场地位的辅助材料。"
+        }
+      ]
+    }
+  },
+  "escalation_flags": [
+    {
+      "flag_id": "insufficient_overseas_experience",
+      "risk_level": "High",
+      "rule": "受益人海外工作经历不足一年，或无法提供充分证据证明连续性和全职性。",
+      "action_required": "立即与受益人沟通，核实是否有其他形式的雇佣证明；重新评估是否满足L-1A要求，或考虑其他签证类别。",
+      "keywords": [
+        "less than 1 year",
+        "part-time",
+        "insufficient payroll",
+        "employment gap"
+      ]
+    },
+    {
+      "flag_id": "ambiguous_job_duties",
+      "risk_level": "High",
+      "rule": "海外或美国职位描述侧重于技术、专业或日常执行性工作，而非高管或经理职责（如：缺乏下属管理、决策权不清晰、职能性职责过多）。",
+      "action_required": "要求受益人提供更详细的职责描述，强调管理或高管层面，并与公司协商修改，确保与L-1A要求一致。必要时提供额外证据，如项目管理文件或决策记录。",
+      "keywords": [
+        "technical role",
+        "individual contributor",
+        "lack of direct reports",
+        "operational focus"
+      ]
+    },
+    {
+      "flag_id": "weak_organizational_structure",
+      "risk_level": "Medium",
+      "rule": "组织架构图不清晰，受益人下属员工过少，或无明显汇报层级，尤其对于美国新设公司。",
+      "action_required": "与公司协商完善组织架构图，确保合理的人员配置和管理层级。对于新设公司，需在商业计划书中详细说明未来两年内的招聘计划和管理结构。",
+      "keywords": [
+        "flat structure",
+        "few subordinates",
+        "new office staffing"
+      ]
+    },
+    {
+      "flag_id": "unclear_qualifying_relationship",
+      "risk_level": "High",
+      "rule": "美国公司与海外公司之间的股权结构复杂，或无法明确证明合格的关联关系。",
+      "action_required": "要求提供额外的公司注册文件、股权证明、投资协议或法律意见书，以明确关联关系。",
+      "keywords": [
+        "complex ownership",
+        "insufficient control",
+        "no common parent"
+      ]
+    },
+    {
+      "flag_id": "financial_instability_us_entity",
+      "risk_level": "Medium",
+      "rule": "美国公司（特别是新设办公室）的财务状况薄弱，缺乏充足的资金来支持受益人的薪资和公司运营。",
+      "action_required": "要求提供更多资金证明（如银行存款证明、投资协议），并确保商业计划书中的财务预测合理且有资金支持。",
+      "keywords": [
+        "low capital",
+        "negative cash flow",
+        "unrealistic projections"
+      ]
+    }
+  ],
+  "cover_letter_template": {
+    "template_title": "L-1A 申请说明函模板",
+    "content": "致美国公民及移民服务局 (USCIS),\n\n事由：呈递 L-1A 跨国公司高管/经理非移民签证申请 – [受益人姓名]\n\n敬爱的移民官，\n\n我事务所谨代表 [美国申请公司名称]（以下简称“申请公司”）呈递 I-129 表格——非移民雇员申请，以申请 [受益人姓名]（以下简称“受益人”）L-1A 跨国公司高管/经理非移民签证。\n\n**背景介绍：**\n申请公司 [美国申请公司名称] 成立于 [成立日期]，是一家 [简要描述公司业务] 的公司。其母公司/关联公司 [海外公司名称] 是一家位于 [海外国家] 的知名企业，主营 [简要描述海外公司业务]。两家公司之间存在 [明确说明关联关系，如：母公司与全资子公司] 的合格关联关系。\n\n**受益人资质：**\n受益人 [受益人姓名] 在调任至美国之前，已在关联公司 [海外公司名称] 连续工作超过一年，担任 [海外职位名称] 职务，其职责性质属于高管/经理级别。具体而言，[详细阐述受益人海外职责，强调其决策权、人员管理或关键职能管理职责]。\n\n调任至美国后，受益人将在申请公司担任 [美国职位名称] 职务，其职责仍将是高管/经理性质。具体包括 [详细阐述受益人美国职责，强调其对公司战略方向、重要部门或关键职能的领导和管理，以及对下属员工的监督管理职责]。受益人将在 [美国职位名称] 职位上，负责 [例如：拓展美国市场，建立运营团队，管理财务与人力资源等]，对申请公司的发展至关重要。\n\n**支持文件：**\n为支持此 L-1A 申请，我们随函附上以下文件：\n1.  I-129 表格及附加表。\n2.  受益人个人文件，包括护照、简历等。\n3.  详细的海外工作经历证明，包括雇佣函、工资单、纳税记录等，以证明受益人符合海外一年工作经历的要求。\n4.  海外及美国公司的组织架构图，清晰展示受益人作为高管/经理的地位、职责及管理范围。\n5.  受益人在海外及美国职位的详细职责描述，明确其高管/经理性质。\n6.  美国公司与海外公司的关联关系证明，包括公司章程、股权证明等。\n7.  申请公司和海外公司的财务报表、商业计划书、办公室租赁合同等，以证明公司的合法运营及财务能力。\n\n**总结：**\n综上所述，[美国申请公司名称] 与 [海外公司名称] 之间存在合格的关联关系。受益人 [受益人姓名] 符合 L-1A 签证的所有条件，其在海外公司已履行高管/经理职责超过一年，并将继续在美国公司担任高管/经理职务。\n\n恳请贵局批准此 L-1A 申请。\n\n此致，\n\n[律师事务所名称]\n[律师姓名及职称]\n[联系方式]\n[日期]"
+  }
+}

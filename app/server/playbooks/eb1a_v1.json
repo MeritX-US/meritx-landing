@@ -9,6 +9,7 @@
   ],
   "audience": "law_firm_internal",
   "description": "EB-1A Extraordinary Ability intake playbook. Covers self-petitioning or employer-sponsored I-140, concurrent AOS, and consular processing.",
+  "cover_letter_template": "# PETITION FOR IMMIGRANT WORKER (FORM I-140)\n**CLASSIFICATION**: Alien of Extraordinary Ability (INA § 203(b)(1)(A))\n**PETITIONER**: {{PETITIONER_NAME}}\n**BENEFICIARY**: {{BENEFICIARY_NAME}}\n\n---\n\n## I. INTRODUCTION & STATEMENT OF ELIGIBILITY\nThis petition is submitted on behalf of **{{BENEFICIARY_NAME}}** in support of Form I-140 for classification as an Alien of Extraordinary Ability under INA § 203(b)(1)(A). The Beneficiary has sustained national and international acclaim as a leading authority in {{FIELD_OF_EXPERTISE}}.\n\n## II. EVIDENTIARY CRITERIA SATISFACTION (8 CFR § 204.5(h)(3))\nThe Beneficiary meets and exceeds at least 3 of the 10 regulatory criteria:\n\n{{EVIDENCE_SECTIONS_BREAKDOWN}}\n\n## III. FINAL MERITS DETERMINATION (Kazarian Framework)\n{{FINAL_MERITS_ARGUMENT}}\n\n## IV. CONCLUSION & RELIEF REQUESTED\nBased on the foregoing, the Beneficiary unequivocally qualifies for classification under INA § 203(b)(1)(A). We respectfully request approval of this petition.\n\nRespectfully submitted,\n\n**{{ATTORNEY_NAME}}, Esq.**\n{{LAW_FIRM_NAME}}",
   "scenarios": {
     "I140_Only": {
       "label": "I-140 Petition Only",

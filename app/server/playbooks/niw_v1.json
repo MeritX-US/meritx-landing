@@ -1,0 +1,166 @@
+{
+  "playbook_id": "niw_v1",
+  "version": "1.0.0",
+  "case_type": "eb2_niw",
+  "jurisdiction": "US-Federal",
+  "language_variants": [
+    "en",
+    "zh"
+  ],
+  "audience": "law_firm_internal",
+  "description": "EB-2 National Interest Waiver (NIW) intake and petition assembly playbook based on the Matter of Dhanasar 3-prong framework.",
+  "metadata": {
+    "title": "EB-2 NIW (Matter of Dhanasar)",
+    "description": "National Interest Waiver framework covering Substantial Merit, Well-Positioned, and Waiver Benefit."
+  },
+  "cover_letter_template": "# PETITION FOR IMMIGRANT WORKER (FORM I-140)\n**CLASSIFICATION**: EB-2 National Interest Waiver (INA § 203(b)(2)(B)(i))\n**PETITIONER / BENEFICIARY**: {{BENEFICIARY_NAME}} (Self-Petition)\n\n---\n\n## I. EXECUTIVE SUMMARY & THRESHOLD QUALIFICATION\nThis petition is submitted on behalf of **{{BENEFICIARY_NAME}}** seeking a National Interest Waiver under *Matter of Dhanasar*, 26 I&N Dec. 884 (AAO 2016).\n\nThe Beneficiary qualifies for the underlying EB-2 classification via {{ADVANCED_DEGREE_QUALIFICATION}}.\n\n## II. MATTER OF DHANASAR THREE-PRONG ANALYSIS\n\n### PRONG 1: Substantial Merit & National Importance\n{{DHANASAR_PRONG_1_ARGUMENT}}\n\n### PRONG 2: Beneficiary is Well-Positioned to Advance the Endeavor\n{{DHANASAR_PRONG_2_ARGUMENT}}\n\n### PRONG 3: On Balance, Waiving the Job Offer / Labor Cert is Beneficial to the US\n{{DHANASAR_PRONG_3_ARGUMENT}}\n\n## III. CONCLUSION\nThe Beneficiary has established full compliance with all three prongs of *Matter of Dhanasar*. Approval is respectfully requested.\n\nRespectfully submitted,\n\n**{{ATTORNEY_NAME}}, Esq.**\n{{LAW_FIRM_NAME}}",
+  "scenarios": {
+    "NIW_Standalone": {
+      "label": "Standalone EB-2 NIW Petition",
+      "resolve_when": {
+        "filing_strategy": "standalone_niw"
+      },
+      "forms": [
+        "I-140",
+        "ETA-9089_Part_F"
+      ],
+      "notes": "Self-petition allowed. No PERM labor certification required."
+    },
+    "Concurrent_NIW_AOS": {
+      "label": "Concurrent NIW I-140 & I-485",
+      "resolve_when": {
+        "beneficiary_location": "inside_us",
+        "priority_date_current": true
+      },
+      "forms": [
+        "I-140",
+        "I-485",
+        "I-765",
+        "I-131",
+        "I-693"
+      ],
+      "notes": "Allowed if priority date is current under Visa Bulletin Chart A."
+    }
+  },
+  "evidence_map": {
+    "advanced_degree_qualification": {
+      "label": "Threshold: Advanced Degree or Exceptional Ability",
+      "min_items": 1,
+      "weight": "critical",
+      "preferred": [
+        {
+          "id": "masters_or_phd_diploma",
+          "strength": "high"
+        },
+        {
+          "id": "bachelors_plus_5_years_experience",
+          "strength": "high"
+        },
+        {
+          "id": "exceptional_ability_3_criteria",
+          "strength": "medium"
+        }
+      ]
+    },
+    "dhanasar_prong_1": {
+      "label": "Prong 1: Substantial Merit & National Importance",
+      "min_items": 2,
+      "weight": "critical",
+      "preferred": [
+        {
+          "id": "government_grants_funding",
+          "strength": "high"
+        },
+        {
+          "id": "industry_impact_whitepaper",
+          "strength": "high"
+        },
+        {
+          "id": "media_coverage_national_tech",
+          "strength": "medium"
+        },
+        {
+          "id": "venture_capital_backing",
+          "strength": "high"
+        }
+      ]
+    },
+    "dhanasar_prong_2": {
+      "label": "Prong 2: Well Positioned to Advance the Endeavor",
+      "min_items": 3,
+      "weight": "critical",
+      "preferred": [
+        {
+          "id": "citation_record_google_scholar",
+          "strength": "high"
+        },
+        {
+          "id": "patents_issued_or_pending",
+          "strength": "high"
+        },
+        {
+          "id": "expert_recommendation_letters",
+          "strength": "high"
+        },
+        {
+          "id": "key_leadership_track_record",
+          "strength": "medium"
+        }
+      ]
+    },
+    "dhanasar_prong_3": {
+      "label": "Prong 3: On Balance Beneficial to Waive Labor Cert",
+      "min_items": 2,
+      "weight": "high",
+      "preferred": [
+        {
+          "id": "urgency_and_us_competitiveness_arg",
+          "strength": "high"
+        },
+        {
+          "id": "unique_skillset_non_replaceable",
+          "strength": "high"
+        },
+        {
+          "id": "us_job_creation_economic_impact",
+          "strength": "medium"
+        }
+      ]
+    }
+  },
+  "escalation_flags": [
+    {
+      "id": "no_advanced_degree_nor_experience",
+      "label": "Threshold Flag: Missing Advanced Degree / 5 Years Experience",
+      "severity": "critical",
+      "trigger": {
+        "fact": "advanced_degree_qualification",
+        "condition": "is_false"
+      },
+      "action": "block_petition_assembly",
+      "message": "The beneficiary does not possess a Master's/PhD degree nor a Bachelor's degree with 5 years of progressive experience, and fails to establish Exceptional Ability."
+    },
+    {
+      "id": "weak_national_importance_evidence",
+      "label": "Prong 1 Risk: Endeavor Broad National Impact Unsubstantiated",
+      "severity": "high",
+      "trigger": {
+        "evidence_category": "dhanasar_prong_1",
+        "condition": "count_lt_min_items"
+      },
+      "action": "attorney_review_required",
+      "message": "Prong 1 requires proof of broad national importance to the US (e.g. STEM initiative, healthcare, clean energy). Current evidence is purely local or commercial."
+    },
+    {
+      "id": "insufficient_independent_experts",
+      "label": "Prong 2 Risk: Fewer Than 3 Independent Recommendation Letters",
+      "severity": "high",
+      "trigger": {
+        "fact": "independent_expert_letters_count",
+        "condition": "is_false"
+      },
+      "action": "notify_attorney",
+      "message": "At least 3 independent expert recommendation letters (from non-collaborators) are recommended to establish Prong 2 credibility."
+    }
+  ]
+}
