@@ -1061,18 +1061,21 @@ function App() {
           const rect = range.getBoundingClientRect();
           
           setSelectionRect({
-            top: rect.top - 50,
-            left: rect.left + (rect.width / 2)
+            top: Math.max(10, rect.top - 50),
+            left: Math.max(170, Math.min(window.innerWidth - 180, rect.left + (rect.width / 2)))
           });
         }
       } else {
-        if (!showRefineInput) {
+        const active = document.activeElement;
+        const isInputActive = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.closest('.glass-card'));
+        if (!isInputActive) {
           setSelectionRect(null);
           setSelectedText('');
+          setShowRefineInput(false);
         }
       }
     }, 50);
-  }, [isEditing, isRefining, isRegenerating, isAnalyzingFiles, showRefineInput]);
+  }, [isEditing, isRefining, isRegenerating, isAnalyzingFiles]);
 
   useEffect(() => {
     document.addEventListener('selectionchange', handleSelection);
@@ -4202,7 +4205,7 @@ function App() {
               <Wand2 size={14} /> Refine Selection
             </button>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', width: '340px' }} onClick={e => e.stopPropagation()}>
               <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
                 <input 
                   autoFocus
@@ -4212,40 +4215,41 @@ function App() {
                   placeholder="e.g. Add IEEE senior membership certificate requirement..."
                   onKeyDown={(e) => { if (e.key === 'Enter') handleInlineRefine(); }}
                   style={{
-                    flex: 1, padding: '0.5rem 0.75rem', borderRadius: '6px',
-                    border: '1px solid var(--border-color)', background: 'var(--card-bg)',
+                    flex: 1, padding: '0.55rem 0.75rem', borderRadius: '8px',
+                    border: '1px solid rgba(168, 85, 247, 0.4)', background: '#0f172a',
                     color: 'var(--text-primary)', outline: 'none', fontSize: '0.85rem'
                   }}
                 />
                 <button 
                   onClick={handleInlineRefine}
                   style={{
-                    background: 'var(--primary)', border: 'none', borderRadius: '6px',
-                    padding: '0.5rem 0.8rem', color: 'white', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', fontSize: '0.85rem', fontWeight: 600
+                    background: 'linear-gradient(135deg, #a855f7, #6366f1)', border: 'none', borderRadius: '8px',
+                    padding: '0.55rem 0.9rem', color: 'white', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', fontSize: '0.85rem', fontWeight: 600,
+                    boxShadow: '0 2px 10px rgba(168, 85, 247, 0.3)'
                   }}
                 >
-                  <Send size={14} /> Send
+                  <Send size={14} /> Refine
                 </button>
                 <button 
-                  onClick={() => { setShowRefineInput(false); setSelectionRect(null); }}
+                  onClick={() => { setShowRefineInput(false); setSelectionRect(null); setSelectedText(''); }}
                   style={{
-                    background: 'none', border: '1px solid var(--border-color)', borderRadius: '6px',
-                    padding: '0.5rem', color: 'var(--text-secondary)', cursor: 'pointer',
+                    background: 'none', border: '1px solid var(--border-color)', borderRadius: '8px',
+                    padding: '0.55rem', color: 'var(--text-secondary)', cursor: 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'center'
                   }}
                 >
                   <X size={14} />
                 </button>
               </div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.78rem', color: '#c084fc', cursor: 'pointer', userSelect: 'none', fontWeight: 500 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: '#c084fc', cursor: 'pointer', userSelect: 'none', fontWeight: 600, background: 'rgba(168, 85, 247, 0.1)', padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
                 <input 
                   type="checkbox" 
                   checked={saveToPlaybook} 
                   onChange={(e) => setSaveToPlaybook(e.target.checked)} 
-                  style={{ cursor: 'pointer', accentColor: '#a855f7' }}
+                  style={{ cursor: 'pointer', accentColor: '#a855f7', width: '15px', height: '15px' }}
                 />
-                <span>💡 Save this refinement to Playbook as a permanent rule</span>
+                <span>💡 Save refinement as permanent Playbook rule</span>
               </label>
             </div>
           )}

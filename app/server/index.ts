@@ -886,41 +886,24 @@ app.post('/api/playbook/feedback-loop', async (req, res) => {
 
         const currentPlaybook = JSON.parse(fs.readFileSync(filePath, 'utf8'));
 
-        const systemInstruction = `You are an AI Immigration Expert and Playbook Optimizer.
-You analyze real-world case refinements, attorney corrections, and RFE (Request for Evidence) responses, and translate them into permanent, high-value rules for a Playbook JSON configuration.
+        const systemInstruction = `You are an AI Immigration Playbook Optimizer.
+Translate attorney feedback into JSON updates for:
+- 'evidence_map': missing docs/criteria
+- 'escalation_flags': risk flags
+- 'required_facts': intake facts
+Return JSON: { "summary": "1 sentence explanation", "suggested_changes": { modified keys only } }`;
 
-Given:
-1. Attorney Refine Instruction / Feedback: "${refinePrompt || ''}"
-2. RFE Text / Case Context Snippet: "${(rfeText || editedText || '').slice(0, 800)}"
-3. Existing Playbook configuration
-
-Your job:
-Determine what specific additions or updates should be made to the Playbook JSON to prevent similar gaps or improve petition quality for ALL future cases.
-You can update:
-- 'evidence_map': adding missing document requirements or adjusting criteria
-- 'escalation_flags': adding new warning/critical risk flags
-- 'required_facts': adding required facts to collect during intake
-
-Return ONLY a JSON object with:
-1. "summary": A 1-2 sentence human-readable explanation of what rules were added/refined and why.
-2. "suggested_changes": An object containing ONLY the modified top-level keys (e.g. { "evidence_map": ..., "escalation_flags": ... }).
-3. "updated_playbook": The complete updated Playbook object with the changes merged.
-
-Do not include markdown blocks, output raw JSON only.`;
-
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash', systemInstruction });
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash', systemInstruction, generationConfig: { responseMimeType: "application/json" } });
         const slimContext = {
             playbook_id: currentPlaybook.playbook_id,
             case_type: currentPlaybook.case_type,
-            evidence_map: currentPlaybook.evidence_map,
-            escalation_flags: currentPlaybook.escalation_flags,
-            required_facts: currentPlaybook.required_facts
+            evidence_categories: Object.keys(currentPlaybook.evidence_map || {}),
+            existing_flags: (currentPlaybook.escalation_flags || []).map((f: any) => f.id || f.label)
         };
 
-        const result = await model.generateContent(`Current Playbook Context:\n${JSON.stringify(slimContext, null, 2)}\n\nAttorney Feedback & Case Refinements:\nPrompt: ${refinePrompt}\nContext: ${JSON.stringify(caseFacts || {})}`);
+        const result = await model.generateContent(`Playbook: ${currentPlaybook.playbook_id}\nFeedback: ${refinePrompt}\nContext: ${JSON.stringify(slimContext)}`);
         const rawText = result.response.text();
-        const cleanJson = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
-        const parsed = JSON.parse(cleanJson);
+        const parsed = JSON.parse(rawText);
 
         const updatedPlaybook = {
             ...currentPlaybook,
