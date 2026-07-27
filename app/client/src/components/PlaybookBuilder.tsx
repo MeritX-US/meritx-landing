@@ -5,19 +5,243 @@ interface PlaybookBuilderProps {
   onBack?: () => void;
 }
 
+function JsonIDEEditor({ 
+  value, 
+  onChange,
+  isFullscreen = false,
+  onToggleFullscreen
+}: { 
+  value: string; 
+  onChange: (val: string) => void;
+  isFullscreen?: boolean;
+  onToggleFullscreen?: () => void;
+}) {
+  const [foldedLines, setFoldedLines] = useState<Set<number>>(new Set());
+  const [isEditing, setIsEditing] = useState(false);
+  const [rawText, setRawText] = useState(value);
+  const [isValid, setIsValid] = useState(true);
+
+  useEffect(() => {
+    try {
+      const parsed = JSON.parse(value);
+      const formatted = JSON.stringify(parsed, null, 2);
+      setRawText(formatted);
+    } catch {
+      setRawText(value);
+    }
+  }, [value]);
+
+  // Format / Beautify JSON
+  const handleBeautify = () => {
+    try {
+      const parsed = JSON.parse(rawText);
+      const formatted = JSON.stringify(parsed, null, 2);
+      setRawText(formatted);
+      onChange(formatted);
+      setIsValid(true);
+    } catch (err) {
+      setIsValid(false);
+    }
+  };
+
+  // Compute fold ranges for braces
+  const lines = rawText.split('\n');
+  const foldMap: Record<number, number> = {};
+  const stack: { line: number }[] = [];
+
+  lines.forEach((line, idx) => {
+    const trimmed = line.trim();
+    const opens = (trimmed.endsWith('{') || trimmed.endsWith('[') || trimmed.endsWith(':{') || trimmed.endsWith('=[')) && !trimmed.endsWith('}') && !trimmed.endsWith(']');
+    const closes = trimmed.startsWith('}') || trimmed.startsWith(']') || trimmed.startsWith('},') || trimmed.startsWith('],');
+
+    if (opens) {
+      stack.push({ line: idx });
+    } else if (closes && stack.length > 0) {
+      const top = stack.pop();
+      if (top) {
+        foldMap[top.line] = idx;
+      }
+    }
+  });
+
+  const toggleFold = (lineIdx: number) => {
+    const next = new Set(foldedLines);
+    if (next.has(lineIdx)) {
+      next.delete(lineIdx);
+    } else {
+      next.add(lineIdx);
+    }
+    setFoldedLines(next);
+  };
+
+  const hiddenLines = new Set<number>();
+  foldedLines.forEach(startLine => {
+    const endLine = foldMap[startLine];
+    if (endLine !== undefined) {
+      for (let i = startLine + 1; i <= endLine; i++) {
+        hiddenLines.add(i);
+      }
+    }
+  });
+
+  const editorContent = (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#090d16', borderRadius: isFullscreen ? '0' : '10px', border: isFullscreen ? 'none' : `1px solid ${isValid ? 'var(--border-color)' : '#ef4444'}`, overflow: 'hidden' }}>
+      {/* Editor Toolbar */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1.25rem', background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid var(--border-color)' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <button
+            onClick={() => setIsEditing(!isEditing)}
+            style={{ padding: '0.4rem 0.85rem', borderRadius: '6px', border: '1px solid var(--border-color)', background: isEditing ? '#3b82f6' : 'rgba(255,255,255,0.05)', color: 'white', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+          >
+            {isEditing ? '👁 View Folded IDE' : '✏️ Raw Edit Mode'}
+          </button>
+          
+          <button
+            onClick={handleBeautify}
+            style={{ padding: '0.4rem 0.85rem', borderRadius: '6px', border: '1px solid rgba(16, 185, 129, 0.3)', background: 'rgba(16, 185, 129, 0.15)', color: '#6ee7b7', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+            title="Auto-indent and format JSON code"
+          >
+            ✨ Format / Beautify JSON
+          </button>
+        </div>
+
+        {onToggleFullscreen && (
+          <button
+            onClick={onToggleFullscreen}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.9rem', background: isFullscreen ? '#3b82f6' : 'rgba(255, 255, 255, 0.05)', color: isFullscreen ? 'white' : 'var(--text-secondary)', border: '1px solid var(--border-color)', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem' }}
+          >
+            {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+            {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen Editor'}
+          </button>
+        )}
+      </div>
+
+      {!isValid && (
+        <div style={{ background: 'rgba(239,68,68,0.15)', color: '#fca5a5', padding: '0.5rem 1rem', fontSize: '0.82rem', borderBottom: '1px solid #ef4444', fontFamily: 'monospace' }}>
+          ⚠️ Invalid JSON Syntax. Format or fix line errors before saving.
+        </div>
+      )}
+
+      {/* Code Editor Body */}
+      {isEditing ? (
+        <textarea
+          value={rawText}
+          onChange={(e) => {
+            const val = e.target.value;
+            setRawText(val);
+            onChange(val);
+            try {
+              JSON.parse(val);
+              setIsValid(true);
+            } catch (err) {
+              setIsValid(false);
+            }
+          }}
+          spellCheck={false}
+          style={{
+            flexGrow: 1,
+            width: '100%',
+            padding: '1.25rem',
+            background: '#0f172a',
+            color: '#e2e8f0',
+            fontFamily: 'Consolas, Monaco, monospace',
+            fontSize: isFullscreen ? '15px' : '13.5px',
+            border: 'none',
+            outline: 'none',
+            lineHeight: 1.6,
+            whiteSpace: 'pre',
+            resize: 'none'
+          }}
+        />
+      ) : (
+        <div style={{ flexGrow: 1, overflowY: 'auto', padding: '1rem 0', fontFamily: 'Consolas, Monaco, monospace', fontSize: isFullscreen ? '15px' : '13.5px', lineHeight: 1.6 }}>
+          {lines.map((lineText, idx) => {
+            if (hiddenLines.has(idx)) return null;
+
+            const isFoldable = foldMap[idx] !== undefined;
+            const isFolded = foldedLines.has(idx);
+
+            let lineElement = <span style={{ color: '#cbd5e1' }}>{lineText}</span>;
+            const keyMatch = lineText.match(/^(\s*)("[\w_]+")(\s*:\s*)(.*)$/);
+
+            if (keyMatch) {
+              const [, indent, keyStr, colon, valStr] = keyMatch;
+              let valStyled = <span style={{ color: '#e2e8f0' }}>{valStr}</span>;
+
+              if (valStr.startsWith('"')) valStyled = <span style={{ color: '#10b981' }}>{valStr}</span>;
+              else if (valStr === 'true' || valStr === 'false' || !isNaN(Number(valStr.replace(',', '')))) valStyled = <span style={{ color: '#c084fc' }}>{valStr}</span>;
+
+              lineElement = (
+                <span>
+                  {indent}
+                  <span style={{ color: '#60a5fa', fontWeight: 600 }}>{keyStr}</span>
+                  <span style={{ color: '#94a3b8' }}>{colon}</span>
+                  {valStyled}
+                </span>
+              );
+            }
+
+            return (
+              <div 
+                key={idx} 
+                style={{ display: 'flex', alignItems: 'center', padding: '0 1.25rem', background: isFolded ? 'rgba(59, 130, 246, 0.08)' : 'transparent' }}
+              >
+                <span style={{ width: '40px', flexShrink: 0, color: '#475569', fontSize: '0.8rem', userSelect: 'none', textAlign: 'right', paddingRight: '0.85rem' }}>
+                  {idx + 1}
+                </span>
+
+                <span 
+                  onClick={() => isFoldable && toggleFold(idx)}
+                  style={{ width: '18px', flexShrink: 0, color: '#94a3b8', fontSize: '0.8rem', cursor: isFoldable ? 'pointer' : 'default', userSelect: 'none' }}
+                >
+                  {isFoldable ? (isFolded ? '▶' : '▼') : ''}
+                </span>
+
+                <div style={{ whiteSpace: 'pre', flexGrow: 1 }}>
+                  {lineElement}
+                  {isFolded && (
+                    <span 
+                      onClick={() => toggleFold(idx)}
+                      style={{ background: 'rgba(59, 130, 246, 0.25)', color: '#93c5fd', padding: '0.1rem 0.4rem', borderRadius: '4px', fontSize: '0.75rem', marginLeft: '0.5rem', cursor: 'pointer', border: '1px solid rgba(59, 130, 246, 0.4)' }}
+                    >
+                      {foldMap[idx] - idx} lines folded {"{...}"}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
+  if (isFullscreen) {
+    return (
+      <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 999999, background: '#070a12', display: 'flex', flexDirection: 'column', padding: '1rem 1.5rem', boxSizing: 'border-box' }}>
+        {editorContent}
+      </div>
+    );
+  }
+
+  return editorContent;
+}
+
 export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
   const [playbooks, setPlaybooks] = useState<{id: string, name: string, description: string}[]>([]);
   const [selectedPlaybook, setSelectedPlaybook] = useState<string>('');
   const [playbookData, setPlaybookData] = useState<any>(null);
   const [playbookContent, setPlaybookContent] = useState<string>('');
   
-  const [activeTab, setActiveTab] = useState<'general' | 'evidence' | 'risk' | 'templates' | 'advanced'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'scenarios' | 'facts' | 'evidence' | 'risk' | 'templates' | 'advanced'>('general');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isJsonValid, setIsJsonValid] = useState(true);
   const [copilotPrompt, setCopilotPrompt] = useState('');
   const [isCopilotLoading, setIsCopilotLoading] = useState(false);
+
+
 
   // Add Category Modal State
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -33,6 +257,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
 
   // Fullscreen & Variable Guide State
   const [isTemplateFullscreen, setIsTemplateFullscreen] = useState(false);
+  const [isJsonFullscreen, setIsJsonFullscreen] = useState(false);
   const [showVarGuide, setShowVarGuide] = useState(false);
 
   // Zen Mode Customization State
@@ -384,6 +609,50 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
     );
   }
 
+  if (isJsonFullscreen && playbookData) {
+    return (
+      <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 999999, background: '#070a12', display: 'flex', flexDirection: 'column', padding: '1.25rem 1.75rem', boxSizing: 'border-box' }}>
+        {/* Fullscreen JSON Zen Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <Code size={24} style={{ color: '#60a5fa' }} />
+            <h2 style={{ margin: 0, fontSize: '1.4rem', color: '#f8fafc' }}>
+              Advanced JSON Zen Editor — {playbookData.metadata?.title || playbookData.playbook_id}
+            </h2>
+          </div>
+          
+          <button
+            onClick={() => setIsJsonFullscreen(false)}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1.25rem', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.95rem' }}
+          >
+            <Minimize2 size={18} /> Exit Fullscreen
+          </button>
+        </div>
+
+        {/* Fullscreen JSON Editor Body */}
+        <div style={{ flexGrow: 1, overflow: 'hidden' }}>
+          <JsonIDEEditor
+            value={playbookContent}
+            isFullscreen={true}
+            onToggleFullscreen={() => setIsJsonFullscreen(false)}
+            onChange={(newVal) => {
+              setPlaybookContent(newVal);
+              try {
+                const parsed = JSON.parse(newVal);
+                setIsJsonValid(true);
+                setError(null);
+                setPlaybookData(parsed);
+              } catch (err) {
+                setIsJsonValid(false);
+                setError('Invalid JSON syntax formatting.');
+              }
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
 
@@ -541,9 +810,11 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
           <div className="glass-card" style={{ padding: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
             {[
               { id: 'general', icon: <Settings size={16} />, label: 'General Info' },
+              { id: 'scenarios', icon: <FileText size={16} />, label: 'Filing Scenarios' },
+              { id: 'facts', icon: <HelpCircle size={16} />, label: 'Required Facts' },
               { id: 'evidence', icon: <ShieldCheck size={16} />, label: 'Evidence Rules' },
               { id: 'risk', icon: <AlertCircle size={16} />, label: 'Risk Flags' },
-              { id: 'templates', icon: <FileText size={16} />, label: 'Templates' },
+              { id: 'templates', icon: <FileText size={16} />, label: 'Cover Letter' },
               { id: 'advanced', icon: <Code size={16} />, label: 'Advanced JSON' },
             ].map(tab => (
               <button
@@ -603,6 +874,105 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                     style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-primary)', resize: 'vertical' }} 
                   />
                 </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'scenarios' && playbookData && (
+            <div style={{ padding: '2rem', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                <div>
+                  <h2 style={{ margin: 0 }}>Filing Scenarios & Required USCIS Forms</h2>
+                  <p style={{ margin: '0.25rem 0 0 0', color: 'var(--text-secondary)', fontSize: '0.88rem' }}>
+                    Configure filing pathways (e.g. I-140 Petition Only, Concurrent AOS) and required form packages.
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                {Object.entries(playbookData.scenarios || {}).map(([scenKey, scenVal]: [string, any]) => (
+                  <div key={scenKey} className="glass-card" style={{ padding: '1.25rem', border: '1px solid var(--border-color)', borderRadius: '10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '0.75rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ fontWeight: 'bold', color: '#60a5fa', fontSize: '1rem' }}>{scenVal.label || scenKey}</span>
+                        <span style={{ fontSize: '0.78rem', background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary)', padding: '0.15rem 0.5rem', borderRadius: '4px', fontFamily: 'monospace' }}>Key: {scenKey}</span>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>Scenario Display Label</label>
+                        <input
+                          type="text"
+                          value={scenVal.label || ''}
+                          onChange={(e) => updateData(['scenarios', scenKey, 'label'], e.target.value)}
+                          style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid var(--border-color)', background: '#0f172a', color: '#e2e8f0', fontSize: '0.88rem' }}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>Filing Notes / Strategy</label>
+                        <input
+                          type="text"
+                          value={scenVal.notes || ''}
+                          onChange={(e) => updateData(['scenarios', scenKey, 'notes'], e.target.value)}
+                          style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid var(--border-color)', background: '#0f172a', color: '#e2e8f0', fontSize: '0.88rem' }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: '1rem' }}>
+                      <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>Required Forms (comma-separated)</label>
+                      <input
+                        type="text"
+                        value={Array.isArray(scenVal.forms) ? scenVal.forms.join(', ') : ''}
+                        onChange={(e) => {
+                          const formsArr = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+                          updateData(['scenarios', scenKey, 'forms'], formsArr);
+                        }}
+                        placeholder="e.g. I-140, I-485, I-765, I-131"
+                        style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid var(--border-color)', background: '#0f172a', color: '#6ee7b7', fontFamily: 'monospace', fontSize: '0.88rem' }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'facts' && playbookData && (
+            <div style={{ padding: '2rem', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                <div>
+                  <h2 style={{ margin: 0 }}>Required Intake Facts</h2>
+                  <p style={{ margin: '0.25rem 0 0 0', color: 'var(--text-secondary)', fontSize: '0.88rem' }}>
+                    Define the fact fields requested during case intake to satisfy criteria rules.
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem' }}>
+                {(playbookData.required_facts || []).map((fact: any, fIdx: number) => (
+                  <div key={fact.id || fIdx} className="glass-card" style={{ padding: '1rem', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
+                    <div style={{ fontWeight: 'bold', color: '#c084fc', marginBottom: '0.5rem', fontSize: '0.92rem' }}>
+                      {fact.label || fact.id}
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontFamily: 'monospace' }}>
+                      ID: {fact.id} | Type: {fact.type || 'string'}
+                    </div>
+                    <input
+                      type="text"
+                      value={fact.label || ''}
+                      onChange={(e) => {
+                        const updated = [...(playbookData.required_facts || [])];
+                        updated[fIdx] = { ...updated[fIdx], label: e.target.value };
+                        updateData(['required_facts'], updated);
+                      }}
+                      placeholder="Fact prompt label..."
+                      style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border-color)', background: '#0f172a', color: '#e2e8f0', fontSize: '0.84rem' }}
+                    />
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -966,38 +1336,21 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
 
           {activeTab === 'advanced' && (
             <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '1rem' }}>
-              <div style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.3)', color: '#f59e0b', padding: '0.75rem', borderRadius: '6px', marginBottom: '1rem', fontSize: '0.9rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                <AlertTriangle size={16} />
-                <strong>Advanced Mode:</strong> Direct JSON editing. Invalid JSON will prevent saving and tab switching.
-              </div>
-              <textarea
+              <JsonIDEEditor
                 value={playbookContent}
-                onChange={(e) => {
-                  setPlaybookContent(e.target.value);
+                isFullscreen={false}
+                onToggleFullscreen={() => setIsJsonFullscreen(true)}
+                onChange={(newVal) => {
+                  setPlaybookContent(newVal);
                   try {
-                    JSON.parse(e.target.value);
+                    const parsed = JSON.parse(newVal);
                     setIsJsonValid(true);
                     setError(null);
+                    setPlaybookData(parsed);
                   } catch (err) {
                     setIsJsonValid(false);
-                    setError('Invalid JSON formatting in Advanced Tab.');
+                    setError('Invalid JSON syntax formatting.');
                   }
-                }}
-                spellCheck={false}
-                style={{
-                  flexGrow: 1,
-                  width: '100%',
-                  padding: '1rem',
-                  background: '#0f172a',
-                  color: '#e2e8f0',
-                  fontFamily: 'monospace',
-                  fontSize: '14px',
-                  border: `1px solid ${!isJsonValid ? '#ef4444' : 'var(--border-color)'}`,
-                  borderRadius: '6px',
-                  resize: 'none',
-                  outline: 'none',
-                  lineHeight: 1.5,
-                  whiteSpace: 'pre'
                 }}
               />
             </div>
