@@ -415,11 +415,16 @@ function App() {
   const [records, setRecords] = useState<any[]>([]);
   const [view, setView] = useState<'home' | 'history' | 'results' | 'questionnaire' | 'playbook-builder'>('history');
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
-  const [activeResultTab, setActiveResultTab] = useState<'questionnaire' | 'package' | 'completeness' | 'evidence' | 'transcript' | 'assembly'>('package');
+  const [activeResultTab, setActiveResultTab] = useState<'questionnaire' | 'package' | 'completeness' | 'evidence' | 'transcript' | 'assembly' | 'autofill'>('package');
   const [selectedAssemblyDocId, setSelectedAssemblyDocId] = useState<string>('cover-sheet');
   const [isAssembling, setIsAssembling] = useState(false);
   const [showAssemblySuccessModal, setShowAssemblySuccessModal] = useState(false);
   const [assemblyCheckedItems, setAssemblyCheckedItems] = useState<string[]>([]);
+
+  const [autofillData, setAutofillData] = useState<any>(null);
+  const [activeAutofillForm, setActiveAutofillForm] = useState<string>('I-140');
+  const [formCustomOverrides, setFormCustomOverrides] = useState<Record<string, string>>({});
+  const [isLoadingAutofill, setIsLoadingAutofill] = useState(false);
 
   const [clientPhone, setClientPhone] = useState('');
   const [isCallingOut, setIsCallingOut] = useState(false);
@@ -536,6 +541,36 @@ function App() {
       console.error('Failed to fetch records:', err);
     }
   };
+
+  const fetchAutofillData = async (recId?: string, overrides?: Record<string, string>) => {
+    const targetId = recId || selectedRecordId;
+    if (!targetId) return;
+    setIsLoadingAutofill(true);
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/intake/autofill-forms`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recordId: targetId,
+          customOverrides: overrides || formCustomOverrides
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAutofillData(data);
+      }
+    } catch (err: any) {
+      console.error('Failed to fetch autofill forms:', err);
+    } finally {
+      setIsLoadingAutofill(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedRecordId && activeResultTab === 'autofill') {
+      fetchAutofillData(selectedRecordId);
+    }
+  }, [selectedRecordId, activeResultTab]);
 
   const deleteRecord = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation(); // Don't trigger "view record"
@@ -2034,6 +2069,30 @@ function App() {
                     <CheckCircle size={16} />
                     <span className="hide-mobile">Petition Package</span>
                     <span className="show-mobile-inline">Package</span>
+                  </button>
+
+                  <button
+                    className={`btn-tab ${activeResultTab === 'autofill' ? 'active' : ''}`}
+                    onClick={() => { setActiveResultTab('autofill'); fetchAutofillData(); }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      padding: '0.5rem 1rem',
+                      background: activeResultTab === 'autofill' ? 'rgba(168, 85, 247, 0.2)' : 'none',
+                      border: activeResultTab === 'autofill' ? '1px solid #a855f7' : '1px solid transparent',
+                      color: activeResultTab === 'autofill' ? '#c084fc' : 'var(--text-secondary)',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontSize: '0.9rem',
+                      fontWeight: 600,
+                      transition: 'all 0.2s',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    <FileText size={16} />
+                    <span className="hide-mobile">📋 Auto Form Filling</span>
+                    <span className="show-mobile-inline">Form Fill</span>
                   </button>
                 </div>
               </div>
@@ -3623,6 +3682,169 @@ function App() {
                     </div>
                   </div>
                 </>
+              )}
+
+              {activeResultTab === 'autofill' && (
+                <div style={{ padding: '0.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%' }}>
+                  {/* Top Header Card */}
+                  <div className="glass-card" style={{ padding: '1.5rem', borderRadius: '12px', background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 27, 75, 0.8))', border: '1px solid rgba(168, 85, 247, 0.3)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.4rem' }}>
+                          <FileText size={22} style={{ color: '#c084fc' }} />
+                          <h2 style={{ margin: 0, fontSize: '1.3rem', color: '#f8fafc' }}>Automatic Form Filling & Review Hub (自动填表复核)</h2>
+                        </div>
+                        <p style={{ margin: 0, fontSize: '0.85rem', color: '#94a3b8' }}>
+                          Structured facts, questionnaire answers, and OCR documents auto-mapped to official USCIS PDF Forms. <strong>Attorney retains 100% review & override authority.</strong>
+                        </p>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                        <button
+                          onClick={() => fetchAutofillData(undefined, formCustomOverrides)}
+                          style={{
+                            background: 'rgba(255, 255, 255, 0.05)', border: '1px solid var(--border-color)',
+                            borderRadius: '8px', padding: '0.55rem 1rem', color: 'var(--text-primary)',
+                            fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem'
+                          }}
+                        >
+                          <RefreshCw size={14} className={isLoadingAutofill ? 'spin' : ''} /> Refresh Mapping
+                        </button>
+                        <button
+                          onClick={() => {
+                            showNotification('Sign-Off Approved', 'Form data verified by attorney. Ready for PDF compilation.', 'success');
+                          }}
+                          style={{
+                            background: 'linear-gradient(135deg, #a855f7, #6366f1)', border: 'none',
+                            borderRadius: '8px', padding: '0.55rem 1.2rem', color: 'white',
+                            fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem',
+                            boxShadow: '0 4px 15px rgba(168, 85, 247, 0.4)'
+                          }}
+                        >
+                          <CheckCircle size={15} /> Attorney Sign-Off & Approve
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Summary Metrics Row */}
+                    {autofillData && autofillData.metrics && (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginTop: '1.25rem', paddingTop: '1.25rem', borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                        <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '0.8rem 1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                          <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Total Form Fields</div>
+                          <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#f8fafc' }}>{autofillData.metrics.totalFields}</div>
+                        </div>
+                        <div style={{ background: 'rgba(34, 197, 94, 0.1)', padding: '0.8rem 1rem', borderRadius: '8px', border: '1px solid rgba(34, 197, 94, 0.3)' }}>
+                          <div style={{ fontSize: '0.75rem', color: '#4ade80' }}>✨ Auto-Filled by AI</div>
+                          <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#4ade80' }}>{autofillData.metrics.autoFilledCount}</div>
+                        </div>
+                        <div style={{ background: 'rgba(234, 179, 8, 0.1)', padding: '0.8rem 1rem', borderRadius: '8px', border: '1px solid rgba(234, 179, 8, 0.3)' }}>
+                          <div style={{ fontSize: '0.75rem', color: '#fde047' }}>⚠️ Needs Attorney Review</div>
+                          <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#fde047' }}>{autofillData.metrics.needsReviewCount}</div>
+                        </div>
+                        <div style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '0.8rem 1rem', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+                          <div style={{ fontSize: '0.75rem', color: '#f87171' }}>❗ Missing / Action Needed</div>
+                          <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#f87171' }}>{autofillData.metrics.missingCount}</div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Form Tabs & Field Mapping Table */}
+                  {autofillData && autofillData.formsData ? (
+                    <div className="glass-card" style={{ padding: '1.5rem', borderRadius: '12px' }}>
+                      <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem', marginBottom: '1.25rem', overflowX: 'auto' }}>
+                        {Object.keys(autofillData.formsData).map(formKey => (
+                          <button
+                            key={formKey}
+                            onClick={() => setActiveAutofillForm(formKey)}
+                            style={{
+                              padding: '0.5rem 1.2rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600,
+                              background: activeAutofillForm === formKey ? 'rgba(168, 85, 247, 0.2)' : 'transparent',
+                              border: activeAutofillForm === formKey ? '1px solid #a855f7' : '1px solid transparent',
+                              color: activeAutofillForm === formKey ? '#c084fc' : 'var(--text-secondary)'
+                            }}
+                          >
+                            {formKey} Form
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Active Form Details */}
+                      {autofillData.formsData[activeAutofillForm] && (
+                        <div>
+                          <div style={{ fontSize: '1rem', fontWeight: 600, color: '#f8fafc', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>{autofillData.formsData[activeAutofillForm].formTitle}</span>
+                            <span style={{ fontSize: '0.8rem', color: '#c084fc', background: 'rgba(168, 85, 247, 0.1)', padding: '0.3rem 0.6rem', borderRadius: '6px', border: '1px solid rgba(168, 85, 247, 0.3)' }}>
+                              Official USCIS PDF Field Mapping
+                            </span>
+                          </div>
+
+                          <div style={{ overflowX: 'auto' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                              <thead>
+                                <tr style={{ background: 'rgba(255, 255, 255, 0.04)', textAlign: 'left', color: '#94a3b8' }}>
+                                  <th style={{ padding: '0.75rem', borderBottom: '1px solid var(--border-color)', width: '150px' }}>USCIS Form Location</th>
+                                  <th style={{ padding: '0.75rem', borderBottom: '1px solid var(--border-color)', width: '220px' }}>Field Description</th>
+                                  <th style={{ padding: '0.75rem', borderBottom: '1px solid var(--border-color)' }}>Auto-Filled Value (Attorney Editable)</th>
+                                  <th style={{ padding: '0.75rem', borderBottom: '1px solid var(--border-color)', width: '180px' }}>Source Provenance</th>
+                                  <th style={{ padding: '0.75rem', borderBottom: '1px solid var(--border-color)', width: '120px' }}>Status</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {autofillData.formsData[activeAutofillForm].fields.map((f: any, idx: number) => {
+                                  const currentValue = formCustomOverrides[f.fieldId] !== undefined ? formCustomOverrides[f.fieldId] : f.value;
+                                  return (
+                                    <tr key={idx} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                      <td style={{ padding: '0.75rem', fontWeight: 600, color: '#a855f7' }}>{f.part}</td>
+                                      <td style={{ padding: '0.75rem', color: '#f8fafc' }}>{f.name}</td>
+                                      <td style={{ padding: '0.75rem' }}>
+                                        <input 
+                                          type="text"
+                                          value={currentValue}
+                                          onChange={(e) => {
+                                            const newOverrides = { ...formCustomOverrides, [f.fieldId]: e.target.value };
+                                            setFormCustomOverrides(newOverrides);
+                                            fetchAutofillData(undefined, newOverrides);
+                                          }}
+                                          style={{
+                                            width: '100%', padding: '0.4rem 0.6rem', borderRadius: '6px',
+                                            background: '#0f172a', border: '1px solid rgba(168, 85, 247, 0.3)',
+                                            color: '#f8fafc', fontSize: '0.85rem', outline: 'none'
+                                          }}
+                                        />
+                                      </td>
+                                      <td style={{ padding: '0.75rem' }}>
+                                        <span style={{ fontSize: '0.75rem', background: 'rgba(255, 255, 255, 0.06)', padding: '0.2rem 0.5rem', borderRadius: '4px', color: '#94a3b8' }}>
+                                          {f.source}
+                                        </span>
+                                      </td>
+                                      <td style={{ padding: '0.75rem' }}>
+                                        {f.confidence === 'verified' ? (
+                                          <span style={{ color: '#c084fc', fontSize: '0.75rem', fontWeight: 600 }}>✍️ Verified</span>
+                                        ) : f.confidence === 'high' ? (
+                                          <span style={{ color: '#4ade80', fontSize: '0.75rem', fontWeight: 600 }}>✨ Auto (High)</span>
+                                        ) : f.confidence === 'medium' ? (
+                                          <span style={{ color: '#fde047', fontSize: '0.75rem', fontWeight: 600 }}>⚠️ Check</span>
+                                        ) : (
+                                          <span style={{ color: '#f87171', fontSize: '0.75rem', fontWeight: 600 }}>❗ Missing</span>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="glass-card" style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
+                      <RefreshCw size={24} className="spin" style={{ marginBottom: '0.5rem' }} />
+                      <div>Loading Form Autofill & Field Mapping...</div>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           );

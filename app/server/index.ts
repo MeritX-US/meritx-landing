@@ -924,9 +924,142 @@ Return JSON: { "summary": "1 sentence explanation", "suggested_changes": { modif
     }
 });
 
-/**
- * CONSULTATION RECORDS ENDPOINTS
- */
+app.post('/api/intake/autofill-forms', (req, res) => {
+    try {
+        const { recordId, customOverrides } = req.body;
+        const records = getRecords();
+        const record = records.find(r => r.id === recordId);
+        
+        if (!record) {
+            return res.status(404).json({ error: 'Record not found' });
+        }
+
+        const facts = record.analysis?.facts || {};
+        const answers = record.answers || {};
+        const caseType = record.caseType || 'eb1a';
+
+        const getValue = (keys: string[], defaultVal: string = '') => {
+            for (const k of keys) {
+                if (facts[k]?.value) return { value: facts[k].value, source: facts[k].source || 'Extracted Fact', confidence: facts[k].confidence || 'high' };
+                if (answers[k]) return { value: answers[k], source: 'Questionnaire Answer', confidence: 'high' };
+            }
+            return { value: defaultVal, source: 'Missing', confidence: 'low' };
+        };
+
+        const familyName = getValue(['beneficiary_family_name', 'family_name', 'last_name', 'applicant_name']);
+        const givenName = getValue(['beneficiary_given_name', 'given_name', 'first_name']);
+        const dob = getValue(['beneficiary_dob', 'dob', 'date_of_birth']);
+        const nationality = getValue(['beneficiary_nationality', 'nationality', 'country_of_citizenship'], 'China');
+        const aNumber = getValue(['alien_registration_number', 'a_number', 'u_s_social_security_number']);
+        const address = getValue(['us_address', 'address', 'current_address'], 'N/A');
+        const employer = getValue(['petitioner_name', 'company_name', 'employer_name'], 'Self-Petitioned');
+        const jobTitle = getValue(['proposed_employment_title', 'job_title', 'position'], 'Senior Researcher / Executive');
+        const passportNo = getValue(['passport_number', 'passport_no']);
+        const i94No = getValue(['i94_number', 'i94_no']);
+        const status = getValue(['current_nonimmigrant_status', 'visa_status'], 'H-1B Specialty Occupation');
+
+        const formsData: Record<string, any> = {
+            'I-140': {
+                formTitle: 'Immigrant Petition for Alien Workers (Form I-140)',
+                fields: [
+                    { part: 'Part 1, Line 1a', name: 'Family Name (Last Name)', ...familyName, fieldId: 'Pt1Line1a_FamilyName' },
+                    { part: 'Part 1, Line 1b', name: 'Given Name (First Name)', ...givenName, fieldId: 'Pt1Line1b_GivenName' },
+                    { part: 'Part 1, Line 3', name: 'Company or Organization Name', ...employer, fieldId: 'Pt1Line3_CompanyName' },
+                    { part: 'Part 1, Line 4', name: 'IRS Employer Identification No.', value: 'XX-XXXXXXX', source: 'Default Template', confidence: 'medium', fieldId: 'Pt1Line4_EIN' },
+                    { part: 'Part 1, Line 6', name: 'Alien Registration Number (A-Number)', ...aNumber, fieldId: 'Pt1Line6_ANumber' },
+                    { part: 'Part 3, Line 1', name: 'Petition Category Requested', value: caseType === 'eb1a' ? 'EB-1A Extraordinary Ability (204.5(h))' : caseType === 'eb2_niw' ? 'EB-2 National Interest Waiver (204.5(k))' : 'L-1A Multinational Executive', source: 'Playbook Scenario', confidence: 'high', fieldId: 'Pt3Line1_Category' },
+                    { part: 'Part 3, Line 4', name: 'Date of Birth', ...dob, fieldId: 'Pt3Line4_DOB' },
+                    { part: 'Part 3, Line 5', name: 'Country of Citizenship/Nationality', ...nationality, fieldId: 'Pt3Line5_Nationality' },
+                    { part: 'Part 3, Line 7', name: 'Passport Number', ...passportNo, fieldId: 'Pt3Line7_Passport' },
+                    { part: 'Part 4, Line 1', name: 'Proposed Job Title', ...jobTitle, fieldId: 'Pt4Line1_JobTitle' },
+                    { part: 'Part 4, Line 2', name: 'U.S. Physical Address', ...address, fieldId: 'Pt4Line2_Address' }
+                ]
+            },
+            'I-485': {
+                formTitle: 'Application to Register Permanent Residence or Adjust Status (Form I-485)',
+                fields: [
+                    { part: 'Part 1, Line 1a', name: 'Family Name (Last Name)', ...familyName, fieldId: 'I485_FamilyName' },
+                    { part: 'Part 1, Line 1b', name: 'Given Name (First Name)', ...givenName, fieldId: 'I485_GivenName' },
+                    { part: 'Part 1, Line 4', name: 'Date of Birth (mm/dd/yyyy)', ...dob, fieldId: 'I485_DOB' },
+                    { part: 'Part 1, Line 6', name: 'Country of Citizenship / Nationality', ...nationality, fieldId: 'I485_Nationality' },
+                    { part: 'Part 1, Line 8', name: 'Alien Registration Number (A-Number)', ...aNumber, fieldId: 'I485_ANumber' },
+                    { part: 'Part 1, Line 11', name: 'Current Nonimmigrant Status', ...status, fieldId: 'I485_Status' },
+                    { part: 'Part 1, Line 12', name: 'Form I-94 Arrival-Departure Record No.', ...i94No, fieldId: 'I485_I94' },
+                    { part: 'Part 1, Line 14', name: 'Current Physical Address', ...address, fieldId: 'I485_Address' }
+                ]
+            },
+            'G-28': {
+                formTitle: 'Notice of Entry of Appearance as Attorney or Accredited Representative (Form G-28)',
+                fields: [
+                    { part: 'Part 1, Line 1a', name: 'Attorney Family Name', value: 'Miao', source: 'Law Firm Setting', confidence: 'high', fieldId: 'G28_AttyLastName' },
+                    { part: 'Part 1, Line 1b', name: 'Attorney Given Name', value: 'Attorney Miao', source: 'Law Firm Setting', confidence: 'high', fieldId: 'G28_AttyFirstName' },
+                    { part: 'Part 1, Line 2', name: 'Name of Law Firm', value: 'Miao & Associates, P.C.', source: 'Law Firm Setting', confidence: 'high', fieldId: 'G28_LawFirm' },
+                    { part: 'Part 2, Line 1a', name: 'Client Family Name', ...familyName, fieldId: 'G28_ClientLastName' },
+                    { part: 'Part 2, Line 1b', name: 'Client Given Name', ...givenName, fieldId: 'G28_ClientFirstName' },
+                    { part: 'Part 2, Line 4', name: 'Client Street Address', ...address, fieldId: 'G28_ClientAddress' }
+                ]
+            },
+            'I-765': {
+                formTitle: 'Application for Employment Authorization (Form I-765)',
+                fields: [
+                    { part: 'Part 1, Line 1', name: 'Reason for Applying', value: 'Initial permission to accept employment (c)(9)', source: 'Filing Scenario', confidence: 'high', fieldId: 'I765_Reason' },
+                    { part: 'Part 2, Line 1a', name: 'Family Name', ...familyName, fieldId: 'I765_FamilyName' },
+                    { part: 'Part 2, Line 1b', name: 'Given Name', ...givenName, fieldId: 'I765_GivenName' },
+                    { part: 'Part 2, Line 18', name: 'Country of Citizenship', ...nationality, fieldId: 'I765_Nationality' },
+                    { part: 'Part 2, Line 27', name: 'Eligibility Category', value: '(c)(9) Pending I-485 Adjustment', source: 'Scenario Resolution', confidence: 'high', fieldId: 'I765_Category' }
+                ]
+            }
+        };
+
+        if (customOverrides && typeof customOverrides === 'object') {
+            Object.keys(formsData).forEach(formKey => {
+                formsData[formKey].fields.forEach((field: any) => {
+                    if (customOverrides[field.fieldId] !== undefined) {
+                        field.value = customOverrides[field.fieldId];
+                        field.source = 'Attorney Override (Verified)';
+                        field.confidence = 'verified';
+                    }
+                });
+            });
+        }
+
+        let totalFields = 0;
+        let autoFilledCount = 0;
+        let needsReviewCount = 0;
+        let missingCount = 0;
+
+        Object.values(formsData).forEach(f => {
+            f.fields.forEach((field: any) => {
+                totalFields++;
+                if (!field.value || field.value === 'N/A' || field.source === 'Missing') {
+                    missingCount++;
+                } else if (field.confidence === 'low' || field.confidence === 'medium') {
+                    needsReviewCount++;
+                } else {
+                    autoFilledCount++;
+                }
+            });
+        });
+
+        res.json({
+            success: true,
+            recordId,
+            caseType,
+            metrics: {
+                totalFields,
+                autoFilledCount,
+                needsReviewCount,
+                missingCount,
+                completionRate: Math.round(((autoFilledCount) / (totalFields || 1)) * 100)
+            },
+            formsData
+        });
+    } catch (err: any) {
+        console.error("Autofill Forms Error:", err);
+        res.status(500).json({ error: "Failed to autofill forms", details: err?.message });
+    }
+});
+
 
 app.get('/api/records', (req, res) => {
     res.json(getRecords());
