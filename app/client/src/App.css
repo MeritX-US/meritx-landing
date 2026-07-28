@@ -1201,23 +1201,31 @@ audio::-webkit-media-controls-time-remaining-display {
 /* Tab navigation container */
 .results-tab-bar {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
   gap: 0.5rem;
   width: 100%;
-  padding-bottom: 0.75rem;
+  max-width: 100%;
+  padding-bottom: 0.5rem;
   margin-bottom: -1px;
+  scrollbar-width: thin;
+}
+
+.results-tab-bar .btn-tab {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 @media (max-width: 768px) {
   .results-tab-bar {
-    padding-bottom: 0 !important;
+    padding-bottom: 0.25rem !important;
     margin-bottom: 0 !important;
   }
   .results-tab-bar .btn-tab {
-    flex: 1 1 calc(33.33% - 0.5rem) !important;
+    flex-shrink: 0 !important;
     justify-content: center !important;
-    font-size: 0.75rem !important;
-    padding: 0.45rem 0.6rem !important;
+    font-size: 0.8rem !important;
+    padding: 0.45rem 0.75rem !important;
   }
 }
 

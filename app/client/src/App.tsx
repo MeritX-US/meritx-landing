@@ -2087,11 +2087,12 @@ function App() {
                       fontSize: '0.9rem',
                       fontWeight: 600,
                       transition: 'all 0.2s',
-                      whiteSpace: 'nowrap'
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0
                     }}
                   >
                     <FileText size={16} />
-                    <span className="hide-mobile">📋 Auto Form Filling</span>
+                    <span className="hide-mobile">Auto Form Filling</span>
                     <span className="show-mobile-inline">Form Fill</span>
                   </button>
                 </div>
