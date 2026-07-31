@@ -4,7 +4,7 @@
   "description": "Backend proxy for AssemblyAI",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc && node -e \"const fs = require('fs'); fs.cpSync('playbooks', 'dist/playbooks', { recursive: true });\"",
+    "build": "tsc && node -e \"const fs = require('fs'); fs.cpSync('playbooks', 'dist/playbooks', { recursive: true }); fs.cpSync('uscis-forms', 'dist/uscis-forms', { recursive: true });\"",
     "start": "node dist/index.js",
     "dev": "nodemon --ignore playbooks/ --ignore records.json --ignore uploads/ index.ts"
   },

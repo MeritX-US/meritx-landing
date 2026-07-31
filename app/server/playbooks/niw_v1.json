@@ -43,6 +43,134 @@
       "notes": "Allowed if priority date is current under Visa Bulletin Chart A."
     }
   },
+  "required_facts": [
+    {
+      "id": "filing_strategy",
+      "label": "Filing strategy (standalone_niw vs concurrent with I-485)",
+      "type": "string",
+      "required": true,
+      "priority": 1,
+      "applies_to": [
+        "NIW_Standalone",
+        "Concurrent_NIW_AOS"
+      ]
+    },
+    {
+      "id": "beneficiary_location",
+      "label": "Is the beneficiary currently inside or outside the United States?",
+      "type": "string",
+      "required": true,
+      "priority": 1,
+      "applies_to": [
+        "NIW_Standalone",
+        "Concurrent_NIW_AOS"
+      ]
+    },
+    {
+      "id": "priority_date_current",
+      "label": "Is the beneficiary's priority date current under the Visa Bulletin?",
+      "type": "boolean",
+      "required": false,
+      "priority": 2,
+      "applies_to": [
+        "Concurrent_NIW_AOS"
+      ]
+    },
+    {
+      "id": "advanced_degree_qualification",
+      "label": "Does the beneficiary hold a Master's/PhD, or a Bachelor's plus 5 years progressive experience, or otherwise qualify via Exceptional Ability?",
+      "type": "boolean",
+      "required": true,
+      "priority": 1,
+      "applies_to": [
+        "NIW_Standalone",
+        "Concurrent_NIW_AOS"
+      ]
+    },
+    {
+      "id": "proposed_endeavor_description",
+      "label": "Description of the beneficiary's proposed endeavor in the United States",
+      "type": "string",
+      "required": true,
+      "priority": 1,
+      "applies_to": [
+        "NIW_Standalone",
+        "Concurrent_NIW_AOS"
+      ]
+    },
+    {
+      "id": "independent_expert_letters_count",
+      "label": "Number of independent (non-collaborator) expert recommendation letters obtained",
+      "type": "number",
+      "required": false,
+      "priority": 2,
+      "applies_to": [
+        "NIW_Standalone",
+        "Concurrent_NIW_AOS"
+      ]
+    }
+  ],
+  "required_documents": {
+    "identity": [
+      {
+        "id": "beneficiary_passport",
+        "label": "Beneficiary passport biographic page",
+        "required": true,
+        "applies_to": [
+          "NIW_Standalone",
+          "Concurrent_NIW_AOS"
+        ]
+      },
+      {
+        "id": "proposed_endeavor_statement",
+        "label": "Statement detailing the proposed endeavor and its national importance",
+        "required": true,
+        "applies_to": [
+          "NIW_Standalone",
+          "Concurrent_NIW_AOS"
+        ]
+      }
+    ],
+    "qualification": [
+      {
+        "id": "degree_certificate_or_experience_evidence",
+        "label": "Advanced degree certificate, or Bachelor's degree plus experience letters",
+        "required": true,
+        "applies_to": [
+          "NIW_Standalone",
+          "Concurrent_NIW_AOS"
+        ]
+      }
+    ],
+    "entry_status": [
+      {
+        "id": "i94_record",
+        "label": "I-94 / entry record",
+        "required": true,
+        "applies_to": [
+          "Concurrent_NIW_AOS"
+        ]
+      },
+      {
+        "id": "current_visa_or_status_doc",
+        "label": "Current visa / status document",
+        "required": false,
+        "applies_to": [
+          "Concurrent_NIW_AOS"
+        ]
+      }
+    ],
+    "medical": [
+      {
+        "id": "i693_medical",
+        "label": "I-693 medical exam (civil surgeon)",
+        "required": true,
+        "applies_to": [
+          "Concurrent_NIW_AOS"
+        ]
+      }
+    ]
+  },
   "evidence_map": {
     "advanced_degree_qualification": {
       "label": "Threshold: Advanced Degree or Exceptional Ability",

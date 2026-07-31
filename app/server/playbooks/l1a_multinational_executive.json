@@ -8,6 +8,239 @@
     "last_updated": "2023-10-27"
   },
   "case_type": "L-1A Visa",
+  "scenarios": {
+    "New_Office_Petition": {
+      "label": "L-1A New Office Petition",
+      "resolve_when": {
+        "us_company_is_new_office": true
+      },
+      "forms": [
+        "I-129",
+        "L_Classification_Supplement"
+      ],
+      "notes": "New office petitions get an initial approval of up to 1 year and require additional evidence of physical premises and staffing/business plans."
+    },
+    "Established_Office_Petition": {
+      "label": "L-1A Established Office Petition",
+      "resolve_when": {
+        "us_company_is_new_office": false
+      },
+      "forms": [
+        "I-129",
+        "L_Classification_Supplement"
+      ],
+      "notes": "Established U.S. offices (operating over 1 year) can receive up to 3 years initial approval."
+    }
+  },
+  "required_facts": [
+    {
+      "id": "us_company_is_new_office",
+      "label": "Has the U.S. company been doing business for less than 1 year (new office)?",
+      "type": "boolean",
+      "required": true,
+      "priority": 1,
+      "applies_to": [
+        "New_Office_Petition",
+        "Established_Office_Petition"
+      ]
+    },
+    {
+      "id": "overseas_employment_duration_months",
+      "label": "How many continuous months, within the last 3 years, was the beneficiary employed full-time by the overseas qualifying organization?",
+      "type": "number",
+      "required": true,
+      "priority": 1,
+      "applies_to": [
+        "New_Office_Petition",
+        "Established_Office_Petition"
+      ]
+    },
+    {
+      "id": "overseas_position_title",
+      "label": "Beneficiary's overseas job title",
+      "type": "string",
+      "required": true,
+      "priority": 2,
+      "applies_to": [
+        "New_Office_Petition",
+        "Established_Office_Petition"
+      ]
+    },
+    {
+      "id": "overseas_job_duties_summary",
+      "label": "Summary of the beneficiary's executive/managerial duties overseas",
+      "type": "string",
+      "required": true,
+      "priority": 1,
+      "applies_to": [
+        "New_Office_Petition",
+        "Established_Office_Petition"
+      ]
+    },
+    {
+      "id": "us_position_title",
+      "label": "Beneficiary's proposed U.S. job title",
+      "type": "string",
+      "required": true,
+      "priority": 2,
+      "applies_to": [
+        "New_Office_Petition",
+        "Established_Office_Petition"
+      ]
+    },
+    {
+      "id": "us_job_duties_summary",
+      "label": "Summary of the beneficiary's proposed executive/managerial duties in the U.S.",
+      "type": "string",
+      "required": true,
+      "priority": 1,
+      "applies_to": [
+        "New_Office_Petition",
+        "Established_Office_Petition"
+      ]
+    },
+    {
+      "id": "qualifying_relationship_type",
+      "label": "Relationship between the U.S. company and the overseas company (parent, subsidiary, branch, or affiliate)",
+      "type": "string",
+      "required": true,
+      "priority": 1,
+      "applies_to": [
+        "New_Office_Petition",
+        "Established_Office_Petition"
+      ]
+    },
+    {
+      "id": "us_company_years_in_operation",
+      "label": "How many years has the U.S. company been operating?",
+      "type": "number",
+      "required": false,
+      "priority": 3,
+      "applies_to": [
+        "Established_Office_Petition"
+      ]
+    },
+    {
+      "id": "us_company_subordinate_count",
+      "label": "How many employees will directly report to the beneficiary in the U.S.?",
+      "type": "number",
+      "required": false,
+      "priority": 2,
+      "applies_to": [
+        "New_Office_Petition",
+        "Established_Office_Petition"
+      ]
+    }
+  ],
+  "required_documents": {
+    "identity": [
+      {
+        "id": "beneficiary_passport",
+        "label": "Beneficiary passport (all pages)",
+        "required": true,
+        "applies_to": [
+          "New_Office_Petition",
+          "Established_Office_Petition"
+        ]
+      },
+      {
+        "id": "beneficiary_resume",
+        "label": "Beneficiary curriculum vitae / resume",
+        "required": true,
+        "applies_to": [
+          "New_Office_Petition",
+          "Established_Office_Petition"
+        ]
+      }
+    ],
+    "overseas_employment": [
+      {
+        "id": "overseas_employment_letter",
+        "label": "Overseas company employment/verification letter (title, duties, dates, salary)",
+        "required": true,
+        "applies_to": [
+          "New_Office_Petition",
+          "Established_Office_Petition"
+        ]
+      },
+      {
+        "id": "overseas_payroll_records",
+        "label": "Overseas company payroll records / pay stubs",
+        "required": false,
+        "applies_to": [
+          "New_Office_Petition",
+          "Established_Office_Petition"
+        ]
+      }
+    ],
+    "managerial_capacity": [
+      {
+        "id": "overseas_org_chart",
+        "label": "Overseas company organizational chart",
+        "required": true,
+        "applies_to": [
+          "New_Office_Petition",
+          "Established_Office_Petition"
+        ]
+      },
+      {
+        "id": "us_org_chart",
+        "label": "U.S. company organizational chart (proposed, for a new office)",
+        "required": true,
+        "applies_to": [
+          "New_Office_Petition",
+          "Established_Office_Petition"
+        ]
+      }
+    ],
+    "qualifying_relationship": [
+      {
+        "id": "company_registration_documents",
+        "label": "Corporate registration/formation documents for both the U.S. and overseas companies",
+        "required": true,
+        "applies_to": [
+          "New_Office_Petition",
+          "Established_Office_Petition"
+        ]
+      },
+      {
+        "id": "ownership_evidence",
+        "label": "Stock certificates / ownership evidence showing the qualifying relationship",
+        "required": true,
+        "applies_to": [
+          "New_Office_Petition",
+          "Established_Office_Petition"
+        ]
+      }
+    ],
+    "company_operations": [
+      {
+        "id": "us_company_ein_confirmation",
+        "label": "U.S. company IRS EIN confirmation letter",
+        "required": true,
+        "applies_to": [
+          "New_Office_Petition",
+          "Established_Office_Petition"
+        ]
+      },
+      {
+        "id": "business_plan",
+        "label": "Business plan with staffing and financial projections",
+        "required": true,
+        "applies_to": [
+          "New_Office_Petition"
+        ]
+      },
+      {
+        "id": "us_company_financials",
+        "label": "U.S. company financial statements / federal tax returns",
+        "required": false,
+        "applies_to": [
+          "Established_Office_Petition"
+        ]
+      }
+    ]
+  },
   "evidence_map": {
     "beneficiary_personal_documents": {
       "category_title": "受益人个人文件",

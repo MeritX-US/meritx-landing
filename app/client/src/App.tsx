@@ -308,17 +308,29 @@ const generateFormMappingPDF = (uscisFormMapping: any, facts: any): Blob => {
     doc.text(`Form ${formName} Mappings`, 1.0, currentY);
     currentY += 0.15;
     
-    const head = [['Field Name', 'Mapped Value', 'Source Audit Trail']];
-    const body = fieldKeys.map((fieldName) => {
-      const matchingFactKey = Object.keys(facts || {}).find(k => k === fieldName || fieldName.includes(k));
-      const sourceText = matchingFactKey ? facts[matchingFactKey]?.source : 'Extracted from intake';
-      const cleanFieldName = fieldName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-      return [
-        cleanFieldName,
-        String(fields[fieldName] || ''),
-        sourceText
-      ];
-    });
+    const head = [['USCIS Location / Field', 'Mapped Value', 'Source Audit Trail']];
+    let body: any[] = [];
+    
+    if (fields.fields && Array.isArray(fields.fields)) {
+      body = fields.fields.map((f: any) => [
+        `${f.part ? f.part + ' - ' : ''}${f.name || 'Field'}`,
+        String(f.value || 'N/A'),
+        f.source || 'Intake Analysis'
+      ]);
+    } else {
+      body = fieldKeys.map((fieldName) => {
+        const val = fields[fieldName];
+        const valStr = typeof val === 'object' && val !== null ? JSON.stringify(val) : String(val || '');
+        const matchingFactKey = Object.keys(facts || {}).find(k => k === fieldName || fieldName.includes(k));
+        const sourceText = matchingFactKey ? facts[matchingFactKey]?.source : 'Extracted from intake';
+        const cleanFieldName = fieldName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        return [
+          cleanFieldName,
+          valStr,
+          sourceText
+        ];
+      });
+    }
     
     autoTable(doc, {
       startY: currentY,
@@ -378,6 +390,122 @@ interface Transcript {
   utterances?: Utterance[];
 }
 
+// Extracted and memoized so a single Yes/No click or keystroke on the autofill review table
+// only re-renders the one row that changed, not the whole table (up to ~180 rows for I-140).
+// Without this, every edit re-created every row's JSX and inline style objects from scratch,
+// which is what made the table visibly lag/freeze on the larger forms (I-140, I-485).
+// `onFieldChange`/`onFieldBlur` are intentionally excluded from the memo comparison below - they
+// close over the parent's latest state and get a fresh reference every parent render, but the
+// row doesn't care about their identity, only about calling whichever version is current.
+const AutofillFieldRow = React.memo(function AutofillFieldRow({ field, overrideValue, onFieldChange, onFieldBlur }: {
+  field: any;
+  overrideValue: string | undefined;
+  onFieldChange: (fieldId: string, value: string, persistImmediately: boolean) => void;
+  onFieldBlur: (fieldId: string) => void;
+}) {
+  const f = field;
+  const currentValue = overrideValue !== undefined ? overrideValue : f.value;
+  // toggle/select fields store their raw machine value ('true'/'apt') in overrides, but f.value
+  // from the backend is already the display label ('Yes'/'Apt.') - reverse-derive the raw value
+  // so the control shows the right selection when there's no in-progress local edit yet.
+  const rawValue = overrideValue !== undefined
+    ? overrideValue
+    : f.type === 'toggle' ? (f.value === 'Yes' ? 'true' : f.value === 'No' ? 'false' : '')
+    : f.type === 'select' ? (f.options?.find((o: any) => o.label === f.value)?.value || '')
+    : f.value;
+
+  return (
+    <tr id={`autofill-row-${f.fieldId}`} style={{ borderBottom: '1px solid var(--border-color)' }}>
+      <td style={{ padding: '0.75rem', fontWeight: 600, color: '#a855f7' }}>{f.part}</td>
+      <td style={{ padding: '0.75rem', color: '#f8fafc' }}>{f.name}</td>
+      <td style={{ padding: '0.75rem' }}>
+        {f.type === 'toggle' ? (
+          <div style={{ display: 'flex', gap: '0.4rem' }}>
+            {[{ v: 'true', label: 'Yes' }, { v: 'false', label: 'No' }].map(opt => (
+              <button
+                key={opt.v}
+                onClick={() => onFieldChange(f.fieldId, opt.v, true)}
+                style={{
+                  padding: '0.35rem 0.8rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
+                  background: rawValue === opt.v ? 'rgba(168, 85, 247, 0.3)' : '#0f172a',
+                  border: rawValue === opt.v ? '1px solid #a855f7' : '1px solid rgba(168, 85, 247, 0.3)',
+                  color: rawValue === opt.v ? '#f8fafc' : 'var(--text-secondary)'
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        ) : f.type === 'select' ? (
+          <select
+            value={rawValue}
+            onChange={(e) => onFieldChange(f.fieldId, e.target.value, true)}
+            style={{
+              width: '100%', padding: '0.4rem 0.6rem', borderRadius: '6px',
+              background: '#0f172a', border: '1px solid rgba(168, 85, 247, 0.3)',
+              color: '#f8fafc', fontSize: '0.85rem', outline: 'none'
+            }}
+          >
+            <option value="">-- Select --</option>
+            {(f.options || []).map((o: any) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        ) : (
+          <input
+            type="text"
+            value={currentValue}
+            onChange={(e) => {
+              // Only update local state while typing - refetching the whole form set on every
+              // keystroke caused lag and out-of-order updates.
+              onFieldChange(f.fieldId, e.target.value, false);
+            }}
+            onBlur={() => {
+              // Persist and refresh metrics/cross-form propagation once the attorney moves on
+              // from the field, not on every keystroke.
+              onFieldBlur(f.fieldId);
+            }}
+            style={{
+              width: '100%', padding: '0.4rem 0.6rem', borderRadius: '6px',
+              background: '#0f172a', border: '1px solid rgba(168, 85, 247, 0.3)',
+              color: '#f8fafc', fontSize: '0.85rem', outline: 'none'
+            }}
+          />
+        )}
+      </td>
+      <td style={{ padding: '0.75rem' }}>
+        <span style={{ fontSize: '0.75rem', background: 'rgba(255, 255, 255, 0.06)', padding: '0.2rem 0.5rem', borderRadius: '4px', color: '#94a3b8' }}>
+          {f.source}
+        </span>
+      </td>
+      <td style={{ padding: '0.75rem' }}>
+        {f.confidence === 'verified' ? (
+          <span style={{ color: '#c084fc', fontSize: '0.75rem', fontWeight: 600 }}>✍️ Verified</span>
+        ) : f.confidence === 'high' ? (
+          <span style={{ color: '#4ade80', fontSize: '0.75rem', fontWeight: 600 }}>✨ Auto (High)</span>
+        ) : f.confidence === 'medium' ? (
+          <span style={{ color: '#fde047', fontSize: '0.75rem', fontWeight: 600 }}>⚠️ Check</span>
+        ) : (
+          <span style={{ color: '#f87171', fontSize: '0.75rem', fontWeight: 600 }}>❗ Missing</span>
+        )}
+      </td>
+    </tr>
+  );
+}, (prev, next) => prev.field === next.field && prev.overrideValue === next.overrideValue);
+
+// A field's `part` string is e.g. "Part 9, Item 53.a" or "Other Names Used, Item 2.a" or
+// "Attorney Block" (no item suffix). Grouping on the text before the first comma collapses all
+// three shapes into a sensible section name ("Part 9", "Other Names Used", "Attorney Block")
+// without needing every field def to follow one rigid format.
+const autofillPartGroupKey = (part: string): string => (part || '').split(',')[0].trim() || 'Other';
+
+// Same "missing" definition the backend uses (see buildAutofillFormsData), applied client-side so
+// the filter/progress UI stays in sync with any not-yet-persisted local edit in formCustomOverrides.
+const isAutofillFieldMissing = (field: any, overrideValue: string | undefined): boolean => {
+  const value = overrideValue !== undefined ? overrideValue : field.value;
+  return !value || value === 'N/A' || (overrideValue === undefined && field.source === 'Missing');
+};
+
 function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
@@ -425,6 +553,10 @@ function App() {
   const [activeAutofillForm, setActiveAutofillForm] = useState<string>('I-140');
   const [formCustomOverrides, setFormCustomOverrides] = useState<Record<string, string>>({});
   const [isLoadingAutofill, setIsLoadingAutofill] = useState(false);
+  const [isSigningOffForm, setIsSigningOffForm] = useState(false);
+  const autofillRequestSeq = useRef(0);
+  const [autofillFilter, setAutofillFilter] = useState<'all' | 'missingRequired' | 'optional'>('all');
+  const [collapsedAutofillParts, setCollapsedAutofillParts] = useState<Record<string, boolean>>({});
 
   const [clientPhone, setClientPhone] = useState('');
   const [isCallingOut, setIsCallingOut] = useState(false);
@@ -542,9 +674,12 @@ function App() {
     }
   };
 
-  const fetchAutofillData = async (recId?: string, overrides?: Record<string, string>) => {
+  const fetchAutofillData = async (recId?: string, overrides?: Record<string, string>, persist: boolean = false) => {
     const targetId = recId || selectedRecordId;
     if (!targetId) return;
+    // Guard against out-of-order responses: if the attorney keeps editing, an older
+    // in-flight request could otherwise resolve last and stomp on newer state.
+    const seq = ++autofillRequestSeq.current;
     setIsLoadingAutofill(true);
     try {
       const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/intake/autofill-forms`, {
@@ -552,25 +687,101 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           recordId: targetId,
-          customOverrides: overrides || formCustomOverrides
+          customOverrides: overrides || formCustomOverrides,
+          persist
         })
       });
       const data = await res.json();
-      if (data.success) {
+      if (data.success && seq === autofillRequestSeq.current) {
+        // A form that was signed off before this save but no longer is means the backend just
+        // invalidated it (a field changed after the attorney certified it) - surface that clearly
+        // rather than letting the "Signed Off" badge silently disappear.
+        if (persist && autofillData?.signOff) {
+          Object.keys(autofillData.signOff).forEach((formKey) => {
+            if (autofillData.signOff[formKey] && !data.signOff?.[formKey]) {
+              showNotification('Sign-Off Invalidated', `${formKey} was previously signed off, but a field just changed - please review and re-approve before filing.`, 'error');
+            }
+          });
+        }
         setAutofillData(data);
       }
     } catch (err: any) {
       console.error('Failed to fetch autofill forms:', err);
     } finally {
-      setIsLoadingAutofill(false);
+      if (seq === autofillRequestSeq.current) setIsLoadingAutofill(false);
+    }
+  };
+
+  // Passed to AutofillFieldRow. Deliberately not wrapped in useCallback: fetchAutofillData itself
+  // isn't memoized (it closes over selectedRecordId et al.), so a memoized wrapper here would
+  // capture a stale copy and could target the wrong record after switching. Redefining these each
+  // render is fine - AutofillFieldRow's memo comparator ignores callback identity on purpose (see
+  // the component definition above) and only re-renders a row when its own field/overrideValue
+  // props change, so a fresh closure here doesn't cause any extra re-renders.
+  //
+  // Because unchanged rows don't re-render, a row that hasn't touched its own field recently keeps
+  // whatever onFieldChange closure it last captured - which can be stale relative to edits made to
+  // OTHER fields in the meantime. Building `next` via the functional setState form (reading `prev`
+  // at apply time) rather than closing over `formCustomOverrides` directly means a stale-closure
+  // call still merges onto the real latest state instead of a snapshot that's missing another
+  // field's in-progress edit.
+  const handleAutofillFieldChange = (fieldId: string, value: string, persistImmediately: boolean) => {
+    setFormCustomOverrides(prev => {
+      const next = { ...prev, [fieldId]: value };
+      if (persistImmediately) fetchAutofillData(undefined, next, true);
+      return next;
+    });
+  };
+  const handleAutofillFieldBlur = (_fieldId: string) => {
+    setFormCustomOverrides(prev => {
+      fetchAutofillData(undefined, prev, true);
+      return prev;
+    });
+  };
+
+  const signOffAutofillForm = async (formKey: string) => {
+    if (!selectedRecordId) return;
+    setIsSigningOffForm(true);
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/intake/autofill-forms/sign-off`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recordId: selectedRecordId, formKey })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAutofillData((prev: any) => prev ? { ...prev, signOff: data.signOff } : prev);
+        showNotification('Sign-Off Approved', `${formKey} verified by attorney and recorded.`, 'success');
+      } else {
+        showNotification('Sign-Off Blocked', data.error || 'This form still has missing fields.', 'error');
+      }
+    } catch (err: any) {
+      console.error('Failed to sign off form:', err);
+      showNotification('Sign-Off Failed', 'Could not reach the server.', 'error');
+    } finally {
+      setIsSigningOffForm(false);
     }
   };
 
   useEffect(() => {
     if (selectedRecordId && activeResultTab === 'autofill') {
-      fetchAutofillData(selectedRecordId);
+      // Clear any in-session edits from a previously viewed record before loading this one -
+      // persisted overrides for this record come back from the server on field.value already,
+      // so this can't lose data, only prevent another case's unsaved edits from bleeding in.
+      setFormCustomOverrides({});
+      setAutofillFilter('all');
+      setCollapsedAutofillParts({});
+      fetchAutofillData(selectedRecordId, {});
     }
   }, [selectedRecordId, activeResultTab]);
+
+  // Reset the filter/collapse view (not the edits themselves) when switching between the 4 forms
+  // within the same record - a "Missing Required Only" filter or a collapsed section left over
+  // from I-485 has no meaning once you're looking at G-28's completely different Parts.
+  useEffect(() => {
+    setAutofillFilter('all');
+    setCollapsedAutofillParts({});
+  }, [activeAutofillForm]);
 
   const deleteRecord = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation(); // Don't trigger "view record"
@@ -1949,21 +2160,21 @@ function App() {
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: '0.4rem',
-                      padding: '0.5rem 1rem',
+                      gap: '0.35rem',
+                      padding: '0.45rem 0.75rem',
                       background: activeResultTab === 'package' ? 'rgba(59, 130, 246, 0.15)' : 'none',
                       border: activeResultTab === 'package' ? '1px solid var(--accent-primary)' : '1px solid transparent',
                       color: activeResultTab === 'package' ? 'var(--text-primary)' : 'var(--text-secondary)',
                       borderRadius: '8px',
                       cursor: 'pointer',
-                      fontSize: '0.9rem',
+                      fontSize: '0.85rem',
                       transition: 'all 0.2s',
-                      whiteSpace: 'nowrap'
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0
                     }}
                   >
-                    <FileText size={16} />
-                    <span className="hide-mobile">Intake Package</span>
-                    <span className="show-mobile-inline">Intake</span>
+                    <FileText size={15} />
+                    <span>Intake Package</span>
                   </button>
                   <button
                     className={`btn-tab ${activeResultTab === 'completeness' ? 'active' : ''}`}
@@ -1971,21 +2182,21 @@ function App() {
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: '0.4rem',
-                      padding: '0.5rem 1rem',
+                      gap: '0.35rem',
+                      padding: '0.45rem 0.75rem',
                       background: activeResultTab === 'completeness' ? 'rgba(59, 130, 246, 0.15)' : 'none',
                       border: activeResultTab === 'completeness' ? '1px solid var(--accent-primary)' : '1px solid transparent',
                       color: activeResultTab === 'completeness' ? 'var(--text-primary)' : 'var(--text-secondary)',
                       borderRadius: '8px',
                       cursor: 'pointer',
-                      fontSize: '0.9rem',
+                      fontSize: '0.85rem',
                       transition: 'all 0.2s',
-                      whiteSpace: 'nowrap'
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0
                     }}
                   >
-                    <AlertCircle size={16} />
-                    <span className="hide-mobile">Completeness & Risk Flags</span>
-                    <span className="show-mobile-inline">Completeness</span>
+                    <AlertCircle size={15} />
+                    <span>Completeness</span>
                   </button>
                   <button
                     className={`btn-tab ${activeResultTab === 'evidence' ? 'active' : ''}`}
@@ -1993,21 +2204,21 @@ function App() {
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: '0.4rem',
-                      padding: '0.5rem 1rem',
+                      gap: '0.35rem',
+                      padding: '0.45rem 0.75rem',
                       background: activeResultTab === 'evidence' ? 'rgba(59, 130, 246, 0.15)' : 'none',
                       border: activeResultTab === 'evidence' ? '1px solid var(--accent-primary)' : '1px solid transparent',
                       color: activeResultTab === 'evidence' ? 'var(--text-primary)' : 'var(--text-secondary)',
                       borderRadius: '8px',
                       cursor: 'pointer',
-                      fontSize: '0.9rem',
+                      fontSize: '0.85rem',
                       transition: 'all 0.2s',
-                      whiteSpace: 'nowrap'
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0
                     }}
                   >
-                    <Upload size={16} />
-                    <span className="hide-mobile">Evidence Mapping</span>
-                    <span className="show-mobile-inline">Evidence</span>
+                    <Upload size={15} />
+                    <span>Evidence Map</span>
                   </button>
                   {(() => {
                     const audioCount = record?.items?.filter((i: any) => i.type === 'audio').length || 0;
@@ -2018,22 +2229,22 @@ function App() {
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '0.4rem',
-                          padding: '0.5rem 1rem',
+                          gap: '0.35rem',
+                          padding: '0.45rem 0.75rem',
                           background: activeResultTab === 'transcript' ? 'rgba(59, 130, 246, 0.15)' : 'none',
                           border: activeResultTab === 'transcript' ? '1px solid var(--accent-primary)' : '1px solid transparent',
                           color: activeResultTab === 'transcript' ? 'var(--text-primary)' : 'var(--text-secondary)',
                           borderRadius: '8px',
                           cursor: 'pointer',
-                          fontSize: '0.9rem',
+                          fontSize: '0.85rem',
                           transition: 'all 0.2s',
                           whiteSpace: 'nowrap',
+                          flexShrink: 0,
                           opacity: audioCount === 0 && activeResultTab !== 'transcript' ? 0.75 : 1
                         }}
                       >
-                        <PlayCircle size={16} />
-                        <span className="hide-mobile">Audio Transcript</span>
-                        <span className="show-mobile-inline">Transcript</span>
+                        <PlayCircle size={15} />
+                        <span>Transcript</span>
                         <span style={{
                           fontSize: '0.7rem',
                           padding: '0.1rem 0.4rem',
@@ -2054,21 +2265,21 @@ function App() {
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: '0.4rem',
-                      padding: '0.5rem 1rem',
+                      gap: '0.35rem',
+                      padding: '0.45rem 0.75rem',
                       background: activeResultTab === 'assembly' ? 'rgba(59, 130, 246, 0.15)' : 'none',
                       border: activeResultTab === 'assembly' ? '1px solid var(--accent-primary)' : '1px solid transparent',
                       color: activeResultTab === 'assembly' ? 'var(--text-primary)' : 'var(--text-secondary)',
                       borderRadius: '8px',
                       cursor: 'pointer',
-                      fontSize: '0.9rem',
+                      fontSize: '0.85rem',
                       transition: 'all 0.2s',
-                      whiteSpace: 'nowrap'
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0
                     }}
                   >
-                    <CheckCircle size={16} />
-                    <span className="hide-mobile">Petition Package</span>
-                    <span className="show-mobile-inline">Package</span>
+                    <CheckCircle size={15} />
+                    <span>Petition Package</span>
                   </button>
 
                   <button
@@ -2077,23 +2288,22 @@ function App() {
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: '0.4rem',
-                      padding: '0.5rem 1rem',
+                      gap: '0.35rem',
+                      padding: '0.45rem 0.75rem',
                       background: activeResultTab === 'autofill' ? 'rgba(168, 85, 247, 0.2)' : 'none',
                       border: activeResultTab === 'autofill' ? '1px solid #a855f7' : '1px solid transparent',
                       color: activeResultTab === 'autofill' ? '#c084fc' : 'var(--text-secondary)',
                       borderRadius: '8px',
                       cursor: 'pointer',
-                      fontSize: '0.9rem',
+                      fontSize: '0.85rem',
                       fontWeight: 600,
                       transition: 'all 0.2s',
                       whiteSpace: 'nowrap',
                       flexShrink: 0
                     }}
                   >
-                    <FileText size={16} />
-                    <span className="hide-mobile">Auto Form Filling</span>
-                    <span className="show-mobile-inline">Form Fill</span>
+                    <FileText size={15} />
+                    <span>Form Autofill</span>
                   </button>
                 </div>
               </div>
@@ -3693,10 +3903,10 @@ function App() {
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.4rem' }}>
                           <FileText size={22} style={{ color: '#c084fc' }} />
-                          <h2 style={{ margin: 0, fontSize: '1.3rem', color: '#f8fafc' }}>Automatic Form Filling & Review Hub (自动填表复核)</h2>
+                          <h2 style={{ margin: 0, fontSize: '1.3rem', color: '#f8fafc' }}>Automatic Form Filling & Review Hub</h2>
                         </div>
                         <p style={{ margin: 0, fontSize: '0.85rem', color: '#94a3b8' }}>
-                          Structured facts, questionnaire answers, and OCR documents auto-mapped to official USCIS PDF Forms. <strong>Attorney retains 100% review & override authority.</strong>
+                          Structured facts and questionnaire answers are mapped onto the real official USCIS PDF for each form - only the fields shown below are filled in; everything else is left blank. <strong>Attorney must review and complete every remaining field, then sign off, before the official PDF can be exported.</strong> Editing any field after sign-off revokes it and re-locks export until it's re-approved.
                         </p>
                       </div>
 
@@ -3711,19 +3921,79 @@ function App() {
                         >
                           <RefreshCw size={14} className={isLoadingAutofill ? 'spin' : ''} /> Refresh Mapping
                         </button>
-                        <button
-                          onClick={() => {
-                            showNotification('Sign-Off Approved', 'Form data verified by attorney. Ready for PDF compilation.', 'success');
-                          }}
-                          style={{
-                            background: 'linear-gradient(135deg, #a855f7, #6366f1)', border: 'none',
-                            borderRadius: '8px', padding: '0.55rem 1.2rem', color: 'white',
-                            fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem',
-                            boxShadow: '0 4px 15px rgba(168, 85, 247, 0.4)'
-                          }}
-                        >
-                          <CheckCircle size={15} /> Attorney Sign-Off & Approve
-                        </button>
+                        {(() => {
+                          const currentFormMetrics = autofillData?.formsData?.[activeAutofillForm]?.formMetrics;
+                          const hasMissingFields = !currentFormMetrics || (currentFormMetrics.missingRequiredCount ?? currentFormMetrics.missingCount) > 0;
+                          const isSignedOff = !!autofillData?.signOff?.[activeAutofillForm];
+                          // Export now requires sign-off first, so it's a real final checkpoint
+                          // rather than a badge that nothing else depends on: an attorney must
+                          // explicitly certify the reviewed fields before the official PDF can be
+                          // produced, and editing a field after sign-off revokes it (see
+                          // fetchAutofillData's invalidation notice above) and re-locks export.
+                          const exportDisabled = !isSignedOff;
+                          return (
+                            <>
+                              <button
+                                disabled={exportDisabled}
+                                title={exportDisabled ? 'Sign off on this form before exporting the official PDF' : undefined}
+                                onClick={async () => {
+                                  if (!selectedRecordId || exportDisabled) return;
+                                  try {
+                                    showNotification('Generating PDF...', `Filling the official ${activeAutofillForm} PDF`, 'info');
+                                    const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/intake/generate-filled-pdf`, {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({
+                                        recordId: selectedRecordId,
+                                        formKey: activeAutofillForm,
+                                        customOverrides: formCustomOverrides
+                                      })
+                                    });
+                                    if (!res.ok) {
+                                      const errText = await res.text().catch(() => '');
+                                      throw new Error(errText || `Server returned ${res.status}`);
+                                    }
+                                    const blob = await res.blob();
+                                    const url = URL.createObjectURL(blob);
+                                    const a = document.createElement('a');
+                                    a.href = url;
+                                    a.download = `${activeAutofillForm}_Official_Filled_${selectedRecordId}.pdf`;
+                                    a.click();
+                                    URL.revokeObjectURL(url);
+                                    showNotification('PDF Exported', `Official ${activeAutofillForm} PDF downloaded with available fields filled in.`, 'success');
+                                  } catch (err: any) {
+                                    console.error('Server PDF generation error:', err);
+                                    showNotification('PDF Generation Failed', err?.message || 'Could not fill the official PDF. Please try again.', 'error');
+                                  }
+                                }}
+                                style={{
+                                  background: exportDisabled ? 'rgba(148, 163, 184, 0.2)' : 'linear-gradient(135deg, #3b82f6, #8b5cf6)', border: 'none',
+                                  borderRadius: '8px', padding: '0.55rem 1.2rem', color: exportDisabled ? '#94a3b8' : 'white',
+                                  fontSize: '0.85rem', fontWeight: 600, cursor: exportDisabled ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem',
+                                  boxShadow: exportDisabled ? 'none' : '0 4px 15px rgba(59, 130, 246, 0.4)'
+                                }}
+                              >
+                                <Download size={15} /> Export Official USCIS PDF
+                              </button>
+                              <button
+                                disabled={hasMissingFields || isSigningOffForm}
+                                title={hasMissingFields ? 'Resolve all missing fields on this form before signing off' : undefined}
+                                onClick={() => signOffAutofillForm(activeAutofillForm)}
+                                style={{
+                                  background: hasMissingFields ? 'rgba(148, 163, 184, 0.2)' : 'linear-gradient(135deg, #a855f7, #6366f1)',
+                                  border: 'none',
+                                  borderRadius: '8px', padding: '0.55rem 1.2rem', color: hasMissingFields ? '#94a3b8' : 'white',
+                                  fontSize: '0.85rem', fontWeight: 600, cursor: hasMissingFields || isSigningOffForm ? 'not-allowed' : 'pointer',
+                                  display: 'flex', alignItems: 'center', gap: '0.4rem',
+                                  boxShadow: hasMissingFields ? 'none' : '0 4px 15px rgba(168, 85, 247, 0.4)'
+                                }}
+                              >
+                                <CheckCircle size={15} />
+                                {isSignedOff ? `Signed Off ✓ (${new Date(autofillData.signOff[activeAutofillForm].approvedAt).toLocaleDateString()})` : 'Attorney Sign-Off & Approve'}
+                              </button>
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
 
@@ -3743,8 +4013,15 @@ function App() {
                           <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#fde047' }}>{autofillData.metrics.needsReviewCount}</div>
                         </div>
                         <div style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '0.8rem 1rem', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
-                          <div style={{ fontSize: '0.75rem', color: '#f87171' }}>❗ Missing / Action Needed</div>
-                          <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#f87171' }}>{autofillData.metrics.missingCount}</div>
+                          <div style={{ fontSize: '0.75rem', color: '#f87171' }}>❗ Missing (Required for Sign-Off)</div>
+                          <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#f87171' }}>
+                            {autofillData.metrics.missingRequiredCount ?? autofillData.metrics.missingCount}
+                          </div>
+                          {autofillData.metrics.missingCount > (autofillData.metrics.missingRequiredCount ?? autofillData.metrics.missingCount) && (
+                            <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '0.15rem' }}>
+                              +{autofillData.metrics.missingCount - (autofillData.metrics.missingRequiredCount ?? 0)} optional fields also blank
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -3771,73 +4048,149 @@ function App() {
                       </div>
 
                       {/* Active Form Details */}
-                      {autofillData.formsData[activeAutofillForm] && (
+                      {autofillData.formsData[activeAutofillForm] && (() => {
+                        const activeFields: any[] = autofillData.formsData[activeAutofillForm].fields;
+                        const groupOrder: string[] = [];
+                        const groupsMap: Record<string, any[]> = {};
+                        activeFields.forEach((f: any) => {
+                          const key = autofillPartGroupKey(f.part);
+                          if (!groupsMap[key]) { groupsMap[key] = []; groupOrder.push(key); }
+                          groupsMap[key].push(f);
+                        });
+                        const passesFilter = (f: any) => {
+                          if (autofillFilter === 'optional') return f.required === false;
+                          if (autofillFilter === 'missingRequired') return f.required !== false && isAutofillFieldMissing(f, formCustomOverrides[f.fieldId]);
+                          return true;
+                        };
+                        const jumpToNextMissingRequired = () => {
+                          const target = activeFields.find((f: any) => f.required !== false && isAutofillFieldMissing(f, formCustomOverrides[f.fieldId]));
+                          if (!target) {
+                            showNotification('All Required Fields Complete', 'No missing required fields remain on this form.', 'success');
+                            return;
+                          }
+                          const groupKey = autofillPartGroupKey(target.part);
+                          setCollapsedAutofillParts(prev => ({ ...prev, [groupKey]: false }));
+                          setAutofillFilter('all');
+                          setTimeout(() => {
+                            const el = document.getElementById(`autofill-row-${target.fieldId}`);
+                            if (!el) return;
+                            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            el.style.transition = 'background-color 0.3s';
+                            el.style.backgroundColor = 'rgba(168, 85, 247, 0.35)';
+                            setTimeout(() => { el.style.backgroundColor = ''; }, 1400);
+                          }, 100);
+                        };
+                        return (
                         <div>
-                          <div style={{ fontSize: '1rem', fontWeight: 600, color: '#f8fafc', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ fontSize: '1rem', fontWeight: 600, color: '#f8fafc', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
                             <span>{autofillData.formsData[activeAutofillForm].formTitle}</span>
-                            <span style={{ fontSize: '0.8rem', color: '#c084fc', background: 'rgba(168, 85, 247, 0.1)', padding: '0.3rem 0.6rem', borderRadius: '6px', border: '1px solid rgba(168, 85, 247, 0.3)' }}>
-                              Official USCIS PDF Field Mapping
-                            </span>
+                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                              <a
+                                href={`https://www.uscis.gov/sites/default/files/document/forms/${activeAutofillForm.toLowerCase()}.pdf`}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{
+                                  fontSize: '0.8rem', color: '#60a5fa', background: 'rgba(59, 130, 246, 0.1)',
+                                  padding: '0.35rem 0.75rem', borderRadius: '6px', border: '1px solid rgba(59, 130, 246, 0.3)',
+                                  textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600
+                                }}
+                              >
+                                🏛️ Open Official USCIS {activeAutofillForm} Blank PDF
+                              </a>
+                              <span style={{ fontSize: '0.8rem', color: '#c084fc', background: 'rgba(168, 85, 247, 0.1)', padding: '0.35rem 0.75rem', borderRadius: '6px', border: '1px solid rgba(168, 85, 247, 0.3)' }}>
+                                Official USCIS PDF Field Mapping
+                              </span>
+                            </div>
                           </div>
 
-                          <div style={{ overflowX: 'auto' }}>
+                          {/* Filter + jump-to-next controls */}
+                          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                            {([
+                              { key: 'all', label: 'All Fields' },
+                              { key: 'missingRequired', label: 'Missing Required Only' },
+                              { key: 'optional', label: 'Optional / Not Required' },
+                            ] as const).map(opt => (
+                              <button
+                                key={opt.key}
+                                onClick={() => setAutofillFilter(opt.key)}
+                                style={{
+                                  padding: '0.4rem 0.9rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
+                                  background: autofillFilter === opt.key ? 'rgba(168, 85, 247, 0.25)' : 'rgba(255, 255, 255, 0.04)',
+                                  border: autofillFilter === opt.key ? '1px solid #a855f7' : '1px solid var(--border-color)',
+                                  color: autofillFilter === opt.key ? '#c084fc' : 'var(--text-secondary)'
+                                }}
+                              >
+                                {opt.label}
+                              </button>
+                            ))}
+                            <button
+                              onClick={jumpToNextMissingRequired}
+                              style={{
+                                marginLeft: 'auto', padding: '0.4rem 0.9rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
+                                background: 'rgba(59, 130, 246, 0.15)', border: '1px solid rgba(59, 130, 246, 0.4)', color: '#93c5fd',
+                                display: 'flex', alignItems: 'center', gap: '0.35rem'
+                              }}
+                            >
+                              ↓ Jump to Next Missing Required
+                            </button>
+                          </div>
+
+                          <div style={{ overflowX: 'auto', maxHeight: '70vh', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                               <thead>
-                                <tr style={{ background: 'rgba(255, 255, 255, 0.04)', textAlign: 'left', color: '#94a3b8' }}>
-                                  <th style={{ padding: '0.75rem', borderBottom: '1px solid var(--border-color)', width: '150px' }}>USCIS Form Location</th>
-                                  <th style={{ padding: '0.75rem', borderBottom: '1px solid var(--border-color)', width: '220px' }}>Field Description</th>
-                                  <th style={{ padding: '0.75rem', borderBottom: '1px solid var(--border-color)' }}>Auto-Filled Value (Attorney Editable)</th>
-                                  <th style={{ padding: '0.75rem', borderBottom: '1px solid var(--border-color)', width: '180px' }}>Source Provenance</th>
-                                  <th style={{ padding: '0.75rem', borderBottom: '1px solid var(--border-color)', width: '120px' }}>Status</th>
+                                <tr style={{ background: '#171426', textAlign: 'left', color: '#94a3b8' }}>
+                                  <th style={{ position: 'sticky', top: 0, background: '#171426', padding: '0.75rem', borderBottom: '1px solid var(--border-color)', width: '150px', zIndex: 2 }}>USCIS Form Location</th>
+                                  <th style={{ position: 'sticky', top: 0, background: '#171426', padding: '0.75rem', borderBottom: '1px solid var(--border-color)', width: '220px', zIndex: 2 }}>Field Description</th>
+                                  <th style={{ position: 'sticky', top: 0, background: '#171426', padding: '0.75rem', borderBottom: '1px solid var(--border-color)', zIndex: 2 }}>Auto-Filled Value (Attorney Editable)</th>
+                                  <th style={{ position: 'sticky', top: 0, background: '#171426', padding: '0.75rem', borderBottom: '1px solid var(--border-color)', width: '180px', zIndex: 2 }}>Source Provenance</th>
+                                  <th style={{ position: 'sticky', top: 0, background: '#171426', padding: '0.75rem', borderBottom: '1px solid var(--border-color)', width: '120px', zIndex: 2 }}>Status</th>
                                 </tr>
                               </thead>
                               <tbody>
-                                {autofillData.formsData[activeAutofillForm].fields.map((f: any, idx: number) => {
-                                  const currentValue = formCustomOverrides[f.fieldId] !== undefined ? formCustomOverrides[f.fieldId] : f.value;
+                                {groupOrder.map((groupKey) => {
+                                  const groupFields = groupsMap[groupKey];
+                                  const visibleFields = groupFields.filter(passesFilter);
+                                  if (visibleFields.length === 0) return null;
+                                  const requiredFields = groupFields.filter((f: any) => f.required !== false);
+                                  const requiredFilled = requiredFields.filter((f: any) => !isAutofillFieldMissing(f, formCustomOverrides[f.fieldId])).length;
+                                  const totalFilled = groupFields.filter((f: any) => !isAutofillFieldMissing(f, formCustomOverrides[f.fieldId])).length;
+                                  const isCollapsed = !!collapsedAutofillParts[groupKey];
+                                  const groupDone = requiredFields.length > 0 && requiredFilled === requiredFields.length;
                                   return (
-                                    <tr key={idx} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                                      <td style={{ padding: '0.75rem', fontWeight: 600, color: '#a855f7' }}>{f.part}</td>
-                                      <td style={{ padding: '0.75rem', color: '#f8fafc' }}>{f.name}</td>
-                                      <td style={{ padding: '0.75rem' }}>
-                                        <input 
-                                          type="text"
-                                          value={currentValue}
-                                          onChange={(e) => {
-                                            const newOverrides = { ...formCustomOverrides, [f.fieldId]: e.target.value };
-                                            setFormCustomOverrides(newOverrides);
-                                            fetchAutofillData(undefined, newOverrides);
-                                          }}
-                                          style={{
-                                            width: '100%', padding: '0.4rem 0.6rem', borderRadius: '6px',
-                                            background: '#0f172a', border: '1px solid rgba(168, 85, 247, 0.3)',
-                                            color: '#f8fafc', fontSize: '0.85rem', outline: 'none'
-                                          }}
+                                    <React.Fragment key={groupKey}>
+                                      <tr
+                                        onClick={() => setCollapsedAutofillParts(prev => ({ ...prev, [groupKey]: !prev[groupKey] }))}
+                                        style={{ background: 'rgba(168, 85, 247, 0.08)', cursor: 'pointer', userSelect: 'none' }}
+                                      >
+                                        <td colSpan={5} style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#c084fc', borderBottom: '1px solid var(--border-color)' }}>
+                                          <span style={{ display: 'inline-block', width: '1rem' }}>{isCollapsed ? '▶' : '▼'}</span>
+                                          {groupKey}
+                                          <span style={{ marginLeft: '0.75rem', fontSize: '0.75rem', fontWeight: 600, color: groupDone ? '#4ade80' : '#94a3b8' }}>
+                                            {requiredFields.length > 0
+                                              ? `Required: ${requiredFilled}/${requiredFields.length}${groupDone ? ' ✓' : ''}`
+                                              : 'No required fields'}
+                                            {' · '}Total: {totalFilled}/{groupFields.length}
+                                          </span>
+                                        </td>
+                                      </tr>
+                                      {!isCollapsed && visibleFields.map((f: any) => (
+                                        <AutofillFieldRow
+                                          key={f.fieldId}
+                                          field={f}
+                                          overrideValue={formCustomOverrides[f.fieldId]}
+                                          onFieldChange={handleAutofillFieldChange}
+                                          onFieldBlur={handleAutofillFieldBlur}
                                         />
-                                      </td>
-                                      <td style={{ padding: '0.75rem' }}>
-                                        <span style={{ fontSize: '0.75rem', background: 'rgba(255, 255, 255, 0.06)', padding: '0.2rem 0.5rem', borderRadius: '4px', color: '#94a3b8' }}>
-                                          {f.source}
-                                        </span>
-                                      </td>
-                                      <td style={{ padding: '0.75rem' }}>
-                                        {f.confidence === 'verified' ? (
-                                          <span style={{ color: '#c084fc', fontSize: '0.75rem', fontWeight: 600 }}>✍️ Verified</span>
-                                        ) : f.confidence === 'high' ? (
-                                          <span style={{ color: '#4ade80', fontSize: '0.75rem', fontWeight: 600 }}>✨ Auto (High)</span>
-                                        ) : f.confidence === 'medium' ? (
-                                          <span style={{ color: '#fde047', fontSize: '0.75rem', fontWeight: 600 }}>⚠️ Check</span>
-                                        ) : (
-                                          <span style={{ color: '#f87171', fontSize: '0.75rem', fontWeight: 600 }}>❗ Missing</span>
-                                        )}
-                                      </td>
-                                    </tr>
+                                      ))}
+                                    </React.Fragment>
                                   );
                                 })}
                               </tbody>
                             </table>
                           </div>
                         </div>
-                      )}
+                        );
+                      })()}
                     </div>
                   ) : (
                     <div className="glass-card" style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>

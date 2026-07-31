@@ -57,6 +57,29 @@ export interface PlaybookAnalysis {
   coverLetterDraft: string;
 }
 
+// Identity facts common to every case type - the Auto Form Filling forms (G-28/I-140/I-765/I-485)
+// always need the beneficiary's biographic identifiers regardless of which legal theory (playbook)
+// the case uses. A playbook's own required_facts (e.g. marriage_gc's bundled "beneficiary_identity"
+// entity) are still extracted too; these flat ids just guarantee a match against the Auto Form
+// Filling semantic keys (see AUTOFILL_FIELD_SEMANTIC_MAP / getValue in index.ts) even for playbooks
+// (eb1a, l1a, niw) that don't otherwise ask for identity facts at all.
+const COMMON_IDENTITY_FACTS = [
+  { id: 'beneficiary_family_name', label: "Beneficiary's family name (last name)", type: 'string', required: true, priority: 1 },
+  { id: 'beneficiary_given_name', label: "Beneficiary's given name (first name)", type: 'string', required: true, priority: 1 },
+  { id: 'beneficiary_dob', label: "Beneficiary's date of birth", type: 'string', required: true, priority: 1 },
+  { id: 'beneficiary_nationality', label: "Beneficiary's country of citizenship/nationality", type: 'string', required: true, priority: 2 },
+  { id: 'alien_registration_number', label: "Beneficiary's A-Number (Alien Registration Number), if any", type: 'string', required: false, priority: 2 },
+  { id: 'passport_number', label: "Beneficiary's passport number", type: 'string', required: false, priority: 2 },
+  { id: 'i94_number', label: "Beneficiary's I-94 admission number, if any", type: 'string', required: false, priority: 3 },
+  { id: 'current_nonimmigrant_status', label: "Beneficiary's current nonimmigrant/visa status", type: 'string', required: false, priority: 3 },
+  // Not identity per se, but the same "always ask, regardless of playbook" treatment - self-
+  // petitioned cases (EB-1A, NIW) will simply have no employer and the AI should return null
+  // rather than invent one.
+  { id: 'employer_name', label: "Beneficiary's current employer/petitioning company name, if any", type: 'string', required: false, priority: 3 },
+  { id: 'job_title', label: "Beneficiary's job title/position, if any", type: 'string', required: false, priority: 3 },
+  { id: 'us_address', label: "Beneficiary's current U.S. mailing address, if stated", type: 'string', required: false, priority: 3 },
+];
+
 export function loadPlaybook(identifier: string = 'unknown'): any {
   const playbooksDir = path.join(__dirname, 'playbooks');
   if (!fs.existsSync(playbooksDir)) {
@@ -149,8 +172,9 @@ Transcript: ${recordText.substring(0, 1500)}`;
     }
   });
 
-  // Prepare required facts schema
-  const factsSchema = playbook.required_facts.map((f: any) => ({
+  // Prepare required facts schema (playbook-specific facts plus the identity facts common to
+  // every case type - see COMMON_IDENTITY_FACTS above)
+  const factsSchema = [...(playbook.required_facts || []), ...COMMON_IDENTITY_FACTS].map((f: any) => ({
     id: f.id,
     label: f.label,
     type: f.type,
@@ -308,8 +332,11 @@ You must return a valid JSON object matching the following structure:
 
   // 2. Identify missing facts and populate follow-up questions
   const followUpQuestions: any[] = [];
-  playbook.required_facts.forEach((fact: any) => {
-    if (fact.applies_to.includes(scenario)) {
+  [...(playbook.required_facts || []), ...COMMON_IDENTITY_FACTS].forEach((fact: any) => {
+    // Common identity facts have no applies_to (they're relevant to every scenario); playbook
+    // facts keep their own scenario gating.
+    const applies = fact.applies_to ? fact.applies_to.includes(scenario) : true;
+    if (applies) {
       const isMissing = !extractedFacts[fact.id] || extractedFacts[fact.id].value === null || extractedFacts[fact.id].value === undefined || extractedFacts[fact.id].value === '';
       if (isMissing) {
         followUpQuestions.push({

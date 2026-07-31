@@ -17,6 +17,35 @@ import { PDFDocument, rgb, StandardFonts, PageSizes } from 'pdf-lib';
 // Fix for Node.js 18+ IPv6 fetch issues causing 'fetch failed'
 dns.setDefaultResultOrder('ipv4first');
 
+// Category metadata for display on the frontend
+const CATEGORY_LABELS: Record<string, string> = {
+    passport: 'Passport',
+    visa: 'Visa',
+    employment_letter: 'Employment Letter',
+    support_letter: 'Support Letter',
+    award_certificate: 'Award / Certificate',
+    publication: 'Publication',
+    media_coverage: 'Media Coverage',
+    tax_document: 'Tax Document',
+    degree_certificate: 'Degree / Diploma',
+    affidavit: 'Affidavit',
+    court_document: 'Court Document',
+    immigration_form: 'USCIS / Immigration Form',
+    photo_id: 'Photo ID',
+    contract: 'Contract / Agreement',
+    financial_document: 'Financial Document',
+    medical_record: 'Medical Record',
+    // Audio categories
+    consultation_call: 'Consultation Call',
+    deposition: 'Deposition',
+    witness_statement: 'Witness Statement',
+    court_hearing: 'Court Hearing',
+    interview: 'Interview Recording',
+    voicemail: 'Voicemail',
+    audio_recording: 'Audio Recording',
+    other: 'Other Document',
+};
+
 // Helper for Google API Retries
 async function uploadFileWithRetry(fileManager: GoogleAIFileManager, filePath: string, options: any, maxRetries = 3) {
     for (let i = 0; i < maxRetries; i++) {
@@ -199,25 +228,49 @@ const twilioClient = (twilioAccountSid && twilioAuthToken) ? twilio(twilioAccoun
 // Persistence Utility for Consultation History
 const recordsPath = path.join(serverRootDir, 'records.json');
 
+// records.json is multiple MB (grows with every uploaded transcript/analysis) - re-reading and
+// JSON.parse-ing it from disk on every single request (which is what happened before this cache)
+// cost ~45ms per call before any actual work started, on top of the same cost again on every
+// save. Since every getRecords() caller already mutates objects from the returned array in place
+// and then persists that same array, keeping one cached array in memory for the process lifetime
+// is safe: in-place mutations are visible to every other caller immediately, with no risk of the
+// cache drifting from what callers already hold a reference to.
+let recordsCache: any[] | null = null;
+
 const getRecords = (): any[] => {
+    if (recordsCache) return recordsCache;
     try {
         if (!fs.existsSync(recordsPath)) {
+            recordsCache = [];
             fs.writeFileSync(recordsPath, JSON.stringify([]));
-            return [];
+            return recordsCache;
         }
         const data = fs.readFileSync(recordsPath, 'utf8');
-        return JSON.parse(data);
+        recordsCache = JSON.parse(data);
+        return recordsCache!;
     } catch (err) {
         console.error('Error reading records.json:', err);
         return [];
     }
 };
 
+// Updates the in-memory cache synchronously (so subsequent getRecords() calls in the same or a
+// later request see the change immediately) and writes to disk in the background. The write no
+// longer blocks the Node event loop - previously every save (including a single Yes/No toggle
+// click on the autofill review table) did a synchronous multi-MB file write that stalled every
+// other in-flight request on the server until it finished.
+const saveRecords = (records: any[]) => {
+    recordsCache = records;
+    fs.writeFile(recordsPath, JSON.stringify(records, null, 2), (err) => {
+        if (err) console.error('Error saving records.json:', err);
+    });
+};
+
 const saveRecord = (record: any) => {
     try {
         const records = getRecords();
         records.unshift(record); // Add to beginning
-        fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
+        saveRecords(records);
     } catch (err) {
         console.error('Error saving record:', err);
     }
@@ -227,7 +280,7 @@ const deleteRecord = (id: string) => {
     try {
         const records = getRecords();
         const filtered = records.filter(r => r.id !== id);
-        fs.writeFileSync(recordsPath, JSON.stringify(filtered, null, 2));
+        saveRecords(filtered);
         return true;
     } catch (err) {
         console.error('Error deleting record:', err);
@@ -924,139 +977,1182 @@ Return JSON: { "summary": "1 sentence explanation", "suggested_changes": { modif
     }
 });
 
+// A field edited on any one form (e.g. the family name on I-140) represents the same
+// underlying person attribute on every other form. This map lets an attorney override
+// entered against any fieldId propagate to every other field that represents the same fact.
+// Maps each full-coverage field's fieldId to the semantic key it should feed when an attorney
+// edits it directly (see getValue()'s semanticOverrides lookup below), so an edit made while
+// looking at one form's field is reflected on every other form's same field too - and, just as
+// importantly, so the edit doesn't get silently discarded. Every fieldId here MUST exactly match
+// a fieldId actually used with that semanticKey in G28_FIELD_DEFS / I140_FIELD_DEFS /
+// I765_FIELD_DEFS / I485_FIELD_DEFS: buildDefinedFields() resolves a field's semanticKey to
+// canonicalValues[semanticKey] *before* ever looking at the field's own raw override, so a
+// fieldId missing from this map means a direct edit to that specific field is silently ignored
+// (this happened for real: the map went stale relative to the field defs after they were
+// rewritten for full coverage, and this list was rebuilt from every semanticKey actually in use).
+const AUTOFILL_FIELD_SEMANTIC_MAP: Record<string, string> = {
+    G28_ClientLastName: 'familyName', I140_BeneFamilyName: 'familyName', I765_FamilyName: 'familyName', I485_FamilyName: 'familyName',
+    G28_ClientFirstName: 'givenName', I140_BeneGivenName: 'givenName', I765_GivenName: 'givenName', I485_GivenName: 'givenName',
+    I140_BeneDOB: 'dob', I765_DOB: 'dob', I485_DOB: 'dob',
+    I140_BeneNationality: 'nationality', I765_Nationality: 'nationality', I485_Nationality: 'nationality',
+    G28_ClientANumber: 'aNumber', I140_BeneANumber: 'aNumber', I765_ANumber: 'aNumber', I485_ANumber: 'aNumber',
+    I140_CompanyName: 'employer',
+    I140_JobTitle: 'jobTitle',
+    I140_PassportNo: 'passportNo', I765_Passport: 'passportNo', I485_PassportNo: 'passportNo',
+    I140_I94Number: 'i94No', I765_I94: 'i94No', I485_I94Number: 'i94No',
+    I140_I94Status: 'status', I765_CurrentStatus: 'status', I485_CurrentStatus: 'status',
+    G28_AttyLastName: 'attorneyFamilyName', I140_PreparerFamilyName: 'attorneyFamilyName', I765_PreparerFamilyName: 'attorneyFamilyName', I485_PreparerFamilyName: 'attorneyFamilyName',
+    G28_AttyFirstName: 'attorneyGivenName', I140_PreparerGivenName: 'attorneyGivenName', I765_PreparerGivenName: 'attorneyGivenName', I485_PreparerGivenName: 'attorneyGivenName',
+    G28_LawFirm: 'lawFirm', I140_PreparerOrgName: 'lawFirm', I765_PreparerOrgName: 'lawFirm', I485_PreparerOrgName: 'lawFirm',
+};
+
+// Single-attorney firm setting (this deployment serves one law firm). Not derived from
+// case data, so kept as a shared constant rather than duplicated per form definition.
+const FIRM_ATTORNEY_FAMILY_NAME = 'Miao';
+const FIRM_ATTORNEY_GIVEN_NAME = 'Attorney Miao';
+const FIRM_LAW_FIRM_NAME = 'Miao & Associates, P.C.';
+
+// Full-field-coverage form definitions (as opposed to the hand-picked ~10-field lists above).
+// Every fillable item on the real official PDF that a human would actually need to answer is
+// listed here, so the on-screen review table and the exported PDF can never drift apart - both
+// are generated from this same list. Real field names and their checkbox on-values were reverse
+// engineered from the actual template (rendering the blank form and probing marker text into
+// each field - internal AcroForm names are frequently misleading, e.g. this G-28's own
+// "Line6_EMail"/"Line7_MobileTelephoneNumber" fields are swapped relative to what they render as).
+// Mutually-exclusive checkbox clusters (e.g. "select only one box") are collapsed into a single
+// `select` field so the review table shows one answerable row instead of N raw checkboxes.
+type UscisFieldType = 'text' | 'toggle' | 'select';
+interface UscisFieldOption { value: string; label: string; realField: string; }
+interface UscisFieldDef {
+    fieldId: string;
+    part: string;
+    name: string;
+    type: UscisFieldType;
+    semanticKey?: string;
+    realField?: string; // text/toggle
+    onValue?: string;   // toggle's checkbox on-value (from the template; pdf-lib's .check() applies it automatically)
+    options?: UscisFieldOption[]; // select
+    caseTypeMap?: Record<string, string>; // select fields only: derive a default option from record.caseType
+    // Defaults to true (G-28's whole list is required). Forms with a long tail of fields we have
+    // no data source for (business financials, additional dependents beyond the first, interpreter/
+    // preparer contact numbers) mark those `false` so they're still shown and exportable, but don't
+    // block sign-off the way the identity/eligibility fields we can actually expect data for do.
+    required?: boolean;
+}
+
+const G28_FIELD_DEFS: UscisFieldDef[] = [
+    { fieldId: 'G28_AttyUscisAcct', part: 'Part 1, Item 1', name: 'Attorney USCIS Online Account Number', type: 'text', realField: 'form1[0].#subform[0].#area[0].Pt1Line1_USCISOnlineAcctNumber[0]' },
+    { fieldId: 'G28_AttyLastName', part: 'Part 1, Item 2.a', name: 'Attorney Family Name', type: 'text', semanticKey: 'attorneyFamilyName', realField: 'form1[0].#subform[0].Pt1Line2a_FamilyName[0]' },
+    { fieldId: 'G28_AttyFirstName', part: 'Part 1, Item 2.b', name: 'Attorney Given Name', type: 'text', semanticKey: 'attorneyGivenName', realField: 'form1[0].#subform[0].Pt1Line2b_GivenName[0]' },
+    { fieldId: 'G28_AttyMiddleName', part: 'Part 1, Item 2.c', name: 'Attorney Middle Name', type: 'text', realField: 'form1[0].#subform[0].Pt1Line2c_MiddleName[0]' },
+    { fieldId: 'G28_AttyStreet', part: 'Part 1, Item 3.a', name: 'Attorney Street Number and Name', type: 'text', realField: 'form1[0].#subform[0].Line3a_StreetNumber[0]' },
+    { fieldId: 'G28_AttyUnitType', part: 'Part 1, Item 3.b', name: 'Attorney Address Unit Type', type: 'select', options: [
+        { value: 'apt', label: 'Apt.', realField: 'form1[0].#subform[0].Line3b_Unit[2]' },
+        { value: 'ste', label: 'Ste.', realField: 'form1[0].#subform[0].Line3b_Unit[0]' },
+        { value: 'flr', label: 'Flr.', realField: 'form1[0].#subform[0].Line3b_Unit[1]' },
+        { value: 'na', label: 'Not Applicable', realField: '' },
+    ] },
+    { fieldId: 'G28_AttyUnitNumber', part: 'Part 1, Item 3.b', name: 'Attorney Apt/Ste/Flr Number', type: 'text', realField: 'form1[0].#subform[0].Line3b_AptSteFlrNumber[0]' },
+    { fieldId: 'G28_AttyCity', part: 'Part 1, Item 3.c', name: 'Attorney City or Town', type: 'text', realField: 'form1[0].#subform[0].Line3c_CityOrTown[0]' },
+    { fieldId: 'G28_AttyState', part: 'Part 1, Item 3.d', name: 'Attorney State', type: 'text', realField: 'form1[0].#subform[0].Line3d_State[0]' },
+    { fieldId: 'G28_AttyZip', part: 'Part 1, Item 3.e', name: 'Attorney ZIP Code', type: 'text', realField: 'form1[0].#subform[0].Line3e_ZipCode[0]' },
+    { fieldId: 'G28_AttyProvince', part: 'Part 1, Item 3.f', name: 'Attorney Province', type: 'text', realField: 'form1[0].#subform[0].Line3f_Province[0]' },
+    { fieldId: 'G28_AttyPostalCode', part: 'Part 1, Item 3.g', name: 'Attorney Postal Code', type: 'text', realField: 'form1[0].#subform[0].Line3g_PostalCode[0]' },
+    { fieldId: 'G28_AttyCountry', part: 'Part 1, Item 3.h', name: 'Attorney Country', type: 'text', realField: 'form1[0].#subform[0].Line3h_Country[0]' },
+    { fieldId: 'G28_AttyDaytimePhone', part: 'Part 1, Item 4', name: 'Attorney Daytime Telephone Number', type: 'text', realField: 'form1[0].#subform[0].Line4_DaytimeTelephoneNumber[0]' },
+    // Real field names are swapped for these two on the actual template - confirmed by probing marker text and rendering.
+    { fieldId: 'G28_AttyMobilePhone', part: 'Part 1, Item 5', name: 'Attorney Mobile Telephone Number', type: 'text', realField: 'form1[0].#subform[0].Line6_EMail[0]' },
+    { fieldId: 'G28_AttyEmail', part: 'Part 1, Item 6', name: 'Attorney Email Address', type: 'text', realField: 'form1[0].#subform[0].Line7_MobileTelephoneNumber[0]' },
+    { fieldId: 'G28_AttyFax', part: 'Part 1, Item 7', name: 'Attorney Fax Number', type: 'text', realField: 'form1[0].#subform[0].Pt1ItemNumber7_FaxNumber[0]' },
+    { fieldId: 'G28_AttyEligible', part: 'Part 2, Item 1.a', name: 'Attorney Eligible to Practice Law & Member in Good Standing', type: 'toggle', realField: 'form1[0].#subform[0].CheckBox1[0]' },
+    { fieldId: 'G28_LicensingAuthority', part: 'Part 2, Item 1.a', name: 'Licensing Authority', type: 'text', realField: 'form1[0].#subform[0].Pt2Line1a_LicensingAuthority[0]' },
+    { fieldId: 'G28_BarNumber', part: 'Part 2, Item 1.b', name: 'Bar Number (if applicable)', type: 'text', realField: 'form1[0].#subform[0].Pt2Line1b_BarNumber[0]' },
+    { fieldId: 'G28_SuspensionStatus', part: 'Part 2, Item 1.c', name: 'Subject to Any Order Suspending/Restricting Practice of Law', type: 'select', options: [
+        { value: 'am_not', label: 'Am NOT subject to suspension/restriction', realField: 'form1[0].#subform[0].Checkbox1dAmNot[0]' },
+        { value: 'am', label: 'AM subject to suspension/restriction', realField: 'form1[0].#subform[0].Checkbox1dAm[0]' },
+    ] },
+    { fieldId: 'G28_LawFirm', part: 'Part 2, Item 1.d', name: 'Name of Law Firm or Organization', type: 'text', semanticKey: 'lawFirm', realField: 'form1[0].#subform[0].Pt2Line1d_NameofFirmOrOrganization[0]' },
+    { fieldId: 'G28_AccreditedRep', part: 'Part 2, Item 2.a', name: 'Accredited Representative of Recognized Organization', type: 'toggle', realField: 'form1[0].#subform[0].CheckBox2[0]' },
+    { fieldId: 'G28_RecognizedOrgName', part: 'Part 2, Item 2.b', name: 'Name of Recognized Organization', type: 'text', realField: 'form1[0].#subform[0].Line2b_NameofOrganization[0]' },
+    { fieldId: 'G28_AccreditationDate', part: 'Part 2, Item 2.c', name: 'Date of Accreditation', type: 'text', realField: 'form1[0].#subform[0].Line2c_DateExpires[0]' },
+    { fieldId: 'G28_AssociatedWith', part: 'Part 2, Item 3', name: 'Associated With Attorney/Rep of Record', type: 'toggle', realField: 'form1[0].#subform[0].CheckBox3[0]' },
+    { fieldId: 'G28_AssociatedAttyName', part: 'Part 2, Item 3', name: 'Name of Attorney/Rep of Record (if associated)', type: 'text', realField: 'form1[0].#subform[0].Line3_NameofAttorneyOrRep[0]' },
+    { fieldId: 'G28_LawStudent', part: 'Part 2, Item 4.a', name: 'Law Student or Law Graduate', type: 'toggle', realField: 'form1[0].#subform[0].CheckBox4[0]' },
+    { fieldId: 'G28_LawStudentName', part: 'Part 2, Item 4.b', name: 'Name of Law Student or Law Graduate', type: 'text', realField: 'form1[0].#subform[0].Line4b_LawStudent[0]' },
+    { fieldId: 'G28_AppearanceBefore', part: 'Part 3, Item 1-3', name: 'Appearance Relates to Matters Before', type: 'select', options: [
+        { value: 'uscis', label: 'USCIS', realField: 'form1[0].#subform[1].Line1a_USCIS[0]' },
+        { value: 'ice', label: 'ICE', realField: 'form1[0].#subform[1].Line2a_ICE[0]' },
+        { value: 'cbp', label: 'CBP', realField: 'form1[0].#subform[1].Line3a_CBP[0]' },
+        { value: 'na', label: 'Not Applicable', realField: '' },
+    ] },
+    { fieldId: 'G28_FormNumbers', part: 'Part 3, Item 1.b', name: 'Form Numbers or Specific Matter (USCIS)', type: 'text', realField: 'form1[0].#subform[1].Line1b_ListFormNumber[0]' },
+    { fieldId: 'G28_ICEMatter', part: 'Part 3, Item 2.b', name: 'Specific Matter (ICE)', type: 'text', realField: 'form1[0].#subform[1].Line2b_ListMatter[0]' },
+    { fieldId: 'G28_CBPMatter', part: 'Part 3, Item 3.b', name: 'Specific Matter (CBP)', type: 'text', realField: 'form1[0].#subform[1].Line3b_ListSpecificMatter[0]' },
+    { fieldId: 'G28_ReceiptNumber', part: 'Part 3, Item 4', name: 'Receipt Number (if any)', type: 'text', realField: 'form1[0].#subform[1].Pt3Line4_ReceiptNumber[0]' },
+    { fieldId: 'G28_AppearanceRole', part: 'Part 3, Item 5', name: 'Appearance Entered at the Request of the', type: 'select', options: [
+        { value: 'applicant', label: 'Applicant', realField: 'form1[0].#subform[1].Line4_Checkbox[1]' },
+        { value: 'petitioner', label: 'Petitioner', realField: 'form1[0].#subform[1].Line4_Checkbox[3]' },
+        { value: 'requestor', label: 'Requestor', realField: 'form1[0].#subform[1].Line4_Checkbox[0]' },
+        { value: 'beneficiary', label: 'Beneficiary/Derivative', realField: 'form1[0].#subform[1].Line4_Checkbox[4]' },
+        { value: 'respondent', label: 'Respondent (ICE, CBP)', realField: 'form1[0].#subform[1].Line4_Checkbox[2]' },
+    ] },
+    { fieldId: 'G28_ClientLastName', part: 'Part 3, Item 6.a', name: 'Client Family Name', type: 'text', semanticKey: 'familyName', realField: 'form1[0].#subform[1].Pt3Line5a_FamilyName[0]' },
+    { fieldId: 'G28_ClientFirstName', part: 'Part 3, Item 6.b', name: 'Client Given Name', type: 'text', semanticKey: 'givenName', realField: 'form1[0].#subform[1].Pt3Line5b_GivenName[0]' },
+    { fieldId: 'G28_ClientMiddleName', part: 'Part 3, Item 6.c', name: 'Client Middle Name', type: 'text', realField: 'form1[0].#subform[1].Pt3Line5c_MiddleName[0]' },
+    { fieldId: 'G28_EntityName', part: 'Part 3, Item 7.a', name: 'Name of Entity (if applicable)', type: 'text', realField: 'form1[0].#subform[1].Pt3Line7a_NameOfEntity[0]' },
+    { fieldId: 'G28_EntityTitle', part: 'Part 3, Item 7.b', name: 'Title of Authorized Signatory for Entity', type: 'text', realField: 'form1[0].#subform[1].Pt3Line7b_TitleofEntity[0]' },
+    { fieldId: 'G28_ClientUscisAcct', part: 'Part 3, Item 8', name: "Client's USCIS Online Account Number", type: 'text', realField: 'form1[0].#subform[1].#area[1].Pt3Line8_USCISOnlineAcctNumber[0]' },
+    { fieldId: 'G28_ClientANumber', part: 'Part 3, Item 9', name: "Client's Alien Registration Number (A-Number)", type: 'text', semanticKey: 'aNumber', realField: 'form1[0].#subform[1].Pt3Line9_ANumber[0]' },
+    { fieldId: 'G28_ClientDaytimePhone', part: 'Part 3, Item 10', name: 'Client Daytime Telephone Number', type: 'text', realField: 'form1[0].#subform[1].Line9_DaytimeTelephoneNumber[0]' },
+    { fieldId: 'G28_ClientMobilePhone', part: 'Part 3, Item 11', name: 'Client Mobile Telephone Number', type: 'text', realField: 'form1[0].#subform[1].Line10_MobileTelephoneNumber[0]' },
+    { fieldId: 'G28_ClientEmail', part: 'Part 3, Item 12', name: 'Client Email Address', type: 'text', realField: 'form1[0].#subform[1].Line11_EMail[0]' },
+    { fieldId: 'G28_ClientStreet', part: 'Part 3, Item 13.a', name: 'Client Street Number and Name', type: 'text', realField: 'form1[0].#subform[1].Line12a_StreetNumberName[0]' },
+    { fieldId: 'G28_ClientUnitType', part: 'Part 3, Item 13.b', name: 'Client Address Unit Type', type: 'select', options: [
+        { value: 'apt', label: 'Apt.', realField: 'form1[0].#subform[1].Line12b_Unit[2]' },
+        { value: 'ste', label: 'Ste.', realField: 'form1[0].#subform[1].Line12b_Unit[0]' },
+        { value: 'flr', label: 'Flr.', realField: 'form1[0].#subform[1].Line12b_Unit[1]' },
+        { value: 'na', label: 'Not Applicable', realField: '' },
+    ] },
+    { fieldId: 'G28_ClientUnitNumber', part: 'Part 3, Item 13.b', name: 'Client Apt/Ste/Flr Number', type: 'text', realField: 'form1[0].#subform[1].Line12b_AptSteFlrNumber[0]' },
+    { fieldId: 'G28_ClientCity', part: 'Part 3, Item 13.c', name: 'Client City or Town', type: 'text', realField: 'form1[0].#subform[1].Line12c_CityOrTown[0]' },
+    { fieldId: 'G28_ClientState', part: 'Part 3, Item 13.d', name: 'Client State', type: 'text', realField: 'form1[0].#subform[1].Line12d_State[0]' },
+    { fieldId: 'G28_ClientZip', part: 'Part 3, Item 13.e', name: 'Client ZIP Code', type: 'text', realField: 'form1[0].#subform[1].Line12e_ZipCode[0]' },
+    { fieldId: 'G28_ClientProvince', part: 'Part 3, Item 13.f', name: 'Client Province', type: 'text', realField: 'form1[0].#subform[1].Line12f_Province[0]' },
+    { fieldId: 'G28_ClientPostalCode', part: 'Part 3, Item 13.g', name: 'Client Postal Code', type: 'text', realField: 'form1[0].#subform[1].Line12g_PostalCode[0]' },
+    { fieldId: 'G28_ClientCountry', part: 'Part 3, Item 13.h', name: 'Client Country', type: 'text', realField: 'form1[0].#subform[1].Line12h_Country[0]' },
+    { fieldId: 'G28_NoticeToAttyAddress', part: 'Part 4, Item 1.a', name: 'Send Original Notices to Attorney Business Address', type: 'toggle', realField: 'form1[0].#subform[2].Pt4Line2a_CheckBox2a[0]' },
+    { fieldId: 'G28_NoticeSecureDocsToAtty', part: 'Part 4, Item 1.b', name: 'Send Secure Identity Documents to Attorney', type: 'toggle', realField: 'form1[0].#subform[2].Pt4Line2b_CheckBox2b[0]' },
+    { fieldId: 'G28_NoticeI94ToClient', part: 'Part 4, Item 1.c', name: "Send Notice Containing Form I-94 to Client's Mailing Address", type: 'toggle', realField: 'form1[0].#subform[2].Pt4Line2c_CheckBox2c[0]' },
+];
+
+// The "For USCIS Use Only" block (Classification, Certification, Fee Stamp, Priority Date,
+// Consulate, Action Block) at the top of page 1 is adjudicator-only - never petitioner-fillable -
+// so it's excluded entirely, same as signatures and the Part 11 "Additional Information" overflow
+// page. Persons 3-6 in Part 7 (fields exist for up to 6 dependents) and secondary business/labor
+// certification/interpreter/preparer-contact fields are included (full coverage) but marked
+// `required: false` - most petitions don't have 6 dependents or labor-cert data on file, and
+// forcing every one of those blank would make sign-off impossible for a normal case.
+const I140_FIELD_DEFS: UscisFieldDef[] = [
+    { fieldId: 'I140_PetitionerFamilyName', part: 'Part 1, Item 1.a', name: 'Petitioner Family Name (if individual)', type: 'text', realField: 'form1[0].#subform[0].Pt1Line1a_FamilyName[0]', required: false },
+    { fieldId: 'I140_PetitionerGivenName', part: 'Part 1, Item 1.b', name: 'Petitioner Given Name (if individual)', type: 'text', realField: 'form1[0].#subform[0].Pt1Line1b_GivenName[0]', required: false },
+    { fieldId: 'I140_PetitionerMiddleName', part: 'Part 1, Item 1.c', name: 'Petitioner Middle Name', type: 'text', realField: 'form1[0].#subform[0].Pt1Line1c_MiddleName[0]', required: false },
+    { fieldId: 'I140_CompanyName', part: 'Part 1, Item 2', name: 'Company or Organization Name (if entity is filing)', type: 'text', semanticKey: 'employer', realField: 'form1[0].#subform[0].Line2_CompanyName[0]' },
+    { fieldId: 'I140_G28Attached', part: 'Attorney Block', name: 'Form G-28 or G-28I is Attached', type: 'toggle', realField: 'form1[0].#subform[0].G28CheckBox[0]', required: false },
+    { fieldId: 'I140_AttyBarNumber', part: 'Attorney Block', name: 'Attorney State Bar Number', type: 'text', realField: 'form1[0].#subform[0].attyStateBarNumber[0]', required: false },
+    { fieldId: 'I140_AttyUscisAcct', part: 'Attorney Block', name: 'Attorney/Rep USCIS Online Account Number', type: 'text', realField: 'form1[0].#subform[0].attyUSCISOnlineNum[0]', required: false },
+    { fieldId: 'I140_PetitionerUscisAcct', part: 'Part 1, Item 8', name: 'Petitioner USCIS Online Account Number', type: 'text', realField: 'form1[0].#subform[0].#area[1].Pt1Line8_USCISOnlineActNumber[0]', required: false },
+    { fieldId: 'I140_EIN', part: 'Part 1, Item 4', name: 'IRS Employer Identification Number (EIN)', type: 'text', realField: 'form1[0].#subform[0].Pt1Line3_TaxNumber[0]', required: false },
+    { fieldId: 'I140_PetitionerSSN', part: 'Part 1, Item 7', name: 'Petitioner U.S. Social Security Number (SSN)', type: 'text', realField: 'form1[0].#subform[0].Line7_SSN[0]', required: false },
+    { fieldId: 'I140_MailInCareOf', part: 'Part 1, Item 3.a', name: 'Petitioner Mailing Address - In Care Of Name', type: 'text', realField: 'form1[0].#subform[0].Line6a_InCareofName[0]', required: false },
+    { fieldId: 'I140_MailStreet', part: 'Part 1, Item 3.b', name: 'Petitioner Mailing Address - Street Number and Name', type: 'text', realField: 'form1[0].#subform[0].Line6b_StreetNumberName[0]', required: false },
+    { fieldId: 'I140_MailUnitType', part: 'Part 1, Item 3.c', name: 'Petitioner Mailing Address - Unit Type', type: 'select', required: false, options: [
+        { value: 'apt', label: 'Apt.', realField: 'form1[0].#subform[0].Line6c_Unit[2]' },
+        { value: 'ste', label: 'Ste.', realField: 'form1[0].#subform[0].Line6c_Unit[0]' },
+        { value: 'flr', label: 'Flr.', realField: 'form1[0].#subform[0].Line6c_Unit[1]' },
+        { value: 'na', label: 'Not Applicable', realField: '' },
+    ] },
+    { fieldId: 'I140_MailUnitNumber', part: 'Part 1, Item 3.c', name: 'Petitioner Mailing Address - Apt/Ste/Flr Number', type: 'text', realField: 'form1[0].#subform[0].Line6c_AptSteFlrNumber[0]', required: false },
+    { fieldId: 'I140_MailCity', part: 'Part 1, Item 3.d', name: 'Petitioner Mailing Address - City or Town', type: 'text', realField: 'form1[0].#subform[0].Line6d_CityOrTown[0]', required: false },
+    { fieldId: 'I140_MailState', part: 'Part 1, Item 3.e', name: 'Petitioner Mailing Address - State', type: 'text', realField: 'form1[0].#subform[0].Line6e_State[0]', required: false },
+    { fieldId: 'I140_MailZip', part: 'Part 1, Item 3.f', name: 'Petitioner Mailing Address - ZIP Code', type: 'text', realField: 'form1[0].#subform[0].Line6f_ZipCode[0]', required: false },
+    { fieldId: 'I140_MailProvince', part: 'Part 1, Item 3.g', name: 'Petitioner Mailing Address - Province', type: 'text', realField: 'form1[0].#subform[0].Line6h_Province[0]', required: false },
+    { fieldId: 'I140_MailPostalCode', part: 'Part 1, Item 3.h', name: 'Petitioner Mailing Address - Postal Code', type: 'text', realField: 'form1[0].#subform[0].Line6g_PostalCode[0]', required: false },
+    { fieldId: 'I140_MailCountry', part: 'Part 1, Item 3.i', name: 'Petitioner Mailing Address - Country', type: 'text', realField: 'form1[0].#subform[0].Line6i_Country[0]', required: false },
+    { fieldId: 'I140_NonprofitTaxExempt', part: 'Part 1, Item 5', name: 'Are You a Nonprofit Organized as Tax Exempt or Governmental Research Org?', type: 'toggle', realField: 'form1[0].#subform[0].P1_Line5_Checkbox[1]', required: false },
+    { fieldId: 'I140_FewerThan25Employees', part: 'Part 1, Item 6', name: 'Do You Currently Employ 25 or Fewer Full-Time Equivalent Employees?', type: 'toggle', realField: 'form1[0].#subform[0].P1_Line6_Checkbox[1]', required: false },
+    // Petition Type spans pages 1-2 of the real form (options a-e on pg1, f-h on pg2) but is one
+    // "select only one box" group - case type is a real structured fact about this specific case,
+    // not a guess, so this is safely derivable the same way the old (unmapped) display-only
+    // "Petition Category Requested" text used to be.
+    { fieldId: 'I140_PetitionType', part: 'Part 2, Item 1', name: 'Petition Type (select only one box)', type: 'select', caseTypeMap: { eb1a: 'a', eb2_niw: 'h' }, options: [
+        { value: 'a', label: 'An alien of extraordinary ability', realField: 'form1[0].#subform[0].prt2PetitionType[1]' },
+        { value: 'b', label: 'An outstanding professor or researcher', realField: 'form1[0].#subform[0].prt2PetitionType[2]' },
+        { value: 'c', label: 'A multinational executive or manager', realField: 'form1[0].#subform[0].prt2PetitionType[3]' },
+        { value: 'd', label: 'Member of professions w/ advanced degree or exceptional ability (NOT seeking NIW)', realField: 'form1[0].#subform[0].prt2PetitionType[4]' },
+        { value: 'e', label: 'A professional', realField: 'form1[0].#subform[0].prt2PetitionType[0]' },
+        { value: 'f', label: 'A skilled worker', realField: 'form1[0].#subform[1].prt2PetitionType[7]' },
+        { value: 'g', label: 'Any other worker', realField: 'form1[0].#subform[1].prt2PetitionType[5]' },
+        { value: 'h', label: 'An alien applying for an NIW', realField: 'form1[0].#subform[1].prt2PetitionType[6]' },
+    ] },
+    { fieldId: 'I140_AmendPrevious', part: 'Part 2, Item 2', name: 'This Petition Is Being Filed To (select only one box)', type: 'select', required: false, options: [
+        { value: 'amend', label: 'To amend a previously filed petition', realField: 'form1[0].#subform[1].Line2_Petition[0]' },
+        { value: 'schedule_a', label: 'For the Schedule A, Group I or II designation', realField: 'form1[0].#subform[1].Line2_Petition[1]' },
+        { value: 'na', label: 'Not Applicable', realField: '' },
+    ] },
+    { fieldId: 'I140_PreviousReceiptNumber', part: 'Part 2, Item 2.a', name: 'Previous Petition Receipt Number', type: 'text', realField: 'form1[0].#subform[1].Line2aReceipt[0].Line2a_ReceiptNumber[0]', required: false },
+    { fieldId: 'I140_BeneFamilyName', part: 'Part 3, Item 1.a', name: 'Beneficiary Family Name', type: 'text', semanticKey: 'familyName', realField: 'form1[0].#subform[1].Pt3Line1a_FamilyName[0]' },
+    { fieldId: 'I140_BeneGivenName', part: 'Part 3, Item 1.b', name: 'Beneficiary Given Name', type: 'text', semanticKey: 'givenName', realField: 'form1[0].#subform[1].Pt3Line1b_GivenName[0]' },
+    { fieldId: 'I140_BeneMiddleName', part: 'Part 3, Item 1.c', name: 'Beneficiary Middle Name', type: 'text', realField: 'form1[0].#subform[1].Pt3Line1c_MiddleName[0]', required: false },
+    { fieldId: 'I140_BeneMailInCareOf', part: 'Part 3, Item 2.a', name: 'Beneficiary Mailing Address - In Care Of Name', type: 'text', realField: 'form1[0].#subform[1].Line2a_InCareofName[0]', required: false },
+    { fieldId: 'I140_BeneMailStreet', part: 'Part 3, Item 2.b', name: 'Beneficiary Mailing Address - Street Number and Name', type: 'text', realField: 'form1[0].#subform[1].Line2b_StreetNumberName[0]', required: false },
+    { fieldId: 'I140_BeneMailUnitType', part: 'Part 3, Item 2.c', name: 'Beneficiary Mailing Address - Unit Type', type: 'select', required: false, options: [
+        { value: 'apt', label: 'Apt.', realField: 'form1[0].#subform[1].Line2c_Unit[2]' },
+        { value: 'ste', label: 'Ste.', realField: 'form1[0].#subform[1].Line2c_Unit[0]' },
+        { value: 'flr', label: 'Flr.', realField: 'form1[0].#subform[1].Line2c_Unit[1]' },
+        { value: 'na', label: 'Not Applicable', realField: '' },
+    ] },
+    { fieldId: 'I140_BeneMailUnitNumber', part: 'Part 3, Item 2.c', name: 'Beneficiary Mailing Address - Apt/Ste/Flr Number', type: 'text', realField: 'form1[0].#subform[1].Line2c_AptSteFlrNumber[0]', required: false },
+    { fieldId: 'I140_BeneMailCity', part: 'Part 3, Item 2.d', name: 'Beneficiary Mailing Address - City or Town', type: 'text', realField: 'form1[0].#subform[1].Line2d_CityOrTown[0]', required: false },
+    { fieldId: 'I140_BeneMailState', part: 'Part 3, Item 2.e', name: 'Beneficiary Mailing Address - State', type: 'text', realField: 'form1[0].#subform[1].Line2e_State[0]', required: false },
+    { fieldId: 'I140_BeneMailZip', part: 'Part 3, Item 2.f', name: 'Beneficiary Mailing Address - ZIP Code', type: 'text', realField: 'form1[0].#subform[1].Line2f_ZipCode[0]', required: false },
+    { fieldId: 'I140_BeneMailProvince', part: 'Part 3, Item 2.h', name: 'Beneficiary Mailing Address - Province', type: 'text', realField: 'form1[0].#subform[1].Line2h_Province[0]', required: false },
+    { fieldId: 'I140_BeneMailPostalCode', part: 'Part 3, Item 2.g', name: 'Beneficiary Mailing Address - Postal Code', type: 'text', realField: 'form1[0].#subform[1].Line2g_PostalCode[0]', required: false },
+    { fieldId: 'I140_BeneMailCountry', part: 'Part 3, Item 2.i', name: 'Beneficiary Mailing Address - Country', type: 'text', realField: 'form1[0].#subform[1].Line2i_Country[0]', required: false },
+    { fieldId: 'I140_BeneDOB', part: 'Part 3, Item 3', name: 'Beneficiary Date of Birth', type: 'text', semanticKey: 'dob', realField: 'form1[0].#subform[1].Line5_DateOfBirth[0]' },
+    { fieldId: 'I140_BeneCityOfBirth', part: 'Part 3, Item 4', name: 'Beneficiary City/Town/Village of Birth', type: 'text', realField: 'form1[0].#subform[1].Line6_CityTownOfBirth[0]', required: false },
+    { fieldId: 'I140_BeneStateProvinceOfBirth', part: 'Part 3, Item 5', name: 'Beneficiary State or Province of Birth', type: 'text', realField: 'form1[0].#subform[1].Line7_StateProvinceOfBirth[0]', required: false },
+    { fieldId: 'I140_BeneCountryOfBirth', part: 'Part 3, Item 6', name: 'Beneficiary Country of Birth', type: 'text', realField: 'form1[0].#subform[1].Line8_Country[0]', required: false },
+    { fieldId: 'I140_BeneNationality', part: 'Part 3, Item 7', name: 'Beneficiary Country of Citizenship or Nationality', type: 'text', semanticKey: 'nationality', realField: 'form1[0].#subform[1].Line9_Country[0]' },
+    { fieldId: 'I140_BeneANumber', part: 'Part 3, Item 8', name: 'Beneficiary Alien Registration Number (A-Number)', type: 'text', semanticKey: 'aNumber', realField: 'form1[0].#subform[1].Line11_Alien[0].Pt3Line8_AlienNumber[0]' },
+    { fieldId: 'I140_BeneSSN', part: 'Part 3, Item 9', name: 'Beneficiary U.S. SSN (if any)', type: 'text', realField: 'form1[0].#subform[1].Line12_SSN[0]', required: false },
+    { fieldId: 'I140_DateOfLastArrival', part: 'Part 3, Item 10', name: 'Date of Last Arrival Into the U.S.', type: 'text', realField: 'form1[0].#subform[1].Line13_DateOArrival[0]', required: false },
+    { fieldId: 'I140_I94Number', part: 'Part 3, Item 11.a', name: 'Form I-94 Arrival-Departure Record Number', type: 'text', semanticKey: 'i94No', realField: 'form1[0].#subform[1].Line14_I94Number[0].Line14a_ArrivalDeparture[0]' },
+    { fieldId: 'I140_I94ExpDate', part: 'Part 3, Item 11.b', name: 'Expiration Date of Authorized Stay Shown on Form I-94', type: 'text', realField: 'form1[0].#subform[1].Line14e_ExpDate[1]', required: false },
+    { fieldId: 'I140_I94Status', part: 'Part 3, Item 11.c / 15', name: 'Current Nonimmigrant Status', type: 'text', semanticKey: 'status', realField: 'form1[0].#subform[1].Line15_CurrentNon[0]' },
+    { fieldId: 'I140_PassportNo', part: 'Part 3, Item 12', name: 'Beneficiary Passport Number', type: 'text', semanticKey: 'passportNo', realField: 'form1[0].#subform[1].Line14b_Passport[0]' },
+    { fieldId: 'I140_TravelDocNo', part: 'Part 3, Item 13', name: 'Beneficiary Travel Document Number', type: 'text', realField: 'form1[0].#subform[1].Line14c_TravelDoc[0]', required: false },
+    { fieldId: 'I140_PassportCountryIssuance', part: 'Part 3, Item 14', name: 'Country of Issuance for Passport or Travel Document', type: 'text', realField: 'form1[0].#subform[1].Line14d_CountryOfIssuance[0]', required: false },
+    { fieldId: 'I140_PassportExpDate', part: 'Part 3, Item 15', name: 'Expiration Date for Passport or Travel Document', type: 'text', realField: 'form1[0].#subform[1].Line14e_ExpDate[0]', required: false },
+    { fieldId: 'I140_ProcessingMethod', part: 'Part 4, Item 1-2', name: 'Beneficiary Will Apply For (select only one box)', type: 'select', required: false, options: [
+        { value: 'visa_abroad', label: 'Visa Abroad at a U.S. Embassy or Consulate', realField: 'form1[0].#subform[1].Line1a_Visa[0]' },
+        { value: 'adjustment', label: 'Adjustment of Status in the U.S.', realField: 'form1[0].#subform[1].Line1b_Status[0]' },
+        { value: 'na', label: 'Not Applicable / Unknown', realField: '' },
+    ] },
+    { fieldId: 'I140_ConsulateCity', part: 'Part 4, Item 1.b', name: 'Consulate/Embassy City or Town', type: 'text', realField: 'form1[0].#subform[1].Line1a_CityorTown[0]', required: false },
+    { fieldId: 'I140_ConsulateCountry', part: 'Part 4, Item 1.c', name: 'Consulate/Embassy Country', type: 'text', realField: 'form1[0].#subform[2].Line1b_Country[0]', required: false },
+    { fieldId: 'I140_ForeignResidenceCountry', part: 'Part 4, Item 2.b', name: "Alien's Current Country of Residence (or last country of permanent residence abroad)", type: 'text', realField: 'form1[0].#subform[2].Line2a_StreetNumberName[0]', required: false },
+    { fieldId: 'I140_ForeignAddressUnitType', part: 'Part 4, Item 3', name: 'Foreign Address - Unit Type', type: 'select', required: false, options: [
+        { value: 'apt', label: 'Apt.', realField: 'form1[0].#subform[2].Line2b_Unit[2]' },
+        { value: 'ste', label: 'Ste.', realField: 'form1[0].#subform[2].Line2b_Unit[0]' },
+        { value: 'flr', label: 'Flr.', realField: 'form1[0].#subform[2].Line2b_Unit[1]' },
+        { value: 'na', label: 'Not Applicable', realField: '' },
+    ] },
+    { fieldId: 'I140_ForeignAddressUnitNumber', part: 'Part 4, Item 3', name: 'Foreign Address - Apt/Ste/Flr Number', type: 'text', realField: 'form1[0].#subform[2].Line2b_AptSteFlrNumber[0]', required: false },
+    { fieldId: 'I140_ForeignAddressCity', part: 'Part 4, Item 3', name: 'Foreign Address - City or Town', type: 'text', realField: 'form1[0].#subform[2].Line2c_CityOrTown[0]', required: false },
+    { fieldId: 'I140_ForeignAddressProvince', part: 'Part 4, Item 3', name: 'Foreign Address - Province', type: 'text', realField: 'form1[0].#subform[2].Line2e_Province[0]', required: false },
+    { fieldId: 'I140_ForeignAddressPostalCode', part: 'Part 4, Item 3', name: 'Foreign Address - Postal Code', type: 'text', realField: 'form1[0].#subform[2].Line2d_PostalCode[0]', required: false },
+    { fieldId: 'I140_ForeignAddressCountry', part: 'Part 4, Item 3', name: 'Foreign Address - Country', type: 'text', realField: 'form1[0].#subform[2].Line2f_Country[0]', required: false },
+    { fieldId: 'I140_NativeFamilyName', part: 'Part 4, Item 4.a', name: "Beneficiary Name in Native Alphabet - Family Name", type: 'text', realField: 'form1[0].#subform[2].Line3a_FamilyName2[0]', required: false },
+    { fieldId: 'I140_NativeGivenName', part: 'Part 4, Item 4.b', name: "Beneficiary Name in Native Alphabet - Given Name", type: 'text', realField: 'form1[0].#subform[2].Line3b_GivenName2[0]', required: false },
+    { fieldId: 'I140_NativeMiddleName', part: 'Part 4, Item 4.c', name: "Beneficiary Name in Native Alphabet - Middle Name", type: 'text', realField: 'form1[0].#subform[2].Line3c_MiddleName2[0]', required: false },
+    { fieldId: 'I140_NativeMailInCareOf', part: 'Part 4, Item 5.a', name: 'Native Alphabet Mailing Address - In Care Of Name', type: 'text', realField: 'form1[0].#subform[2].Line2a_InCareofName[1]', required: false },
+    { fieldId: 'I140_NativeMailStreet', part: 'Part 4, Item 5.b', name: 'Native Alphabet Mailing Address - Street Number and Name', type: 'text', realField: 'form1[0].#subform[2].Line3d_StreetNumberName[0]', required: false },
+    { fieldId: 'I140_NativeMailUnitType', part: 'Part 4, Item 5.c', name: 'Native Alphabet Mailing Address - Unit Type', type: 'select', required: false, options: [
+        { value: 'apt', label: 'Apt.', realField: 'form1[0].#subform[2].Line3e_Unit[2]' },
+        { value: 'ste', label: 'Ste.', realField: 'form1[0].#subform[2].Line3e_Unit[0]' },
+        { value: 'flr', label: 'Flr.', realField: 'form1[0].#subform[2].Line3e_Unit[1]' },
+        { value: 'na', label: 'Not Applicable', realField: '' },
+    ] },
+    { fieldId: 'I140_NativeMailUnitNumber', part: 'Part 4, Item 5.c', name: 'Native Alphabet Mailing Address - Apt/Ste/Flr Number', type: 'text', realField: 'form1[0].#subform[2].Line3e_AptSteFlrNumber[0]', required: false },
+    { fieldId: 'I140_NativeMailCity', part: 'Part 4, Item 5.d', name: 'Native Alphabet Mailing Address - City or Town', type: 'text', realField: 'form1[0].#subform[2].Line3f_CityOrTown[0]', required: false },
+    { fieldId: 'I140_NativeMailProvince', part: 'Part 4, Item 5.e', name: 'Native Alphabet Mailing Address - Province', type: 'text', realField: 'form1[0].#subform[2].Line3h_Province[0]', required: false },
+    { fieldId: 'I140_NativeMailPostalCode', part: 'Part 4, Item 5.f', name: 'Native Alphabet Mailing Address - Postal Code', type: 'text', realField: 'form1[0].#subform[2].Line3g_PostalCode[0]', required: false },
+    { fieldId: 'I140_NativeMailCountry', part: 'Part 4, Item 5.g', name: 'Native Alphabet Mailing Address - Country', type: 'text', realField: 'form1[0].#subform[2].Line3i_Country[0]', required: false },
+    { fieldId: 'I140_ConcurrentI485', part: 'Part 4, Item 6.b', name: 'Filing Concurrently With Form I-485', type: 'toggle', realField: 'form1[0].#subform[2].Line4_Form485[0]', required: false },
+    { fieldId: 'I140_ConcurrentI131', part: 'Part 4, Item 6.b', name: 'Filing Concurrently With Form I-131', type: 'toggle', realField: 'form1[0].#subform[2].Line4_Form131[0]', required: false },
+    { fieldId: 'I140_ConcurrentI765', part: 'Part 4, Item 6.b', name: 'Filing Concurrently With Form I-765', type: 'toggle', realField: 'form1[0].#subform[2].Line4_Form765[0]', required: false },
+    { fieldId: 'I140_ConcurrentOther', part: 'Part 4, Item 6.b', name: 'Filing Concurrently With Other Form (explain in Additional Info)', type: 'toggle', realField: 'form1[0].#subform[2].Line4_OtherAttach[0]', required: false },
+    { fieldId: 'I140_RemovalProceedings', part: 'Part 4, Item 7', name: 'Is the Beneficiary in Removal Proceedings?', type: 'toggle', realField: 'form1[0].#subform[2].Line7_Yes[0]', required: false },
+    { fieldId: 'I140_PriorImmigrantPetition', part: 'Part 4, Item 8', name: 'Has Any Immigrant Visa Petition Ever Been Filed by/on Behalf of This Person?', type: 'toggle', realField: 'form1[0].#subform[2].Line5_Yes[0]', required: false },
+    { fieldId: 'I140_NoOriginalLaborCert', part: 'Part 4, Item 9', name: 'Filing Without Original Labor Certification (previously submitted with another I-140)?', type: 'toggle', realField: 'form1[0].#subform[2].Line6_Yes[0]', required: false },
+    { fieldId: 'I140_RequestDuplicateLaborCert', part: 'Part 4, Item 10', name: 'Requesting USCIS Obtain Duplicate Labor Certification from DOL?', type: 'toggle', realField: 'form1[0].#subform[2].Line8_Yes[0]', required: false },
+    { fieldId: 'I140_PetitionerType', part: 'Part 5, Item 1', name: 'Type of Petitioner (select only one box)', type: 'select', caseTypeMap: { eb1a: 'self', eb2_niw: 'self', l1a: 'employer' }, options: [
+        { value: 'employer', label: 'Employer', realField: 'form1[0].#subform[2].Line1a_Employer[0]' },
+        { value: 'self', label: 'Self', realField: 'form1[0].#subform[2].Line1b_Self[0]' },
+        { value: 'other', label: 'Other', realField: 'form1[0].#subform[2].Line1c_Other[0]' },
+    ] },
+    { fieldId: 'I140_PetitionerTypeOtherExplain', part: 'Part 5, Item 1.c', name: 'Petitioner Type "Other" - Explanation', type: 'text', realField: 'form1[0].#subform[2].Line1c_Explain[0]', required: false },
+    { fieldId: 'I140_TypeOfBusiness', part: 'Part 5, Item 2', name: 'Type of Business', type: 'text', realField: 'form1[0].#subform[2].Line2a_TypeofBusiness[0]', required: false },
+    { fieldId: 'I140_DateEstablished', part: 'Part 5, Item 3', name: 'Date Business Established', type: 'text', realField: 'form1[0].#subform[2].Line2b_DateEstablished[0]', required: false },
+    { fieldId: 'I140_CurrentNumEmployees', part: 'Part 5, Item 4', name: 'Current Number of U.S. Employees', type: 'text', realField: 'form1[0].#subform[2].Line2c_NumberofEmployees[0]', required: false },
+    { fieldId: 'I140_GrossAnnualIncome', part: 'Part 5, Item 5', name: 'Gross Annual Income', type: 'text', realField: 'form1[0].#subform[2].Line2d_GrossAnnualIncome[0]', required: false },
+    { fieldId: 'I140_NetAnnualIncome', part: 'Part 5, Item 6', name: 'Net Annual Income', type: 'text', realField: 'form1[0].#subform[2].Line2e_NetAnnualIncome[0]', required: false },
+    { fieldId: 'I140_NAICSCode', part: 'Part 5, Item 7', name: 'NAICS Code', type: 'text', realField: 'form1[0].#subform[2].Line2f[0].Line2f_NAICSCode[0]', required: false },
+    { fieldId: 'I140_LaborCertDOLCaseNumber', part: 'Part 5, Item 8', name: 'Labor Certification DOL Case Number', type: 'text', realField: 'form1[0].#subform[2].Line2g_LaborCertification[0]', required: false },
+    { fieldId: 'I140_LaborCertFilingDate', part: 'Part 5, Item 9', name: 'Labor Certification DOL Filing Date', type: 'text', realField: 'form1[0].#subform[3].Line2h_LaborCertification[0]', required: false },
+    { fieldId: 'I140_LaborCertExpDate', part: 'Part 5, Item 10', name: 'Labor Certification Expiration Date', type: 'text', realField: 'form1[0].#subform[3].Line2i_LaborCertificationDate[0]', required: false },
+    { fieldId: 'I140_PetitionerOccupation', part: 'Part 5, Item 11', name: 'Petitioner Occupation (if individual is filing)', type: 'text', realField: 'form1[0].#subform[3].Line3a_Occupation[0]', required: false },
+    { fieldId: 'I140_PetitionerAnnualIncome', part: 'Part 5, Item 12', name: 'Petitioner Annual Income (if individual is filing)', type: 'text', realField: 'form1[0].#subform[3].Line3b_AnnualIncome[0]', required: false },
+    { fieldId: 'I140_JobTitle', part: 'Part 6, Item 1', name: 'Job Title', type: 'text', semanticKey: 'jobTitle', realField: 'form1[0].#subform[3].Line1_JobTitle[0]' },
+    { fieldId: 'I140_SOCCode1', part: 'Part 6, Item 2', name: 'SOC Code (prefix)', type: 'text', realField: 'form1[0].#subform[3].Line2_SOCCode1[0]', required: false },
+    { fieldId: 'I140_SOCCode2', part: 'Part 6, Item 2', name: 'SOC Code (suffix)', type: 'text', realField: 'form1[0].#subform[3].Line2_SOCCode2[0]', required: false },
+    { fieldId: 'I140_JobDescription', part: 'Part 6, Item 3', name: 'Nontechnical Job Description', type: 'text', realField: 'form1[0].#subform[3].Line3_JobDescription[0]', required: false },
+    { fieldId: 'I140_FullTimePosition', part: 'Part 6, Item 4', name: 'Is This a Full-Time Position?', type: 'toggle', realField: 'form1[0].#subform[3].Line4_Yes1[0]', required: false },
+    { fieldId: 'I140_HoursPerWeek', part: 'Part 6, Item 5', name: 'Hours Per Week (if not full-time)', type: 'text', realField: 'form1[0].#subform[3].Line5_Hours[0]', required: false },
+    { fieldId: 'I140_PermanentPosition', part: 'Part 6, Item 6', name: 'Is This a Permanent Position?', type: 'toggle', realField: 'form1[0].#subform[3].Line6_Yes1[0]', required: false },
+    { fieldId: 'I140_NewPosition', part: 'Part 6, Item 7', name: 'Is This a New Position?', type: 'toggle', realField: 'form1[0].#subform[3].Line7_Yes1[0]', required: false },
+    { fieldId: 'I140_Wages', part: 'Part 6, Item 8', name: 'Wages', type: 'text', realField: 'form1[0].#subform[3].Line8_Wages[0]', required: false },
+    { fieldId: 'I140_WagesPer', part: 'Part 6, Item 8', name: 'Wages Per (hour/week/month/year)', type: 'text', realField: 'form1[0].#subform[3].Line8_Per[0]', required: false },
+    { fieldId: 'I140_WorksiteStreet', part: 'Part 6, Item 9.a', name: 'Worksite Location - Street Number and Name', type: 'text', realField: 'form1[0].#subform[3].Line9a_StreetNumberName[0]', required: false },
+    { fieldId: 'I140_WorksiteUnitType', part: 'Part 6, Item 9.b', name: 'Worksite Location - Unit Type', type: 'select', required: false, options: [
+        { value: 'apt', label: 'Apt.', realField: 'form1[0].#subform[3].Line9b_Unit[2]' },
+        { value: 'ste', label: 'Ste.', realField: 'form1[0].#subform[3].Line9b_Unit[0]' },
+        { value: 'flr', label: 'Flr.', realField: 'form1[0].#subform[3].Line9b_Unit[1]' },
+        { value: 'na', label: 'Not Applicable', realField: '' },
+    ] },
+    { fieldId: 'I140_WorksiteUnitNumber', part: 'Part 6, Item 9.b', name: 'Worksite Location - Apt/Ste/Flr Number', type: 'text', realField: 'form1[0].#subform[3].Line9b_AptSteFlrNumber[0]', required: false },
+    { fieldId: 'I140_WorksiteCity', part: 'Part 6, Item 9.c', name: 'Worksite Location - City or Town', type: 'text', realField: 'form1[0].#subform[3].Line9c_CityOrTown[0]', required: false },
+    { fieldId: 'I140_WorksiteState', part: 'Part 6, Item 9.d', name: 'Worksite Location - State', type: 'text', realField: 'form1[0].#subform[3].Line9d_State[0]', required: false },
+    { fieldId: 'I140_WorksiteZip', part: 'Part 6, Item 9.e', name: 'Worksite Location - ZIP Code', type: 'text', realField: 'form1[0].#subform[3].Line9e_ZipCode[0]', required: false },
+    // Part 7 - Spouse and children. Person 1/2 are the common case (spouse + one child); Persons
+    // 3-6 exist on the real form for large families but are marked optional (see note above).
+    { fieldId: 'I140_P1FamilyName', part: 'Part 7, Item 1.a', name: 'Person 1 (Spouse/Child) - Family Name', type: 'text', realField: 'form1[0].#subform[3].Line1a_Person1FamilyName[0]', required: false },
+    { fieldId: 'I140_P1GivenName', part: 'Part 7, Item 1.b', name: 'Person 1 (Spouse/Child) - Given Name', type: 'text', realField: 'form1[0].#subform[3].Line1b_Person1GivenName[0]', required: false },
+    { fieldId: 'I140_P1MiddleName', part: 'Part 7, Item 1.c', name: 'Person 1 (Spouse/Child) - Middle Name', type: 'text', realField: 'form1[0].#subform[3].Line1c_Person1MiddleName[0]', required: false },
+    { fieldId: 'I140_P1DOB', part: 'Part 7, Item 2', name: 'Person 1 - Date of Birth', type: 'text', realField: 'form1[0].#subform[3].Line1d_Person1DateOfBirth[0]', required: false },
+    { fieldId: 'I140_P1CountryOfBirth', part: 'Part 7, Item 3', name: 'Person 1 - Country of Birth', type: 'text', realField: 'form1[0].#subform[3].Line1e_CountryOfBirth[0]', required: false },
+    { fieldId: 'I140_P1Relationship', part: 'Part 7, Item 4', name: 'Person 1 - Relationship', type: 'text', realField: 'form1[0].#subform[3].Line1f_Relationship[0]', required: false },
+    { fieldId: 'I140_P1Adjustment', part: 'Part 7, Item 5', name: 'Person 1 - Applying for Adjustment of Status?', type: 'toggle', realField: 'form1[0].#subform[3].Pt7ItemNumber5_CheckboxYes[0]', required: false },
+    { fieldId: 'I140_P1VisaAbroad', part: 'Part 7, Item 6', name: 'Person 1 - Applying for a Visa Abroad?', type: 'toggle', realField: 'form1[0].#subform[3].Pt7ItemNumber6_CheckboxYes[0]', required: false },
+    { fieldId: 'I140_P2FamilyName', part: 'Part 7, Item 7.a', name: 'Person 2 (Spouse/Child) - Family Name', type: 'text', realField: 'form1[0].#subform[3].Line2a_Person2FamilyName[0]', required: false },
+    { fieldId: 'I140_P2GivenName', part: 'Part 7, Item 7.b', name: 'Person 2 (Spouse/Child) - Given Name', type: 'text', realField: 'form1[0].#subform[3].Line2b_Person2GivenName[0]', required: false },
+    { fieldId: 'I140_P2MiddleName', part: 'Part 7, Item 7.c', name: 'Person 2 (Spouse/Child) - Middle Name', type: 'text', realField: 'form1[0].#subform[3].Line2c_Person2MiddleName[0]', required: false },
+    { fieldId: 'I140_P2DOB', part: 'Part 7, Item 8', name: 'Person 2 - Date of Birth', type: 'text', realField: 'form1[0].#subform[3].Line2d_DateOfBirth[0]', required: false },
+    { fieldId: 'I140_P2CountryOfBirth', part: 'Part 7, Item 9', name: 'Person 2 - Country of Birth', type: 'text', realField: 'form1[0].#subform[3].Line2e_CountryOfBirth[0]', required: false },
+    { fieldId: 'I140_P2Relationship', part: 'Part 7, Item 10', name: 'Person 2 - Relationship', type: 'text', realField: 'form1[0].#subform[3].Line2f_Relationship[0]', required: false },
+    { fieldId: 'I140_P2Adjustment', part: 'Part 7, Item 11', name: 'Person 2 - Applying for Adjustment of Status?', type: 'toggle', realField: 'form1[0].#subform[3].Pt7ItemNumber11_CheckboxYes[0]', required: false },
+    { fieldId: 'I140_P2VisaAbroad', part: 'Part 7, Item 12', name: 'Person 2 - Applying for a Visa Abroad?', type: 'toggle', realField: 'form1[0].#subform[3].Pt7ItemNumber12_CheckboxYes[0]', required: false },
+    { fieldId: 'I140_P3FamilyName', part: 'Part 7, Item 13.a', name: 'Person 3 (Spouse/Child) - Family Name', type: 'text', realField: 'form1[0].#subform[4].Line2a_Person2FamilyName[1]', required: false },
+    { fieldId: 'I140_P3GivenName', part: 'Part 7, Item 13.b', name: 'Person 3 (Spouse/Child) - Given Name', type: 'text', realField: 'form1[0].#subform[4].Line2b_Person2GivenName[1]', required: false },
+    { fieldId: 'I140_P3MiddleName', part: 'Part 7, Item 13.c', name: 'Person 3 (Spouse/Child) - Middle Name', type: 'text', realField: 'form1[0].#subform[4].Line2c_Person2MiddleName[1]', required: false },
+    { fieldId: 'I140_P3DOB', part: 'Part 7, Item 14', name: 'Person 3 - Date of Birth', type: 'text', realField: 'form1[0].#subform[4].Line2d_DateOfBirth[1]', required: false },
+    { fieldId: 'I140_P3CountryOfBirth', part: 'Part 7, Item 15', name: 'Person 3 - Country of Birth', type: 'text', realField: 'form1[0].#subform[4].Line2e_CountryOfBirth[1]', required: false },
+    { fieldId: 'I140_P3Relationship', part: 'Part 7, Item 16', name: 'Person 3 - Relationship', type: 'text', realField: 'form1[0].#subform[4].Line2f_Relationship[1]', required: false },
+    { fieldId: 'I140_P3Adjustment', part: 'Part 7, Item 17', name: 'Person 3 - Applying for Adjustment of Status?', type: 'toggle', realField: 'form1[0].#subform[4].Pt7ItemNumber17_CheckboxYes[0]', required: false },
+    { fieldId: 'I140_P3VisaAbroad', part: 'Part 7, Item 18', name: 'Person 3 - Applying for a Visa Abroad?', type: 'toggle', realField: 'form1[0].#subform[4].Pt7ItemNumber18_CheckboxYes[0]', required: false },
+    { fieldId: 'I140_P4FamilyName', part: 'Part 7, Item 19.a', name: 'Person 4 (Spouse/Child) - Family Name', type: 'text', realField: 'form1[0].#subform[4].Line2a_Person2FamilyName[2]', required: false },
+    { fieldId: 'I140_P4GivenName', part: 'Part 7, Item 19.b', name: 'Person 4 (Spouse/Child) - Given Name', type: 'text', realField: 'form1[0].#subform[4].Line2b_Person2GivenName[2]', required: false },
+    { fieldId: 'I140_P4MiddleName', part: 'Part 7, Item 19.c', name: 'Person 4 (Spouse/Child) - Middle Name', type: 'text', realField: 'form1[0].#subform[4].Line2c_Person2MiddleName[2]', required: false },
+    { fieldId: 'I140_P4DOB', part: 'Part 7, Item 20', name: 'Person 4 - Date of Birth', type: 'text', realField: 'form1[0].#subform[4].Line2d_DateOfBirth[2]', required: false },
+    { fieldId: 'I140_P4CountryOfBirth', part: 'Part 7, Item 21', name: 'Person 4 - Country of Birth', type: 'text', realField: 'form1[0].#subform[4].Line2e_CountryOfBirth[2]', required: false },
+    { fieldId: 'I140_P4Relationship', part: 'Part 7, Item 22', name: 'Person 4 - Relationship', type: 'text', realField: 'form1[0].#subform[4].Line2f_Relationship[2]', required: false },
+    { fieldId: 'I140_P4Adjustment', part: 'Part 7, Item 23', name: 'Person 4 - Applying for Adjustment of Status?', type: 'toggle', realField: 'form1[0].#subform[4].Pt7ItemNumber23_CheckboxYes[0]', required: false },
+    { fieldId: 'I140_P4VisaAbroad', part: 'Part 7, Item 24', name: 'Person 4 - Applying for a Visa Abroad?', type: 'toggle', realField: 'form1[0].#subform[4].Pt7ItemNumber24_CheckboxYes[0]', required: false },
+    { fieldId: 'I140_P5FamilyName', part: 'Part 7, Item 25.a', name: 'Person 5 (Spouse/Child) - Family Name', type: 'text', realField: 'form1[0].#subform[4].Line2a_Person2FamilyName[3]', required: false },
+    { fieldId: 'I140_P5GivenName', part: 'Part 7, Item 25.b', name: 'Person 5 (Spouse/Child) - Given Name', type: 'text', realField: 'form1[0].#subform[4].Line2b_Person2GivenName[3]', required: false },
+    { fieldId: 'I140_P5MiddleName', part: 'Part 7, Item 25.c', name: 'Person 5 (Spouse/Child) - Middle Name', type: 'text', realField: 'form1[0].#subform[4].Line2c_Person2MiddleName[3]', required: false },
+    { fieldId: 'I140_P5DOB', part: 'Part 7, Item 26', name: 'Person 5 - Date of Birth', type: 'text', realField: 'form1[0].#subform[4].Line2d_DateOfBirth[3]', required: false },
+    { fieldId: 'I140_P5CountryOfBirth', part: 'Part 7, Item 27', name: 'Person 5 - Country of Birth', type: 'text', realField: 'form1[0].#subform[4].Line2e_CountryOfBirth[3]', required: false },
+    { fieldId: 'I140_P5Relationship', part: 'Part 7, Item 28', name: 'Person 5 - Relationship', type: 'text', realField: 'form1[0].#subform[4].Line2f_Relationship[3]', required: false },
+    { fieldId: 'I140_P5Adjustment', part: 'Part 7, Item 29', name: 'Person 5 - Applying for Adjustment of Status?', type: 'toggle', realField: 'form1[0].#subform[4].Pt7ItemNumber29_CheckboxYes[0]', required: false },
+    { fieldId: 'I140_P5VisaAbroad', part: 'Part 7, Item 30', name: 'Person 5 - Applying for a Visa Abroad?', type: 'toggle', realField: 'form1[0].#subform[4].Pt7ItemNumber30_CheckboxYes[0]', required: false },
+    { fieldId: 'I140_P6FamilyName', part: 'Part 7, Item 31.a', name: 'Person 6 (Spouse/Child) - Family Name', type: 'text', realField: 'form1[0].#subform[4].Line2a_Person2FamilyName[4]', required: false },
+    { fieldId: 'I140_P6GivenName', part: 'Part 7, Item 31.b', name: 'Person 6 (Spouse/Child) - Given Name', type: 'text', realField: 'form1[0].#subform[4].Line2b_Person2GivenName[4]', required: false },
+    { fieldId: 'I140_P6MiddleName', part: 'Part 7, Item 31.c', name: 'Person 6 (Spouse/Child) - Middle Name', type: 'text', realField: 'form1[0].#subform[4].Line2c_Person2MiddleName[4]', required: false },
+    { fieldId: 'I140_P6DOB', part: 'Part 7, Item 32', name: 'Person 6 - Date of Birth', type: 'text', realField: 'form1[0].#subform[4].Line2d_DateOfBirth[4]', required: false },
+    { fieldId: 'I140_P6CountryOfBirth', part: 'Part 7, Item 33', name: 'Person 6 - Country of Birth', type: 'text', realField: 'form1[0].#subform[4].Line2e_CountryOfBirth[4]', required: false },
+    { fieldId: 'I140_P6Relationship', part: 'Part 7, Item 34', name: 'Person 6 - Relationship', type: 'text', realField: 'form1[0].#subform[4].Line2f_Relationship[4]', required: false },
+    { fieldId: 'I140_P6Adjustment', part: 'Part 7, Item 35', name: 'Person 6 - Applying for Adjustment of Status?', type: 'toggle', realField: 'form1[0].#subform[4].Pt7ItemNumber35_CheckboxYes[0]', required: false },
+    { fieldId: 'I140_P6VisaAbroad', part: 'Part 7, Item 36', name: 'Person 6 - Applying for a Visa Abroad?', type: 'toggle', realField: 'form1[0].#subform[4].Pt7ItemNumber36_CheckboxYes[0]', required: false },
+    // Part 8 - Petitioner/Authorized Signatory contact info. Distinct from the beneficiary and
+    // from the attorney - could be an HR contact, so not semantically prefilled.
+    { fieldId: 'I140_SignatoryFamilyName', part: 'Part 8, Item 1.a', name: "Petitioner/Authorized Signatory's Family Name", type: 'text', realField: 'form1[0].#subform[5].Part7_Item3a_FamilyName[0]', required: false },
+    { fieldId: 'I140_SignatoryGivenName', part: 'Part 8, Item 1.b', name: "Petitioner/Authorized Signatory's Given Name", type: 'text', realField: 'form1[0].#subform[5].Part7_Item3b_GivenName[0]', required: false },
+    { fieldId: 'I140_SignatoryTitle', part: 'Part 8, Item 2', name: "Petitioner/Authorized Signatory's Title", type: 'text', realField: 'form1[0].#subform[5].Part7_Item4_Title[0]', required: false },
+    { fieldId: 'I140_SignatoryDayPhone', part: 'Part 8, Item 3', name: "Petitioner/Authorized Signatory's Daytime Telephone Number", type: 'text', realField: 'form1[0].#subform[5].Part7_Item5_DayPhone[0]', required: false },
+    { fieldId: 'I140_SignatoryMobilePhone', part: 'Part 8, Item 4', name: "Petitioner/Authorized Signatory's Mobile Telephone Number", type: 'text', realField: 'form1[0].#subform[5].Part7_Item6_MobilePhone[0]', required: false },
+    { fieldId: 'I140_SignatoryEmail', part: 'Part 8, Item 5', name: "Petitioner/Authorized Signatory's Email Address", type: 'text', realField: 'form1[0].#subform[5].Part7_Item7_Email[0]', required: false },
+    // Part 9 - Interpreter. Only applies if an interpreter was used - most filings have none.
+    { fieldId: 'I140_InterpreterFamilyName', part: 'Part 9, Item 1.a', name: "Interpreter's Family Name", type: 'text', realField: 'form1[0].#subform[5].Part8_Item1a_FamilyName[0]', required: false },
+    { fieldId: 'I140_InterpreterGivenName', part: 'Part 9, Item 1.b', name: "Interpreter's Given Name", type: 'text', realField: 'form1[0].#subform[5].Part8_Item1b_GivenName[0]', required: false },
+    { fieldId: 'I140_InterpreterOrgName', part: 'Part 9, Item 2', name: "Interpreter's Business or Organization Name", type: 'text', realField: 'form1[0].#subform[5].Part8_Item2_OrgName[0]', required: false },
+    { fieldId: 'I140_InterpreterDayPhone', part: 'Part 9, Item 3', name: "Interpreter's Daytime Telephone Number", type: 'text', realField: 'form1[0].#subform[5].Part8_Item4_DayPhone[0]', required: false },
+    { fieldId: 'I140_InterpreterMobilePhone', part: 'Part 9, Item 4', name: "Interpreter's Mobile Telephone Number", type: 'text', realField: 'form1[0].#subform[5].Part8_Item5_MobilePhone[0]', required: false },
+    { fieldId: 'I140_InterpreterEmail', part: 'Part 9, Item 5', name: "Interpreter's Email Address", type: 'text', realField: 'form1[0].#subform[5].Part8_Item6_Email[0]', required: false },
+    { fieldId: 'I140_InterpreterLanguage', part: 'Part 9, Certification', name: 'Language Interpreted', type: 'text', realField: 'form1[0].#subform[5].Part8_Item6_Language[0]', required: false },
+    // Part 10 - Preparer, if other than the petitioner/signatory. The attorney is almost always
+    // the preparer in this practice, so name/firm are safely semantic-prefilled; the rest isn't.
+    { fieldId: 'I140_PreparerFamilyName', part: 'Part 10, Item 1', name: "Preparer's Family Name", type: 'text', semanticKey: 'attorneyFamilyName', realField: 'form1[0].#subform[6].Part10_Item1_FamilyName[0]' },
+    { fieldId: 'I140_PreparerGivenName', part: 'Part 10, Item 1', name: "Preparer's Given Name", type: 'text', semanticKey: 'attorneyGivenName', realField: 'form1[0].#subform[6].Part10_Item1_GivenName[0]' },
+    { fieldId: 'I140_PreparerOrgName', part: 'Part 10, Item 2', name: "Preparer's Business or Organization Name", type: 'text', semanticKey: 'lawFirm', realField: 'form1[0].#subform[6].Part10_Item2_OrgName[0]' },
+    { fieldId: 'I140_PreparerDayPhone', part: 'Part 10, Item 3', name: "Preparer's Daytime Telephone Number", type: 'text', realField: 'form1[0].#subform[6].Part10_Item3_DayPhone[0]', required: false },
+    { fieldId: 'I140_PreparerMobilePhone', part: 'Part 10, Item 4', name: "Preparer's Mobile Telephone Number", type: 'text', realField: 'form1[0].#subform[6].Part10_Item4_MobilePhone[0]', required: false },
+    { fieldId: 'I140_PreparerEmail', part: 'Part 10, Item 5', name: "Preparer's Email Address", type: 'text', realField: 'form1[0].#subform[6].Part10_Item5_Email[0]', required: false },
+];
+
+// I-765's own internal field-name numbering drifts from the current printed item numbers in
+// several spots (already caught once: "Line6_EMail"/"Line7_MobileTelephoneNumber" earlier in this
+// file were actually swapped on G-28; here e.g. "Pt6Line3*" on page 5 is really Part 5 Preparer's
+// address, not Part 6). Every mapping below was resolved by rect position against the rendered
+// blank template, not by trusting the internal name. Eligibility Category (Part 2, Item 27) and
+// Reason for Applying (Part 1, Item 1) are per-case legal judgment calls with no reliable
+// caseType-based default (unlike I-140's petition type) - required, but never auto-derived.
+const I765_FIELD_DEFS: UscisFieldDef[] = [
+    { fieldId: 'I765_G28Attached', part: 'Attorney Block', name: 'Form G-28 is Attached', type: 'toggle', realField: 'form1[0].Page1[0].Attorney-Rep[0].CheckBox1[0]', required: false },
+    { fieldId: 'I765_AttyBarNumber', part: 'Attorney Block', name: 'Attorney State Bar Number', type: 'text', realField: 'form1[0].Page1[0].Attorney-Rep[0].attorneyBarNumber[0]', required: false },
+    { fieldId: 'I765_AttyUscisAcct', part: 'Attorney Block', name: 'Attorney/Rep USCIS Online Account Number', type: 'text', realField: 'form1[0].Page1[0].Attorney-Rep[0].USCISELISAcctNumber[0]', required: false },
+    { fieldId: 'I765_Reason', part: 'Part 1, Item 1', name: 'Reason for Applying (select only one box)', type: 'select', options: [
+        { value: 'initial', label: 'Initial permission to accept employment', realField: 'form1[0].Page1[0].Part1_Checkbox[0]' },
+        { value: 'replacement', label: 'Replacement of lost/stolen/damaged EAD, or correction NOT due to USCIS error', realField: 'form1[0].Page1[0].Part1_Checkbox[1]' },
+        { value: 'renewal', label: 'Renewal of my permission to accept employment', realField: 'form1[0].Page1[0].Part1_Checkbox[2]' },
+    ] },
+    { fieldId: 'I765_FamilyName', part: 'Part 2, Item 1.a', name: 'Family Name', type: 'text', semanticKey: 'familyName', realField: 'form1[0].Page1[0].Line1a_FamilyName[0]' },
+    { fieldId: 'I765_GivenName', part: 'Part 2, Item 1.b', name: 'Given Name', type: 'text', semanticKey: 'givenName', realField: 'form1[0].Page1[0].Line1b_GivenName[0]' },
+    { fieldId: 'I765_MiddleName', part: 'Part 2, Item 1.c', name: 'Middle Name', type: 'text', realField: 'form1[0].Page1[0].Line1c_MiddleName[0]', required: false },
+    { fieldId: 'I765_OtherName2Family', part: 'Other Names Used, Item 2.a', name: 'Other Name Used #1 - Family Name', type: 'text', realField: 'form1[0].Page1[0].Line2a_FamilyName[0]', required: false },
+    { fieldId: 'I765_OtherName2Given', part: 'Other Names Used, Item 2.b', name: 'Other Name Used #1 - Given Name', type: 'text', realField: 'form1[0].Page1[0].Line2b_GivenName[0]', required: false },
+    { fieldId: 'I765_OtherName2Middle', part: 'Other Names Used, Item 2.c', name: 'Other Name Used #1 - Middle Name', type: 'text', realField: 'form1[0].Page1[0].Line2c_MiddleName[0]', required: false },
+    { fieldId: 'I765_OtherName3Family', part: 'Other Names Used, Item 3.a', name: 'Other Name Used #2 - Family Name', type: 'text', realField: 'form1[0].Page1[0].Line3a_FamilyName[1]', required: false },
+    { fieldId: 'I765_OtherName3Given', part: 'Other Names Used, Item 3.b', name: 'Other Name Used #2 - Given Name', type: 'text', realField: 'form1[0].Page1[0].Line3b_GivenName[1]', required: false },
+    { fieldId: 'I765_OtherName3Middle', part: 'Other Names Used, Item 3.c', name: 'Other Name Used #2 - Middle Name', type: 'text', realField: 'form1[0].Page1[0].Line3c_MiddleName[1]', required: false },
+    { fieldId: 'I765_OtherName4Family', part: 'Other Names Used, Item 4.a', name: 'Other Name Used #3 - Family Name', type: 'text', realField: 'form1[0].Page1[0].Line3a_FamilyName[0]', required: false },
+    { fieldId: 'I765_OtherName4Given', part: 'Other Names Used, Item 4.b', name: 'Other Name Used #3 - Given Name', type: 'text', realField: 'form1[0].Page1[0].Line3b_GivenName[0]', required: false },
+    { fieldId: 'I765_OtherName4Middle', part: 'Other Names Used, Item 4.c', name: 'Other Name Used #3 - Middle Name', type: 'text', realField: 'form1[0].Page1[0].Line3c_MiddleName[0]', required: false },
+    { fieldId: 'I765_MailInCareOf', part: 'Part 2, Item 5.a', name: 'Mailing Address - In Care Of Name', type: 'text', realField: 'form1[0].Page2[0].Line4a_InCareofName[0]', required: false },
+    { fieldId: 'I765_MailStreet', part: 'Part 2, Item 5.b', name: 'Mailing Address - Street Number and Name', type: 'text', realField: 'form1[0].Page2[0].Line4b_StreetNumberName[0]', required: false },
+    { fieldId: 'I765_MailUnitType', part: 'Part 2, Item 5.c', name: 'Mailing Address - Unit Type', type: 'select', required: false, options: [
+        { value: 'apt', label: 'Apt.', realField: 'form1[0].Page2[0].Pt2Line5_Unit[2]' },
+        { value: 'ste', label: 'Ste.', realField: 'form1[0].Page2[0].Pt2Line5_Unit[0]' },
+        { value: 'flr', label: 'Flr.', realField: 'form1[0].Page2[0].Pt2Line5_Unit[1]' },
+        { value: 'na', label: 'Not Applicable', realField: '' },
+    ] },
+    { fieldId: 'I765_MailUnitNumber', part: 'Part 2, Item 5.c', name: 'Mailing Address - Apt/Ste/Flr Number', type: 'text', realField: 'form1[0].Page2[0].Pt2Line5_AptSteFlrNumber[0]', required: false },
+    { fieldId: 'I765_MailCity', part: 'Part 2, Item 5.d', name: 'Mailing Address - City or Town', type: 'text', realField: 'form1[0].Page2[0].Pt2Line5_CityOrTown[0]', required: false },
+    { fieldId: 'I765_MailState', part: 'Part 2, Item 5.e', name: 'Mailing Address - State', type: 'text', realField: 'form1[0].Page2[0].Pt2Line5_State[0]', required: false },
+    { fieldId: 'I765_MailZip', part: 'Part 2, Item 5.f', name: 'Mailing Address - ZIP Code', type: 'text', realField: 'form1[0].Page2[0].Pt2Line5_ZipCode[0]', required: false },
+    { fieldId: 'I765_MailSameAsPhysical', part: 'Part 2, Item 6', name: 'Is Mailing Address Same as Physical Address?', type: 'select', required: false, options: [
+        { value: 'yes', label: 'Yes', realField: 'form1[0].Page2[0].Part2Line5_Checkbox[1]' },
+        { value: 'no', label: 'No', realField: 'form1[0].Page2[0].Part2Line5_Checkbox[0]' },
+    ] },
+    { fieldId: 'I765_PhysicalStreet', part: 'Part 2, Item 7.a', name: 'Physical Address - Street Number and Name', type: 'text', realField: 'form1[0].Page2[0].Pt2Line7_StreetNumberName[0]', required: false },
+    { fieldId: 'I765_PhysicalUnitType', part: 'Part 2, Item 7.b', name: 'Physical Address - Unit Type', type: 'select', required: false, options: [
+        { value: 'apt', label: 'Apt.', realField: 'form1[0].Page2[0].Pt2Line7_Unit[2]' },
+        { value: 'ste', label: 'Ste.', realField: 'form1[0].Page2[0].Pt2Line7_Unit[0]' },
+        { value: 'flr', label: 'Flr.', realField: 'form1[0].Page2[0].Pt2Line7_Unit[1]' },
+        { value: 'na', label: 'Not Applicable', realField: '' },
+    ] },
+    { fieldId: 'I765_PhysicalUnitNumber', part: 'Part 2, Item 7.b', name: 'Physical Address - Apt/Ste/Flr Number', type: 'text', realField: 'form1[0].Page2[0].Pt2Line7_AptSteFlrNumber[0]', required: false },
+    { fieldId: 'I765_PhysicalCity', part: 'Part 2, Item 7.c', name: 'Physical Address - City or Town', type: 'text', realField: 'form1[0].Page2[0].Pt2Line7_CityOrTown[0]', required: false },
+    { fieldId: 'I765_PhysicalState', part: 'Part 2, Item 7.d', name: 'Physical Address - State', type: 'text', realField: 'form1[0].Page2[0].Pt2Line7_State[0]', required: false },
+    { fieldId: 'I765_PhysicalZip', part: 'Part 2, Item 7.e', name: 'Physical Address - ZIP Code', type: 'text', realField: 'form1[0].Page2[0].Pt2Line7_ZipCode[0]', required: false },
+    { fieldId: 'I765_ANumber', part: 'Part 2, Item 8', name: 'Alien Registration Number (A-Number)', type: 'text', semanticKey: 'aNumber', realField: 'form1[0].Page2[0].Line7_AlienNumber[0]' },
+    { fieldId: 'I765_UscisAcct', part: 'Part 2, Item 9', name: 'USCIS Online Account Number', type: 'text', realField: 'form1[0].Page2[0].Line8_ElisAccountNumber[0]', required: false },
+    { fieldId: 'I765_Sex', part: 'Part 2, Item 10', name: 'Sex', type: 'select', required: false, options: [
+        { value: 'male', label: 'Male', realField: 'form1[0].Page2[0].Line9_Checkbox[1]' },
+        { value: 'female', label: 'Female', realField: 'form1[0].Page2[0].Line9_Checkbox[0]' },
+    ] },
+    { fieldId: 'I765_MaritalStatus', part: 'Part 2, Item 11', name: 'Marital Status', type: 'select', required: false, options: [
+        { value: 'single', label: 'Single', realField: 'form1[0].Page2[0].Line10_Checkbox[2]' },
+        { value: 'married', label: 'Married', realField: 'form1[0].Page2[0].Line10_Checkbox[3]' },
+        { value: 'divorced', label: 'Divorced', realField: 'form1[0].Page2[0].Line10_Checkbox[1]' },
+        { value: 'widowed', label: 'Widowed', realField: 'form1[0].Page2[0].Line10_Checkbox[0]' },
+    ] },
+    { fieldId: 'I765_PreviouslyFiled', part: 'Part 2, Item 12', name: 'Have You Previously Filed Form I-765?', type: 'toggle', realField: 'form1[0].Page2[0].Line19_Checkbox[1]', required: false },
+    { fieldId: 'I765_SSN', part: 'Part 2, Item 13', name: 'Social Security Number (if known)', type: 'text', realField: 'form1[0].Page2[0].Line12b_SSN[0]', required: false },
+    { fieldId: 'I765_Nationality', part: 'Part 2, Item 14.a', name: 'Country of Citizenship or Nationality', type: 'text', semanticKey: 'nationality', realField: 'form1[0].Page2[0].Line17a_CountryOfBirth[0]' },
+    { fieldId: 'I765_Nationality2', part: 'Part 2, Item 14.b', name: 'Country of Citizenship or Nationality (2nd, if dual national)', type: 'text', realField: 'form1[0].Page2[0].Line17b_CountryOfBirth[0]', required: false },
+    { fieldId: 'I765_CityOfBirth', part: 'Part 2, Item 15.a', name: 'City/Town/Village of Birth', type: 'text', realField: 'form1[0].Page3[0].Line18a_CityTownOfBirth[0]', required: false },
+    { fieldId: 'I765_StateProvinceOfBirth', part: 'Part 2, Item 15.b', name: 'State/Province of Birth', type: 'text', realField: 'form1[0].Page3[0].Line18b_CityTownOfBirth[0]', required: false },
+    { fieldId: 'I765_CountryOfBirth', part: 'Part 2, Item 15.c', name: 'Country of Birth', type: 'text', realField: 'form1[0].Page3[0].Line18c_CountryOfBirth[0]', required: false },
+    { fieldId: 'I765_DOB', part: 'Part 2, Item 16', name: 'Date of Birth', type: 'text', semanticKey: 'dob', realField: 'form1[0].Page3[0].Line19_DOB[0]' },
+    { fieldId: 'I765_I94', part: 'Part 2, Item 17', name: 'Form I-94 Arrival-Departure Record Number', type: 'text', semanticKey: 'i94No', realField: 'form1[0].Page3[0].Line20a_I94Number[0]' },
+    { fieldId: 'I765_Passport', part: 'Part 2, Item 18', name: 'Passport Number of Your Most Recently Issued Passport', type: 'text', semanticKey: 'passportNo', realField: 'form1[0].Page3[0].Line20b_Passport[0]' },
+    { fieldId: 'I765_TravelDoc', part: 'Part 2, Item 19', name: 'Travel Document Number (if any)', type: 'text', realField: 'form1[0].Page3[0].Line20c_TravelDoc[0]', required: false },
+    { fieldId: 'I765_PassportCountryIssuance', part: 'Part 2, Item 20', name: 'Country That Issued Your Passport or Travel Document', type: 'text', realField: 'form1[0].Page3[0].Line20d_CountryOfIssuance[0]', required: false },
+    { fieldId: 'I765_PassportExpDate', part: 'Part 2, Item 21', name: 'Expiration Date for Passport or Travel Document', type: 'text', realField: 'form1[0].Page3[0].Line20e_ExpDate[0]', required: false },
+    { fieldId: 'I765_DateOfLastEntry', part: 'Part 2, Item 22', name: 'Date of Your Last Arrival Into the U.S.', type: 'text', realField: 'form1[0].Page3[0].Line21_DateOfLastEntry[0]', required: false },
+    { fieldId: 'I765_PlaceOfLastEntry', part: 'Part 2, Item 23', name: 'Place of Your Last Arrival Into the U.S.', type: 'text', realField: 'form1[0].Page3[0].place_entry[0]', required: false },
+    { fieldId: 'I765_StatusAtLastEntry', part: 'Part 2, Item 24', name: 'Immigration Status at Your Last Arrival', type: 'text', realField: 'form1[0].Page3[0].Line23_StatusLastEntry[0]', required: false },
+    { fieldId: 'I765_CurrentStatus', part: 'Part 2, Item 25', name: 'Your Current Immigration Status or Category', type: 'text', semanticKey: 'status', realField: 'form1[0].Page3[0].Line24_CurrentStatus[0]' },
+    { fieldId: 'I765_SEVIS', part: 'Part 2, Item 26', name: 'SEVIS Number (if any)', type: 'text', realField: 'form1[0].Page3[0].Line26_SEVISnumber[0]', required: false },
+    // Eligibility category format is "(a)(#)" / "(c)(#)(roman numeral)" - three boxes, one per
+    // bracketed segment. Not case-type-derivable (unrelated to the I-140 EB category system this
+    // app tracks), so always left for the attorney - but still required, since every I-765 needs one.
+    { fieldId: 'I765_EligCategory1', part: 'Part 2, Item 27', name: 'Eligibility Category - Letter (e.g. "c")', type: 'text', realField: 'form1[0].Page3[0].#area[1].section_1[0]' },
+    { fieldId: 'I765_EligCategory2', part: 'Part 2, Item 27', name: 'Eligibility Category - Number (e.g. "9")', type: 'text', realField: 'form1[0].Page3[0].#area[1].section_2[0]' },
+    { fieldId: 'I765_EligCategory3', part: 'Part 2, Item 27', name: 'Eligibility Category - Sub-item (if any)', type: 'text', realField: 'form1[0].Page3[0].#area[1].section_3[0]', required: false },
+    { fieldId: 'I765_STEMDegree', part: 'Part 2, Item 28.a', name: '(c)(3)(C) STEM OPT - Degree', type: 'text', realField: 'form1[0].Page3[0].Line27a_Degree[0]', required: false },
+    { fieldId: 'I765_STEMEverifyEmployer', part: 'Part 2, Item 28.b', name: "(c)(3)(C) STEM OPT - Employer's Name as Listed in E-Verify", type: 'text', realField: 'form1[0].Page3[0].Line27b_Everify[0]', required: false },
+    { fieldId: 'I765_STEMEverifyID', part: 'Part 2, Item 28.c', name: '(c)(3)(C) STEM OPT - E-Verify Company ID Number', type: 'text', realField: 'form1[0].Page3[0].Line27c_EverifyIDNumber[0]', required: false },
+    { fieldId: 'I765_C26ReceiptNumber', part: 'Part 2, Item 29', name: '(c)(26) Eligibility - H-1B Spouse Form I-797 Receipt Number', type: 'text', realField: 'form1[0].Page3[0].Line28_ReceiptNumber[0]', required: false },
+    { fieldId: 'I765_C26EverArrested', part: 'Part 2, Item 30', name: '(c)(8) Eligibility - Have You EVER Been Arrested/Convicted?', type: 'toggle', realField: 'form1[0].Page3[0].PtLine29_YesNo[0]', required: false },
+    { fieldId: 'I765_C35C36ReceiptNumber', part: 'Part 2, Item 31.a', name: '(c)(35)/(c)(36) Eligibility - Form I-140 or Spouse/Parent I-797 Receipt Number', type: 'text', realField: 'form1[0].Page3[0].Line18a_Receipt[0].Line30a_ReceiptNumber[0]', required: false },
+    { fieldId: 'I765_C35C36EverArrested', part: 'Part 2, Item 31.b', name: '(c)(35)/(c)(36) Eligibility - Have You EVER Been Arrested/Convicted?', type: 'toggle', realField: 'form1[0].Page3[0].PtLine30b_YesNo[0]', required: false },
+    // Part 3 - Applicant's Statement/Contact/Certification. Signature fields are excluded.
+    { fieldId: 'I765_StatementChoice', part: 'Part 3, Item 1', name: "Applicant's Statement (select only one box)", type: 'select', required: false, options: [
+        { value: 'read_english', label: 'I can read and understand English', realField: 'form1[0].Page4[0].Pt3Line1Checkbox[1]' },
+        { value: 'interpreter_read', label: 'The interpreter named in Part 4 read every question to me', realField: 'form1[0].Page4[0].Pt3Line1Checkbox[0]' },
+    ] },
+    { fieldId: 'I765_StatementLanguage', part: 'Part 3, Item 1.b', name: 'Language Interpreter Read To Me In', type: 'text', realField: 'form1[0].Page4[0].Pt3Line1b_Language[0]', required: false },
+    { fieldId: 'I765_PreparerUsedCheckbox', part: 'Part 3, Item 2', name: 'Preparer Named in Part 5 Prepared This on My Behalf', type: 'toggle', realField: 'form1[0].Page4[0].Part3_Checkbox[0]', required: false },
+    { fieldId: 'I765_PreparerUsedName', part: 'Part 3, Item 2', name: 'Preparer Name Reference (if Item 2 checked)', type: 'text', realField: 'form1[0].Page4[0].Pt3Line2_RepresentativeName[0]', required: false },
+    { fieldId: 'I765_ApplicantDayPhone', part: 'Part 3, Item 3', name: "Applicant's Daytime Telephone Number", type: 'text', realField: 'form1[0].Page4[0].Pt3Line3_DaytimePhoneNumber1[0]', required: false },
+    { fieldId: 'I765_ApplicantMobilePhone', part: 'Part 3, Item 4', name: "Applicant's Mobile Telephone Number", type: 'text', realField: 'form1[0].Page4[0].Pt3Line4_MobileNumber1[0]', required: false },
+    { fieldId: 'I765_ApplicantEmail', part: 'Part 3, Item 5', name: "Applicant's Email Address", type: 'text', realField: 'form1[0].Page4[0].Pt3Line5_Email[0]', required: false },
+    { fieldId: 'I765_ABCSettlement', part: 'Part 3, Item 6', name: 'Salvadoran/Guatemalan National Eligible Under ABC Settlement', type: 'toggle', realField: 'form1[0].Page4[0].Pt4Line6_Checkbox[0]', required: false },
+    // Part 4 - Interpreter. Only applies if an interpreter was used - most filings have none.
+    { fieldId: 'I765_InterpreterFamilyName', part: 'Part 4, Item 1.a', name: "Interpreter's Family Name", type: 'text', realField: 'form1[0].Page4[0].Pt4Line1a_InterpreterFamilyName[0]', required: false },
+    { fieldId: 'I765_InterpreterGivenName', part: 'Part 4, Item 1.b', name: "Interpreter's Given Name", type: 'text', realField: 'form1[0].Page4[0].Pt4Line1b_InterpreterGivenName[0]', required: false },
+    { fieldId: 'I765_InterpreterOrgName', part: 'Part 4, Item 2', name: "Interpreter's Business or Organization Name", type: 'text', realField: 'form1[0].Page4[0].Pt4Line2_InterpreterBusinessorOrg[0]', required: false },
+    { fieldId: 'I765_InterpreterStreet', part: 'Part 4, Item 3.a', name: "Interpreter's Mailing Address - Street Number and Name", type: 'text', realField: 'form1[0].Page5[0].Pt5Line3a_StreetNumberName[0]', required: false },
+    { fieldId: 'I765_InterpreterUnitType', part: 'Part 4, Item 3.b', name: "Interpreter's Mailing Address - Unit Type", type: 'select', required: false, options: [
+        { value: 'apt', label: 'Apt.', realField: 'form1[0].Page5[0].Pt5Line3b_Unit[2]' },
+        { value: 'ste', label: 'Ste.', realField: 'form1[0].Page5[0].Pt5Line3b_Unit[0]' },
+        { value: 'flr', label: 'Flr.', realField: 'form1[0].Page5[0].Pt5Line3b_Unit[1]' },
+        { value: 'na', label: 'Not Applicable', realField: '' },
+    ] },
+    { fieldId: 'I765_InterpreterUnitNumber', part: 'Part 4, Item 3.b', name: "Interpreter's Mailing Address - Apt/Ste/Flr Number", type: 'text', realField: 'form1[0].Page5[0].Pt5Line3b_AptSteFlrNumber[0]', required: false },
+    { fieldId: 'I765_InterpreterCity', part: 'Part 4, Item 3.c', name: "Interpreter's Mailing Address - City or Town", type: 'text', realField: 'form1[0].Page5[0].Pt5Line3c_CityOrTown[0]', required: false },
+    { fieldId: 'I765_InterpreterState', part: 'Part 4, Item 3.d', name: "Interpreter's Mailing Address - State", type: 'text', realField: 'form1[0].Page5[0].Pt5Line3d_State[0]', required: false },
+    { fieldId: 'I765_InterpreterZip', part: 'Part 4, Item 3.e', name: "Interpreter's Mailing Address - ZIP Code", type: 'text', realField: 'form1[0].Page5[0].Pt5Line3e_ZipCode[0]', required: false },
+    { fieldId: 'I765_InterpreterProvince', part: 'Part 4, Item 3.f', name: "Interpreter's Mailing Address - Province", type: 'text', realField: 'form1[0].Page5[0].Pt5Line3f_Province[0]', required: false },
+    { fieldId: 'I765_InterpreterPostalCode', part: 'Part 4, Item 3.g', name: "Interpreter's Mailing Address - Postal Code", type: 'text', realField: 'form1[0].Page5[0].Pt5Line3g_PostalCode[0]', required: false },
+    { fieldId: 'I765_InterpreterCountry', part: 'Part 4, Item 3.h', name: "Interpreter's Mailing Address - Country", type: 'text', realField: 'form1[0].Page5[0].Pt5Line3h_Country[0]', required: false },
+    { fieldId: 'I765_InterpreterDayPhone', part: 'Part 4, Item 4', name: "Interpreter's Daytime Telephone Number", type: 'text', realField: 'form1[0].Page5[0].Pt4Line4_InterpreterDaytimeTelephone[0]', required: false },
+    { fieldId: 'I765_InterpreterMobilePhone', part: 'Part 4, Item 5', name: "Interpreter's Mobile Telephone Number", type: 'text', realField: 'form1[0].Page5[0].Pt4Line5_MobileNumber[0]', required: false },
+    { fieldId: 'I765_InterpreterEmail', part: 'Part 4, Item 6', name: "Interpreter's Email Address", type: 'text', realField: 'form1[0].Page5[0].Pt4Line6_Email[0]', required: false },
+    { fieldId: 'I765_InterpreterLanguage', part: 'Part 4, Certification', name: 'Language Interpreted', type: 'text', realField: 'form1[0].Page5[0].Part4_NameofLanguage[0]', required: false },
+    // Part 5 - Preparer, if other than the applicant. The attorney is almost always the preparer
+    // in this practice, so name/firm are safely semantic-prefilled; the rest isn't.
+    { fieldId: 'I765_PreparerFamilyName', part: 'Part 5, Item 1.a', name: "Preparer's Family Name", type: 'text', semanticKey: 'attorneyFamilyName', realField: 'form1[0].Page5[0].Pt5Line1a_PreparerFamilyName[0]' },
+    { fieldId: 'I765_PreparerGivenName', part: 'Part 5, Item 1.b', name: "Preparer's Given Name", type: 'text', semanticKey: 'attorneyGivenName', realField: 'form1[0].Page5[0].Pt5Line1b_PreparerGivenName[0]' },
+    { fieldId: 'I765_PreparerOrgName', part: 'Part 5, Item 2', name: "Preparer's Business or Organization Name", type: 'text', semanticKey: 'lawFirm', realField: 'form1[0].Page5[0].Pt5Line2_BusinessName[0]' },
+    { fieldId: 'I765_PreparerStreet', part: 'Part 5, Item 3.a', name: "Preparer's Mailing Address - Street Number and Name", type: 'text', realField: 'form1[0].Page5[0].Pt6Line3a_StreetNumberName[0]', required: false },
+    { fieldId: 'I765_PreparerUnitType', part: 'Part 5, Item 3.b', name: "Preparer's Mailing Address - Unit Type", type: 'select', required: false, options: [
+        { value: 'apt', label: 'Apt.', realField: 'form1[0].Page5[0].Pt6Line3b_Unit[2]' },
+        { value: 'ste', label: 'Ste.', realField: 'form1[0].Page5[0].Pt6Line3b_Unit[0]' },
+        { value: 'flr', label: 'Flr.', realField: 'form1[0].Page5[0].Pt6Line3b_Unit[1]' },
+        { value: 'na', label: 'Not Applicable', realField: '' },
+    ] },
+    { fieldId: 'I765_PreparerUnitNumber', part: 'Part 5, Item 3.b', name: "Preparer's Mailing Address - Apt/Ste/Flr Number", type: 'text', realField: 'form1[0].Page5[0].Pt6Line3b_AptSteFlrNumber[0]', required: false },
+    { fieldId: 'I765_PreparerCity', part: 'Part 5, Item 3.c', name: "Preparer's Mailing Address - City or Town", type: 'text', realField: 'form1[0].Page5[0].Pt6Line3c_CityOrTown[0]', required: false },
+    { fieldId: 'I765_PreparerState', part: 'Part 5, Item 3.d', name: "Preparer's Mailing Address - State", type: 'text', realField: 'form1[0].Page5[0].Pt6Line3d_State[0]', required: false },
+    { fieldId: 'I765_PreparerZip', part: 'Part 5, Item 3.e', name: "Preparer's Mailing Address - ZIP Code", type: 'text', realField: 'form1[0].Page5[0].Pt6Line3e_ZipCode[0]', required: false },
+    { fieldId: 'I765_PreparerProvince', part: 'Part 5, Item 3.f', name: "Preparer's Mailing Address - Province", type: 'text', realField: 'form1[0].Page5[0].Pt6Line3f_Province[0]', required: false },
+    { fieldId: 'I765_PreparerPostalCode', part: 'Part 5, Item 3.g', name: "Preparer's Mailing Address - Postal Code", type: 'text', realField: 'form1[0].Page5[0].Pt6Line3g_PostalCode[0]', required: false },
+    { fieldId: 'I765_PreparerCountry', part: 'Part 5, Item 3.h', name: "Preparer's Mailing Address - Country", type: 'text', realField: 'form1[0].Page5[0].Pt6Line3h_Country[0]', required: false },
+    { fieldId: 'I765_PreparerDayPhone', part: 'Part 5, Item 4', name: "Preparer's Daytime Telephone Number", type: 'text', realField: 'form1[0].Page5[0].Pt5Line4_DaytimePhoneNumber1[0]', required: false },
+    { fieldId: 'I765_PreparerFax', part: 'Part 5, Item 5', name: "Preparer's Fax Number", type: 'text', realField: 'form1[0].Page5[0].Pt5Line5_PreparerFaxNumber[0]', required: false },
+    { fieldId: 'I765_PreparerEmail', part: 'Part 5, Item 6', name: "Preparer's Email Address", type: 'text', realField: 'form1[0].Page5[0].Pt5Line6_Email[0]', required: false },
+    { fieldId: 'I765_PreparerStatement', part: 'Part 5, Item 7', name: "Preparer's Statement (select only one box)", type: 'select', required: false, options: [
+        { value: 'not_attorney', label: 'I am not an attorney/accredited rep but prepared this with consent', realField: 'form1[0].Page6[0].Part5Line7_Checkbox[0]' },
+        { value: 'is_attorney', label: 'I am an attorney/accredited representative', realField: 'form1[0].Page6[0].Part5Line7_Checkbox[1]' },
+    ] },
+    { fieldId: 'I765_PreparerRepExtends', part: 'Part 5, Item 7.b', name: "If Attorney/Rep - Representation Extends Beyond This Application?", type: 'select', required: false, options: [
+        { value: 'extends', label: 'Extends beyond the preparation of this application', realField: 'form1[0].Page6[0].Part5Line7b_Checkbox[0]' },
+        { value: 'does_not_extend', label: 'Does not extend beyond the preparation of this application', realField: 'form1[0].Page6[0].Part5Line7b_Checkbox[1]' },
+    ] },
+];
+
+// I-485 is 24 pages / ~720 raw fields - by far the largest of the four forms, and the only one
+// with a block (Part 9, "General Eligibility and Inadmissibility Grounds") of ~85 individual
+// legal yes/no questions where a wrong answer is a real accusation of criminal/immigration
+// misconduct, not a cosmetic mistake. Given that scale, coverage here is intentionally narrower
+// than the other three forms: full rigor (real field verified by rendering the template, exact
+// question text) for identity, the immigrant category, and every Part 9 question - which is what
+// actually carries legal risk - but the large secondary sections (parents, marital history,
+// children, employment/address history, biographic detail) are left for the attorney to complete
+// directly on the real PDF via the "Open Official Blank PDF" link, rather than surfaced here.
+// Internal field names drift from current item numbers in the same way as the other 3 forms
+// (e.g. "Pt8LineNN" fields are frequently Part 9 questions, not Part 8) - every mapping below was
+// resolved by rect position against the rendered template, not by trusting the internal name.
+const I485_PART9_ITEMS: [string, string, string][] = [
+    ['1', 'Have you EVER been a member of, involved in, or in any way associated with any organization, association, fund, foundation, party, club, society, or similar group in the United States or in any other location in the world?', 'form1[0].#subform[12].Pt8Line1_YesNo[1]'],
+    ['10', 'Have you EVER been denied admission to the United States?', 'form1[0].#subform[13].Pt9Line10_YesNo[1]'],
+    ['11', 'Have you EVER been denied a visa to the United States?', 'form1[0].#subform[13].Pt9Line11_YesNo[0]'],
+    ['12', 'Have you EVER worked in the United States without authorization?', 'form1[0].#subform[13].Pt9Line12_YesNo[0]'],
+    ['13', 'Have you EVER violated the terms or conditions of your nonimmigrant status?', 'form1[0].#subform[13].Pt8Line13_YesNo[1]'],
+    ['14', 'Are you presently or have you EVER been in removal, exclusion, rescission, or deportation proceedings, including expedited removal proceedings?', 'form1[0].#subform[13].Pt8Line18_YesNo[0]'],
+    ['15', 'Have you EVER been issued a final order of exclusion, deportation, or removal?', 'form1[0].#subform[13].Pt8Line19_YesNo[1]'],
+    ['16', 'Have you EVER had a prior final order of exclusion, deportation, or removal reinstated?', 'form1[0].#subform[13].Pt8Line20_YesNo[0]'],
+    ['17', 'Have you EVER been granted voluntary departure by an immigration officer or an immigration judge but failed to depart within the allotted time?', 'form1[0].#subform[13].Pt8Line17_YesNo[0]'],
+    ['18', 'Have you EVER applied for any kind of relief or protection from removal, exclusion, or deportation?', 'form1[0].#subform[13].Pt8Line23_YesNo[1]'],
+    ['19', 'Have you EVER been a J nonimmigrant exchange visitor who was subject to the two-year foreign residence requirement?', 'form1[0].#subform[13].Pt8Line24a_YesNo[0]'],
+    ['20', 'If you answered "Yes" to Item Number 19, have you complied with the foreign residence requirement?', 'form1[0].#subform[13].Pt8Line24b_YesNo[1]'],
+    ['21', 'If you answered "Yes" to Item Number 19 and "No" to Item Number 20, have you been granted a waiver or has Department of State issued a favorable waiver recommendation letter for you?', 'form1[0].#subform[13].Pt8Line24c_YesNo[0]'],
+    ['22', 'Have you EVER been arrested, cited, charged, or permitted to participate in a diversion program, or detained for any reason by any law enforcement official?', 'form1[0].#subform[13].Pt8Line22_YesNo[0]'],
+    ['23', 'Have you EVER committed a crime of any kind (even if you were not arrested, cited, charged with, or tried for that crime, or convicted)?', 'form1[0].#subform[14].Pt9Line23_YesNo[1]'],
+    ['24', 'Have you EVER pled guilty to or been convicted of a crime or offense (even if the violation was subsequently expunged or sealed, or you were granted a pardon, amnesty, rehabilitation decree, or other act of clemency)?', 'form1[0].#subform[14].Pt9Line24_YesNo[0]'],
+    ['25', 'Have you EVER been ordered punished by a judge or had conditions imposed on you that restrained your liberty (prison sentence, suspended sentence, house arrest, parole, alternative sentencing, drug/alcohol treatment, probation, or community service)?', 'form1[0].#subform[14].Pt8Line25_YesNo[1]'],
+    ['26', 'Have you EVER violated (or attempted or conspired to violate) any controlled substance law or regulation of a state, the United States, or a foreign country?', 'form1[0].#subform[14].Pt8Line26_YesNo[1]'],
+    ['27', 'Have you EVER trafficked in or benefited from, or knowingly aided, abetted, assisted, conspired, or colluded in the illegal trafficking of any controlled substances?', 'form1[0].#subform[14].Pt8Line27_YesNo[1]'],
+    ['28', 'Are you the spouse, son, or daughter of an alien who illicitly trafficked a controlled substance and you obtained, within the last 5 years, any financial or other benefit from that activity?', 'form1[0].#subform[14].Pt8Line28_YesNo[1]'],
+    ['29', 'If your answer to Item Number 28 is "Yes," did you know or should you have reasonably known that the financial or other benefit resulted from that activity?', 'form1[0].#subform[14].Pt8Line29_YesNo[1]'],
+    ['30', 'Have you EVER engaged in prostitution or are you coming to the United States to engage in prostitution?', 'form1[0].#subform[14].Pt8Line30_YesNo[1]'],
+    ['31', 'Have you EVER directly or indirectly procured or attempted to procure, or imported prostitutes or persons for the purpose of prostitution?', 'form1[0].#subform[14].Pt8Line31_YesNo[0]'],
+    ['32', 'Have you EVER received any proceeds or money from prostitution?', 'form1[0].#subform[14].Pt8Line32_YesNo[0]'],
+    ['33', 'Do you intend to engage in illegal gambling or any other form of commercialized vice, such as prostitution, bootlegging, or the sale of child pornography, while in the United States?', 'form1[0].#subform[14].Pt8Line33_YesNo[0]'],
+    ['34', 'Have you EVER exercised immunity (diplomatic or otherwise) to avoid being prosecuted for a criminal offense in the United States?', 'form1[0].#subform[14].Pt8Line34_YesNo[1]'],
+    ['35.a', 'Have you EVER served as a foreign government official?', 'form1[0].#subform[14].Pt8Line35a_YesNo[0]'],
+    ['35.b', 'If your answer to Item Number 35.a. is "Yes," have you EVER been responsible for, enforced, or directly carried out violations of religious freedoms?', 'form1[0].#subform[14].Pt8Line35b_YesNo[1]'],
+    ['36', 'Have you EVER induced by force, fraud, or coercion (or otherwise been involved in) the trafficking of another person for commercial sex acts (sex trafficking)?', 'form1[0].#subform[14].Pt8Line36_YesNo[1]'],
+    ['37', 'Have you EVER trafficked a person into involuntary servitude, peonage, debt bondage, or slavery?', 'form1[0].#subform[14].Pt8Line37_YesNo[1]'],
+    ['38', 'Have you EVER knowingly aided, abetted, assisted, conspired, or colluded with others in trafficking in persons for commercial sex acts or involuntary servitude, peonage, debt bondage, or slavery?', 'form1[0].#subform[15].Pt8Line38_YesNo[0]'],
+    ['39', 'Are you the spouse, son, or daughter of an alien who engaged in trafficking in persons and have received or obtained, within the last 5 years, any financial or other benefits from this activity of your spouse or parent?', 'form1[0].#subform[15].Pt9Line39_YesNo[1]'],
+    ['40', 'If your answer is "Yes" to Item Number 39, did you know or reasonably should have known that this benefit resulted from this activity of your spouse or parent?', 'form1[0].#subform[15].Pt8Line40_YesNo[1]'],
+    ['41', 'Have you EVER engaged in money laundering, knowingly aided/assisted/abetted/conspired/colluded with others in money laundering, or do you seek to enter the U.S. to engage in such activity?', 'form1[0].#subform[15].Pt8Line41_YesNo[0]'],
+    ['42.a', 'Do you intend to engage in any activity that violates or evades any law relating to espionage (including spying) or sabotage in the United States?', 'form1[0].#subform[15].Pt8Line42\\.a_YesNo[0]'],
+    ['42.b', 'Do you intend to engage in any activity in the United States that violates or evades any law prohibiting the export from the United States of goods, technology, or sensitive information?', 'form1[0].#subform[15].Pt8Line42\\.b_YesNo[1]'],
+    ['42.c', 'Do you intend to engage in any activity whose purpose includes opposing, controlling, or overthrowing the U.S. Government by force, violence, or other unlawful means while in the United States?', 'form1[0].#subform[15].Pt8Line42c_YesNo[1]'],
+    ['42.d', 'Do you intend to engage in any other unlawful activity?', 'form1[0].#subform[15].Pt8Line42d_YesNo[0]'],
+    ['43.a', 'Have you EVER received any weapons training, paramilitary training, or other military-type training?', 'form1[0].#subform[15].Pt8Line43a_YesNo[1]'],
+    ['43.b', 'Have you EVER committed kidnapping, assassination, or hijacking or sabotage of a conveyance (including an aircraft, vessel, vehicle, or train)?', 'form1[0].#subform[15].Pt8Line43b_YesNo[0]'],
+    ['43.c', 'Have you EVER used a weapon or explosive or any dangerous device with the intent to endanger the safety of another person or people or cause damage to property?', 'form1[0].#subform[15].Pt8Line43c_YesNo[0]'],
+    ['43.d', 'Have you EVER threatened, attempted, conspired, prepared, or planned to do any of the things described in Item Numbers 43.b. - 43.c.?', 'form1[0].#subform[15].Pt8Line43d_YesNo[0]'],
+    ['43.e', 'Have you EVER incited, under circumstances indicating an intention to cause death or serious bodily harm/injury, any of the activities described in Item Numbers 43.b. - 43.c.?', 'form1[0].#subform[15].Pt8Line43e_YesNo[0]'],
+    ['43.f', 'Have you EVER participated in, or been a member of, a group or organization that did any of the activities described in Item Numbers 43.b. - 43.e.?', 'form1[0].#subform[15].Pt8Line43fYesNo[0]'],
+    ['43.g', 'Have you EVER recruited members or asked for money or things of value for a group or organization that did any of the activities described in Item Numbers 43.b. - 43.e.?', 'form1[0].#subform[15].Pt8Line43g_YesNo[0]'],
+    ['43.h', 'Have you EVER provided money, a thing of value, services or labor, or any other assistance or support for any of the activities described in Item Numbers 43.b. - 43.e.?', 'form1[0].#subform[15].Pt8Line43h_YesNo[1]'],
+    ['43.i', 'Have you EVER provided money, a thing of value, services or labor, or any other assistance or support for an individual, group, or organization who did any of the activities described in Item Numbers 43.b. - 43.e.?', 'form1[0].#subform[15].Pt8Line43i_YesNo[1]'],
+    ['44', 'Do you intend to engage in any of the activities listed in any part of Item Numbers 43.b. - 43.e.?', 'form1[0].#subform[15].Pt8Line44_YesNo[0]'],
+    ['45', 'Do you intend to engage in any activity that could endanger the welfare, safety, or security of the United States?', 'form1[0].#subform[15].Pt8Line45_YesNo[1]'],
+    ['46', 'Are you the spouse or child of an individual who EVER engaged in any of the activities listed in Item Numbers 43.b. - 43.i.?', 'form1[0].#subform[16].Pt8Line46_YesNo[0]'],
+    ['47', 'Have you EVER sold, provided, or transported weapons, or assisted any person in selling, providing, or transporting weapons, which you knew or believed would be used against another person?', 'form1[0].#subform[16].Pt8Line47_YesNo[1]'],
+    ['48', 'Have you EVER worked, volunteered, or otherwise served in any prison, jail, prison camp, detention facility, labor camp, or any other place where people were detained, or directed/participated in any activity that involved detaining people?', 'form1[0].#subform[16].Pt8Line48_YesNo[1]'],
+    ['49', 'Have you EVER been a member of, assisted, or participated in any group, unit, or organization of any kind in which you or other persons used any type of weapon against any person or threatened to do so?', 'form1[0].#subform[16].Pt8Line49_YesNo[0]'],
+    ['50', 'Have you EVER served in, been a member of, assisted (helped), or participated in any military or police unit?', 'form1[0].#subform[16].Pt8Line50_YesNo[1]'],
+    ['51', 'Have you EVER served in, been a member of, assisted (helped), or participated in any armed group (paramilitary unit, self-defense unit, vigilante unit, rebel group, or guerrilla group)?', 'form1[0].#subform[16].Pt8Line51_YesNo[0]'],
+    ['52', 'Have you EVER been a member of, or in any way affiliated with, the Communist Party or any totalitarian party (in the United States or abroad)?', 'form1[0].#subform[16].Pt8Line52_YesNo[1]'],
+    ['53.a', 'Have you EVER ordered, incited, called for, committed, assisted, helped with, or otherwise participated in Torture?', 'form1[0].#subform[16].Pt8Line53a_YesNo[0]'],
+    ['53.b', 'Have you EVER ordered, incited, called for, committed, assisted, helped with, or otherwise participated in Genocide?', 'form1[0].#subform[16].Pt8Line53b_YesNo[0]'],
+    ['53.c', 'Have you EVER ordered, incited, called for, committed, assisted, helped with, or otherwise participated in killing, or trying to kill, any person?', 'form1[0].#subform[16].Pt8Line53c_YesNo[0]'],
+    ['53.d', 'Have you EVER ordered, incited, called for, committed, assisted, helped with, or otherwise participated in intentionally and severely injuring or trying to injure any person?', 'form1[0].#subform[16].Pt8Line53d_YesNo[1]'],
+    ['54', 'Have you EVER recruited, enlisted, conscripted, or used any person under 15 years of age to take part in hostilities or to serve in or help an armed force or group, or attempted or worked with others to do so?', 'form1[0].#subform[16].Pt8Line54_YesNo[1]'],
+    ['55', 'Have you EVER used any person under 15 years of age to take part in hostilities (combat, sabotage, courier, transporting supplies), or attempted or worked with others to do so?', 'form1[0].#subform[16].Pt8Line55_YesNo[0]'],
+    ['63', 'Have you ever received Supplemental Security Income (SSI), Temporary Assistance for Needy Families (TANF), or state/Tribal/territorial/local cash benefit programs for income maintenance?', 'form1[0].#subform[18].Pt9Line63_YesNo[0]'],
+    ['64', 'Have you ever received long-term institutionalization at government expense?', 'form1[0].#subform[18].Pt9Line64_YesNo[0]'],
+    ['67', 'Have you EVER failed or refused to attend or to remain in attendance at any removal proceeding filed against you on or after April 1, 1997?', 'form1[0].#subform[20].Pt9Line67_YesNo[1]'],
+    ['68', 'Have you EVER submitted altered, fraudulent, or counterfeit documentation to any U.S. Government official to obtain or attempt to obtain any immigration benefit?', 'form1[0].#subform[20].Pt9Line68_YesNo[0]'],
+    ['69', 'Have you EVER lied about, concealed, or misrepresented any information on an application or petition to obtain a visa, other documentation, admission to the United States, or any other immigration benefit?', 'form1[0].#subform[20].Pt9Line69_YesNo[1]'],
+    ['70', 'Have you EVER falsely claimed to be a U.S. citizen (in writing or any other way)?', 'form1[0].#subform[20].Pt9Line70_YesNo[0]'],
+    ['71', 'Have you EVER been a stowaway on a vessel or aircraft arriving in the United States?', 'form1[0].#subform[20].Pt9Line71_YesNo[1]'],
+    ['72', 'Have you EVER knowingly encouraged, induced, assisted, abetted, or aided any alien to enter or to try to enter the United States illegally (alien smuggling)?', 'form1[0].#subform[20].Pt9Line72_YesNo[0]'],
+    ['73', 'Are you under a final order of civil penalty for violating INA section 274C for use of fraudulent documents?', 'form1[0].#subform[20].Pt9Line73_YesNo[1]'],
+    ['74', 'Have you EVER been excluded, deported, or removed from the United States, or ever departed the United States on your own after having been ordered excluded, deported, or removed?', 'form1[0].#subform[20].Pt9Line74_YesNo[1]'],
+    ['75', 'Have you EVER entered the United States without being inspected and admitted or paroled?', 'form1[0].#subform[20].Pt9Line75_YesNo[0]'],
+    ['76', 'Since April 1, 1997, have you been unlawfully present in the United States (present after expiration of authorized stay, or present without being admitted or paroled)?', 'form1[0].#subform[21].Pt9Line76_YesNo[1]'],
+    ['77', 'If you answered "Yes" to Item Number 76, was a severe form of trafficking in persons at least one central reason for your unlawful presence in the United States?', 'form1[0].#subform[21].Pt9Line77_YesNo[0]'],
+    ['78.a', 'Since April 1, 1997, have you EVER reentered or attempted to reenter the United States without being inspected and admitted or paroled, after having been unlawfully present for more than one year in the aggregate on or after April 1, 1997?', 'form1[0].#subform[21].Pt9Line78a_YesNo[1]'],
+    ['78.b', 'Since April 1, 1997, have you EVER reentered or attempted to reenter the United States without being inspected and admitted or paroled, after having been deported, excluded, or removed from the United States?', 'form1[0].#subform[21].Pt9Line78b_YesNo[0]'],
+    ['79', 'Do you plan to practice polygamy in the United States?', 'form1[0].#subform[21].Pt9Line79_YesNo[0]'],
+    ['80', 'Are you accompanying an alien who is inadmissible and who has been certified by a medical officer as helpless from sickness, mental or physical disability, or infancy, and who requires your protection or guardianship?', 'form1[0].#subform[21].Pt9Line80_YesNo[1]'],
+    ['81', 'Have you EVER assisted in detaining, retaining, or withholding custody of a U.S. citizen child outside the United States from a person who has been granted custody of the child?', 'form1[0].#subform[21].Pt9Line81_YesNo[0]'],
+    ['82', 'Have you EVER voted in violation of any Federal, state, or local constitutional provision, statute, ordinance, or regulation in the United States?', 'form1[0].#subform[21].Pt9Line82_YesNo[1]'],
+    ['83', 'Have you EVER renounced U.S. citizenship to avoid being taxed by the United States?', 'form1[0].#subform[21].Pt9Line83_YesNo[0]'],
+    ['84.a', 'Have you EVER applied for exemption or discharge from training or service in the U.S. armed forces or in the U.S. National Security Training Corps on the ground that you are an alien?', 'form1[0].#subform[21].Pt9Line84a_YesNo[1]'],
+    ['84.b', 'Have you EVER been relieved or discharged from such training or service on the ground that you are an alien?', 'form1[0].#subform[21].Pt9Line84b_YesNo[1]'],
+    ['84.c', 'Have you EVER been convicted of desertion from the U.S. armed forces?', 'form1[0].#subform[21].Pt9Line84c_YesNo[1]'],
+    ['85', 'Have you EVER left or remained outside the United States to avoid or evade training or service in the U.S. armed forces in time of war or a period declared by the President to be a national emergency?', 'form1[0].#subform[21].Pt9Line85_YesNo[1]'],
+];
+
+const I485_FIELD_DEFS: UscisFieldDef[] = [
+    { fieldId: 'I485_G28Attached', part: 'Attorney Block', name: 'Form G-28 is Attached', type: 'toggle', realField: 'form1[0].#subform[0].CheckBox1[0]', required: false },
+    { fieldId: 'I485_VolagNumber', part: 'Attorney Block', name: 'Volag Number', type: 'text', realField: 'form1[0].#subform[0].VolagNumber[0]', required: false },
+    { fieldId: 'I485_AttyBarNumber', part: 'Attorney Block', name: 'Attorney State Bar Number', type: 'text', realField: 'form1[0].#subform[0].AttorneyStateBarNumber[0]', required: false },
+    { fieldId: 'I485_AttyUscisAcct', part: 'Attorney Block', name: 'Attorney/Rep USCIS Online Account Number', type: 'text', realField: 'form1[0].#subform[0].USCISOnlineAcctNumber[0]', required: false },
+    { fieldId: 'I485_FamilyName', part: 'Part 1, Item 1', name: 'Family Name', type: 'text', semanticKey: 'familyName', realField: 'form1[0].#subform[0].Pt1Line1_FamilyName[0]' },
+    { fieldId: 'I485_GivenName', part: 'Part 1, Item 1', name: 'Given Name', type: 'text', semanticKey: 'givenName', realField: 'form1[0].#subform[0].Pt1Line1_GivenName[0]' },
+    { fieldId: 'I485_MiddleName', part: 'Part 1, Item 1', name: 'Middle Name', type: 'text', realField: 'form1[0].#subform[0].Pt1Line1_MiddleName[0]', required: false },
+    { fieldId: 'I485_DOB', part: 'Part 1, Item 3', name: 'Date of Birth', type: 'text', semanticKey: 'dob', realField: 'form1[0].#subform[0].Pt1Line3_DOB[0]' },
+    { fieldId: 'I485_HaveANumber', part: 'Part 1, Item 4', name: 'Do You Have an Alien Registration Number (A-Number)?', type: 'toggle', realField: 'form1[0].#subform[1].Pt1Line4_YN[0]', required: false },
+    { fieldId: 'I485_ANumber', part: 'Part 1, Item 4', name: 'Alien Registration Number (A-Number)', type: 'text', semanticKey: 'aNumber', realField: 'form1[0].#subform[1].Pt1Line4_AlienNumber[0]' },
+    { fieldId: 'I485_Sex', part: 'Part 1, Item 6', name: 'Sex', type: 'select', required: false, options: [
+        { value: 'male', label: 'Male', realField: 'form1[0].#subform[1].Pt1Line6_CB_Sex[1]' },
+        { value: 'female', label: 'Female', realField: 'form1[0].#subform[1].Pt1Line6_CB_Sex[0]' },
+    ] },
+    { fieldId: 'I485_CityOfBirth', part: 'Part 1, Item 7', name: 'City or Town of Birth', type: 'text', realField: 'form1[0].#subform[1].Pt1Line7_CityTownOfBirth[0]', required: false },
+    { fieldId: 'I485_CountryOfBirth', part: 'Part 1, Item 7', name: 'Country of Birth', type: 'text', realField: 'form1[0].#subform[1].Pt1Line7_CountryOfBirth[0]', required: false },
+    { fieldId: 'I485_Nationality', part: 'Part 1, Item 8', name: 'Country of Citizenship or Nationality', type: 'text', semanticKey: 'nationality', realField: 'form1[0].#subform[1].Pt1Line8_CountryofCitizenshipNationality[0]' },
+    { fieldId: 'I485_UscisAcct', part: 'Part 1, Item 9', name: 'USCIS Online Account Number', type: 'text', realField: 'form1[0].#subform[1].Pt1Line9_USCISAccountNumber[0]', required: false },
+    { fieldId: 'I485_PassportNo', part: 'Part 1, Item 10', name: 'Passport or Travel Document Number Used at Last Arrival', type: 'text', semanticKey: 'passportNo', realField: 'form1[0].#subform[1].Pt1Line10_PassportNum[0]' },
+    { fieldId: 'I485_PassportExpDate', part: 'Part 1, Item 10', name: 'Expiration Date of Passport or Travel Document', type: 'text', realField: 'form1[0].#subform[1].Pt1Line10_ExpDate[0]', required: false },
+    { fieldId: 'I485_PassportCountry', part: 'Part 1, Item 10', name: 'Country That Issued Passport or Travel Document', type: 'text', realField: 'form1[0].#subform[1].Pt1Line10_Passport[0]', required: false },
+    { fieldId: 'I485_ArrivalCity', part: 'Part 1, Item 10', name: 'City or Town of Last Arrival', type: 'text', realField: 'form1[0].#subform[1].Pt1Line10_CityTown[0]', required: false },
+    { fieldId: 'I485_ArrivalDate', part: 'Part 1, Item 10', name: 'Date of Last Arrival', type: 'text', realField: 'form1[0].#subform[1].Pt1Line10_DateofArrival[0]', required: false },
+    { fieldId: 'I485_LastEntryManner', part: 'Part 1, Item 11', name: 'When I Last Arrived in the United States (select only one)', type: 'select', required: false, options: [
+        { value: 'admitted', label: 'Inspected at a Port of Entry and admitted as', realField: 'form1[0].#subform[1].Pt2Line11_CB[0]' },
+        { value: 'paroled', label: 'Inspected at a Port of Entry and paroled as', realField: 'form1[0].#subform[1].Pt2Line11_CB[1]' },
+        { value: 'no_admission', label: 'Came into the United States without admission or parole', realField: 'form1[0].#subform[1].Pt2Line11_CB[2]' },
+        { value: 'other', label: 'Other', realField: 'form1[0].#subform[1].Pt2Line11_CB[3]' },
+    ] },
+    { fieldId: 'I485_I94Number', part: 'Part 1, Item 12', name: 'Form I-94 Arrival-Departure Record Number', type: 'text', semanticKey: 'i94No', realField: 'form1[0].#subform[2].P1Line12_I94[0]' },
+    { fieldId: 'I485_I94Status', part: 'Part 1, Item 12', name: 'Immigration Status on Form I-94', type: 'text', realField: 'form1[0].#subform[2].Pt1Line12_Status[0]', required: false },
+    { fieldId: 'I485_CurrentStatus', part: 'Part 1, Item 14', name: 'Current Immigration Status (if changed since last arrival)', type: 'text', semanticKey: 'status', realField: 'form1[0].#subform[2].Pt1Line14_Status[0]' },
+    { fieldId: 'I485_PhysicalStreet', part: 'Part 1, Item 18', name: 'Current U.S. Physical Address - Street Number and Name', type: 'text', realField: 'form1[0].#subform[2].Pt1Line18_StreetNumberName[0]', required: false },
+    { fieldId: 'I485_PhysicalCity', part: 'Part 1, Item 18', name: 'Current U.S. Physical Address - City or Town', type: 'text', realField: 'form1[0].#subform[2].Pt1Line18_CityOrTown[0]', required: false },
+    { fieldId: 'I485_PhysicalState', part: 'Part 1, Item 18', name: 'Current U.S. Physical Address - State', type: 'text', realField: 'form1[0].#subform[2].Pt1Line18_State[0]', required: false },
+    { fieldId: 'I485_PhysicalZip', part: 'Part 1, Item 18', name: 'Current U.S. Physical Address - ZIP Code', type: 'text', realField: 'form1[0].#subform[2].Pt1Line18_ZipCode[0]', required: false },
+    // Part 2 - Application Type/Filing Category. This app's supported case types (eb1a/eb2_niw/
+    // l1a) are all in the Employment-based sub-list (Item 3.b) - the much larger family-based /
+    // special-immigrant / asylee / diversity-visa option lists (Items 3.a, 3.c-3.g, ~30 more
+    // checkboxes) aren't modeled since this practice doesn't file those categories.
+    { fieldId: 'I485_ImmigrantCategory', part: 'Part 2, Item 3.b', name: 'Immigrant Category (Employment-Based) - select only one', type: 'select', caseTypeMap: { eb1a: 'extraordinary', l1a: 'multinational', eb2_niw: 'niw' }, options: [
+        { value: 'extraordinary', label: 'Alien of Extraordinary Ability', realField: 'form1[0].#subform[5].Pt2Line3b_CB140[0]' },
+        { value: 'professor', label: 'Outstanding Professor or Researcher', realField: 'form1[0].#subform[5].Pt2Line3b_CB140[1]' },
+        { value: 'multinational', label: 'Multinational Executive or Manager', realField: 'form1[0].#subform[5].Pt2Line3b_CB140[2]' },
+        { value: 'advanced_degree', label: 'Member of Professions w/ Advanced Degree or Exceptional Ability (NOT seeking NIW)', realField: 'form1[0].#subform[5].Pt2Line3b_CB140[3]' },
+        { value: 'professional', label: 'A Professional', realField: 'form1[0].#subform[5].Pt2Line3b_CB140[4]' },
+        { value: 'skilled', label: 'A Skilled Worker', realField: 'form1[0].#subform[5].Pt2Line3b_CB140[5]' },
+        { value: 'other_worker', label: 'Any Other Worker', realField: 'form1[0].#subform[5].Pt2Line3b_CB140[6]' },
+        { value: 'niw', label: 'An Alien Applying For a National Interest Waiver', realField: 'form1[0].#subform[5].Pt2Line3b_CB140[7]' },
+    ] },
+    { fieldId: 'I485_245i', part: 'Part 2, Item 4', name: 'Applying for Adjustment Based on INA Section 245(i)?', type: 'toggle', realField: 'form1[0].#subform[6].Pt2Line4_CB[1]', required: false },
+    { fieldId: 'I485_CSPA', part: 'Part 2, Item 5', name: 'Applying for Adjustment Based on Child Status Protection Act (CSPA)?', type: 'toggle', realField: 'form1[0].#subform[6].Pt2Line5_CB[1]', required: false },
+    // Part 8 - Biographic Information (ethnicity/race/eye-hair color/height/weight). Not
+    // case-derivable and low legal stakes compared to Part 9, so optional rather than required.
+    { fieldId: 'I485_Ethnicity', part: 'Part 8, Item 1', name: 'Ethnicity', type: 'select', required: false, options: [
+        { value: 'hispanic', label: 'Hispanic or Latino', realField: 'form1[0].#subform[12].Pt7Line1_Ethnicity[0]' },
+        { value: 'not_hispanic', label: 'Not Hispanic or Latino', realField: 'form1[0].#subform[12].Pt7Line1_Ethnicity[1]' },
+    ] },
+    { fieldId: 'I485_EyeColor', part: 'Part 8, Item 5', name: 'Eye Color', type: 'select', required: false, options: [
+        { value: 'black', label: 'Black', realField: 'form1[0].#subform[12].Pt7Line5_Eyecolor[1]' },
+        { value: 'blue', label: 'Blue', realField: 'form1[0].#subform[12].Pt7Line5_Eyecolor[0]' },
+        { value: 'brown', label: 'Brown', realField: 'form1[0].#subform[12].Pt7Line5_Eyecolor[2]' },
+        { value: 'gray', label: 'Gray', realField: 'form1[0].#subform[12].Pt7Line5_Eyecolor[3]' },
+        { value: 'green', label: 'Green', realField: 'form1[0].#subform[12].Pt7Line5_Eyecolor[4]' },
+        { value: 'hazel', label: 'Hazel', realField: 'form1[0].#subform[12].Pt7Line5_Eyecolor[5]' },
+        { value: 'maroon', label: 'Maroon', realField: 'form1[0].#subform[12].Pt7Line5_Eyecolor[6]' },
+        { value: 'pink', label: 'Pink', realField: 'form1[0].#subform[12].Pt7Line5_Eyecolor[7]' },
+        { value: 'unknown', label: 'Unknown/Other', realField: 'form1[0].#subform[12].Pt7Line5_Eyecolor[8]' },
+    ] },
+    { fieldId: 'I485_HairColor', part: 'Part 8, Item 6', name: 'Hair Color', type: 'select', required: false, options: [
+        { value: 'bald', label: 'Bald (No hair)', realField: 'form1[0].#subform[12].Pt7Line6_Haircolor[0]' },
+        { value: 'black', label: 'Black', realField: 'form1[0].#subform[12].Pt7Line6_Haircolor[1]' },
+        { value: 'blond', label: 'Blond', realField: 'form1[0].#subform[12].Pt7Line6_Haircolor[2]' },
+        { value: 'brown', label: 'Brown', realField: 'form1[0].#subform[12].Pt7Line6_Haircolor[3]' },
+        { value: 'gray', label: 'Gray', realField: 'form1[0].#subform[12].Pt7Line6_Haircolor[4]' },
+        { value: 'red', label: 'Red', realField: 'form1[0].#subform[12].Pt7Line6_Haircolor[5]' },
+        { value: 'sandy', label: 'Sandy', realField: 'form1[0].#subform[12].Pt7Line6_Haircolor[6]' },
+        { value: 'white', label: 'White', realField: 'form1[0].#subform[12].Pt7Line6_Haircolor[7]' },
+        { value: 'other', label: 'Unknown/Other', realField: 'form1[0].#subform[12].Pt7Line6_Haircolor[8]' },
+    ] },
+    // Part 9 - General Eligibility and Inadmissibility Grounds. Every item here is required:
+    // these are exactly the ~85 legal yes/no questions that make I-485 legally risky to guess at,
+    // so none are auto-derived and none are skippable - the attorney must answer every one.
+    ...I485_PART9_ITEMS.map(([item, question, realField]): UscisFieldDef => ({
+        fieldId: `I485_Pt9_${item.replace('.', '')}`,
+        part: `Part 9, Item ${item}`,
+        name: question,
+        type: 'toggle',
+        realField,
+        required: true,
+    })),
+    // Part 12 - Preparer (attorney is almost always the preparer in this practice).
+    { fieldId: 'I485_PreparerFamilyName', part: 'Part 12, Item 1', name: "Preparer's Family Name", type: 'text', semanticKey: 'attorneyFamilyName', realField: 'form1[0].#subform[23].Pt12Line1_PreparerFamilyName[0]' },
+    { fieldId: 'I485_PreparerGivenName', part: 'Part 12, Item 1', name: "Preparer's Given Name", type: 'text', semanticKey: 'attorneyGivenName', realField: 'form1[0].#subform[23].Pt12Line1a_PreparerGivenName[0]' },
+    { fieldId: 'I485_PreparerOrgName', part: 'Part 12, Item 2', name: "Preparer's Business or Organization Name", type: 'text', semanticKey: 'lawFirm', realField: 'form1[0].#subform[23].Pt12Line2_BusinessName[0]' },
+];
+
+// Builds review-table rows for a manifest-driven (full-coverage) form. Every row must end up
+// with a non-empty `value` before sign-off is allowed (see the sign-off endpoint below) - for
+// `toggle`/`select` fields that means the attorney must make an explicit choice, not just leave
+// the default unchecked state, so there is no ambiguity between "answered no" and "never reviewed".
+const buildDefinedFields = (defs: UscisFieldDef[], canonicalValues: Record<string, { value: string; source: string; confidence: string }>, mergedOverrides: Record<string, string>, caseType?: string) => {
+    return defs.map((def) => {
+        if (def.semanticKey && canonicalValues[def.semanticKey]) {
+            return { ...def, ...canonicalValues[def.semanticKey] };
+        }
+        const overrideVal = mergedOverrides[def.fieldId];
+        if (overrideVal !== undefined && overrideVal !== '') {
+            const label = def.type === 'select' ? (def.options?.find(o => o.value === overrideVal)?.label || overrideVal)
+                : def.type === 'toggle' ? (overrideVal === 'true' ? 'Yes' : 'No')
+                : overrideVal;
+            // Source is set to the same sentinel the generic cross-form override pass (below,
+            // in buildAutofillFormsData) checks for, so it doesn't re-clobber this already-formatted
+            // label with the raw stored override string (e.g. 'true'/'apt' instead of 'Yes'/'Apt.').
+            return { ...def, value: label, source: 'Attorney Override (Verified)', confidence: 'verified' };
+        }
+        // Some `select` fields (petition type, petitioner type) are safely derivable from the
+        // case's own playbook scenario, same as the legacy caseType-based text used to be - not a
+        // guess, since the case type is already a structured fact about this specific case.
+        if (def.type === 'select' && def.caseTypeMap && caseType && def.caseTypeMap[caseType]) {
+            const derivedVal = def.caseTypeMap[caseType];
+            const label = def.options?.find(o => o.value === derivedVal)?.label || derivedVal;
+            return { ...def, value: label, source: 'Case Type (Derived)', confidence: 'high' };
+        }
+        return { ...def, value: '', source: 'Missing', confidence: 'low' };
+    });
+};
+
+const buildAutofillFormsData = (record: any, mergedOverrides: Record<string, string>) => {
+    const facts = record.analysis?.facts || {};
+    const answers = record.answers || {};
+    const caseType = record.caseType || 'eb1a';
+
+    // Collapse fieldId-keyed overrides down to the semantic person-attribute they represent,
+    // so an edit made while looking at one form is reflected on every other form too.
+    const semanticOverrides: Record<string, string> = {};
+    Object.entries(mergedOverrides || {}).forEach(([fieldId, value]) => {
+        const semanticKey = AUTOFILL_FIELD_SEMANTIC_MAP[fieldId];
+        if (semanticKey && value !== undefined && value !== '') {
+            semanticOverrides[semanticKey] = value;
+        }
+    });
+
+    const getValue = (keys: string[], defaultVal: string = '', semanticKey?: string) => {
+        if (semanticKey && semanticOverrides[semanticKey] !== undefined) {
+            return { value: semanticOverrides[semanticKey], source: 'Attorney Override (Verified)', confidence: 'verified' };
+        }
+        for (const k of keys) {
+            if (facts[k]?.value) return { value: facts[k].value, source: facts[k].source || 'Extracted Fact', confidence: facts[k].confidence || 'high' };
+            if (answers[k]) return { value: answers[k], source: 'Questionnaire Answer', confidence: 'high' };
+        }
+        return { value: defaultVal, source: 'Missing', confidence: 'low' };
+    };
+
+    // Older analyses (run before COMMON_IDENTITY_FACTS existed) only captured identity as a single
+    // bundled "entity" fact (e.g. beneficiary_identity: {full_legal_name, dob}) rather than the flat
+    // keys getValue() looks for below. Best-effort unpack that shape as a fallback so those
+    // already-analyzed cases populate immediately, without needing to re-run analysis.
+    const identityFallback = (() => {
+        for (const key of ['beneficiary_identity', 'client_identity']) {
+            const fact = facts[key];
+            const v = fact?.value;
+            if (v && typeof v === 'object' && v.full_legal_name) {
+                const parts = String(v.full_legal_name).trim().split(/\s+/);
+                return {
+                    familyName: parts.length > 1 ? parts[parts.length - 1] : '',
+                    givenName: parts.length > 1 ? parts.slice(0, -1).join(' ') : parts[0] || '',
+                    dob: v.dob || '',
+                    source: (fact.source || 'Extracted Fact') + ' (name split from full legal name)',
+                    confidence: fact.confidence === 'high' ? 'medium' : (fact.confidence || 'medium')
+                };
+            }
+        }
+        return null;
+    })();
+
+    let familyName = getValue(['beneficiary_family_name', 'family_name', 'last_name', 'applicant_name'], '', 'familyName');
+    if (familyName.source === 'Missing' && identityFallback?.familyName) {
+        familyName = { value: identityFallback.familyName, source: identityFallback.source, confidence: identityFallback.confidence };
+    }
+    let givenName = getValue(['beneficiary_given_name', 'given_name', 'first_name'], '', 'givenName');
+    if (givenName.source === 'Missing' && identityFallback?.givenName) {
+        givenName = { value: identityFallback.givenName, source: identityFallback.source, confidence: identityFallback.confidence };
+    }
+    let dob = getValue(['beneficiary_dob', 'dob', 'date_of_birth'], '', 'dob');
+    if (dob.source === 'Missing' && identityFallback?.dob) {
+        dob = { value: identityFallback.dob, source: identityFallback.source, confidence: identityFallback.confidence };
+    }
+    const nationality = getValue(['beneficiary_nationality', 'nationality', 'country_of_citizenship'], '', 'nationality');
+    const aNumber = getValue(['alien_registration_number', 'a_number', 'u_s_social_security_number'], '', 'aNumber');
+    const address = getValue(['us_address', 'address', 'current_address'], '', 'address');
+    // No fallback placeholder here (e.g. the old 'Self-Petitioned' default) - this value gets
+    // written verbatim into the real "Company or Organization Name" / "Employer Name" box on the
+    // official PDF, where a placeholder string would look like real data to a USCIS reviewer.
+    // "Petitioner Type" (I-140 Part 5) and similar select fields capture self-petition status
+    // correctly instead, via their own case-type-derived options.
+    const employer = getValue(['petitioner_name', 'company_name', 'employer_name'], '', 'employer');
+    const jobTitle = getValue(['proposed_employment_title', 'job_title', 'position'], '', 'jobTitle');
+    const passportNo = getValue(['passport_number', 'passport_no'], '', 'passportNo');
+    const i94No = getValue(['i94_number', 'i94_no'], '', 'i94No');
+    const status = getValue(['current_nonimmigrant_status', 'visa_status'], '', 'status');
+
+    const attorneyFamilyName = semanticOverrides['attorneyFamilyName'] !== undefined
+        ? { value: semanticOverrides['attorneyFamilyName'], source: 'Attorney Override (Verified)', confidence: 'verified' }
+        : { value: FIRM_ATTORNEY_FAMILY_NAME, source: 'Law Firm Setting', confidence: 'high' };
+    const attorneyGivenName = semanticOverrides['attorneyGivenName'] !== undefined
+        ? { value: semanticOverrides['attorneyGivenName'], source: 'Attorney Override (Verified)', confidence: 'verified' }
+        : { value: FIRM_ATTORNEY_GIVEN_NAME, source: 'Law Firm Setting', confidence: 'high' };
+    const lawFirm = semanticOverrides['lawFirm'] !== undefined
+        ? { value: semanticOverrides['lawFirm'], source: 'Attorney Override (Verified)', confidence: 'verified' }
+        : { value: FIRM_LAW_FIRM_NAME, source: 'Law Firm Setting', confidence: 'high' };
+
+    const canonicalValuesForDefs = { familyName, givenName, dob, nationality, aNumber, address, employer, jobTitle, passportNo, i94No, status, attorneyFamilyName, attorneyGivenName, lawFirm };
+
+    const formsData: Record<string, any> = {
+            'I-140': {
+                formTitle: 'Immigrant Petition for Alien Workers (Form I-140)',
+                fullCoverage: true,
+                fields: buildDefinedFields(I140_FIELD_DEFS, canonicalValuesForDefs, mergedOverrides, caseType)
+            },
+            'I-485': {
+                formTitle: 'Application to Register Permanent Residence or Adjust Status (Form I-485)',
+                fullCoverage: true,
+                fields: buildDefinedFields(I485_FIELD_DEFS, canonicalValuesForDefs, mergedOverrides, caseType)
+            },
+            'G-28': {
+                formTitle: 'Notice of Entry of Appearance as Attorney or Accredited Representative (Form G-28)',
+                // Full field coverage (see G28_FIELD_DEFS) - every item the attorney would need to
+                // complete on the real form is a row here, not just the handful of identity fields.
+                fullCoverage: true,
+                fields: buildDefinedFields(G28_FIELD_DEFS, canonicalValuesForDefs, mergedOverrides)
+            },
+            'I-765': {
+                formTitle: 'Application for Employment Authorization (Form I-765)',
+                fullCoverage: true,
+                fields: buildDefinedFields(I765_FIELD_DEFS, canonicalValuesForDefs, mergedOverrides, caseType)
+            }
+        };
+
+    // Fields without a shared semantic key (EIN, category/reason text, firm settings) are only
+    // overridable directly by their own fieldId.
+    Object.keys(formsData).forEach(formKey => {
+        formsData[formKey].fields.forEach((field: any) => {
+            if (mergedOverrides[field.fieldId] !== undefined && field.source !== 'Attorney Override (Verified)') {
+                field.value = mergedOverrides[field.fieldId];
+                field.source = 'Attorney Override (Verified)';
+                field.confidence = 'verified';
+            }
+        });
+    });
+
+    let totalFields = 0;
+    let autoFilledCount = 0;
+    let needsReviewCount = 0;
+    let missingCount = 0;
+    let missingRequiredCount = 0;
+
+    Object.values(formsData).forEach((f: any) => {
+        let formTotal = 0, formAuto = 0, formReview = 0, formMissing = 0, formMissingRequired = 0;
+        f.fields.forEach((field: any) => {
+            formTotal++;
+            const isMissing = !field.value || field.value === 'N/A' || field.source === 'Missing';
+            if (isMissing) {
+                formMissing++;
+                if (field.required !== false) formMissingRequired++;
+            } else if (field.confidence === 'low' || field.confidence === 'medium') {
+                formReview++;
+            } else {
+                formAuto++;
+            }
+        });
+        // missingRequiredCount gates sign-off (see the sign-off endpoint below); missingCount is
+        // purely informational so the attorney can still see everything left on the real form.
+        f.formMetrics = { totalFields: formTotal, autoFilledCount: formAuto, needsReviewCount: formReview, missingCount: formMissing, missingRequiredCount: formMissingRequired };
+        totalFields += formTotal;
+        autoFilledCount += formAuto;
+        needsReviewCount += formReview;
+        missingCount += formMissing;
+        missingRequiredCount += formMissingRequired;
+    });
+
+    return {
+        formsData,
+        caseType,
+        metrics: {
+            totalFields,
+            autoFilledCount,
+            needsReviewCount,
+            missingCount,
+            // Distinct from missingCount: I-485 alone has ~400 optional secondary fields (address
+            // detail, family history, etc.) we don't have data for and don't require - showing
+            // raw missingCount as "action needed" would read as a much bigger problem than it is.
+            missingRequiredCount,
+            completionRate: Math.round(((autoFilledCount) / (totalFields || 1)) * 100)
+        },
+        // Raw values keyed by canonical person-attribute, for filling the real official
+        // USCIS PDF templates directly (as opposed to formsData, which is keyed per-form/per-fieldId
+        // for the on-screen review table).
+        canonicalValues: { familyName, givenName, dob, nationality, aNumber, address, employer, jobTitle, passportNo, i94No, status }
+    };
+};
+
+// Every full-coverage field def's fieldId is prefixed with its owning form (G28_, I140_, I765_,
+// I485_) - used to figure out which form's sign-off to invalidate when a specific field changes.
+const formKeyForFieldId = (fieldId: string): string | null => {
+    if (fieldId.startsWith('G28_')) return 'G-28';
+    if (fieldId.startsWith('I140_')) return 'I-140';
+    if (fieldId.startsWith('I765_')) return 'I-765';
+    if (fieldId.startsWith('I485_')) return 'I-485';
+    return null;
+};
+
 app.post('/api/intake/autofill-forms', (req, res) => {
     try {
-        const { recordId, customOverrides } = req.body;
+        const { recordId, customOverrides, persist } = req.body;
         const records = getRecords();
-        const record = records.find(r => r.id === recordId);
-        
+        const recordIndex = records.findIndex(r => r.id === recordId);
+        const record = records[recordIndex];
+
         if (!record) {
             return res.status(404).json({ error: 'Record not found' });
         }
 
-        const facts = record.analysis?.facts || {};
-        const answers = record.answers || {};
-        const caseType = record.caseType || 'eb1a';
+        // Session edits (customOverrides, not yet saved) take priority over what was
+        // previously persisted, but persisted overrides survive a page reload either way.
+        const mergedOverrides: Record<string, string> = { ...(record.formOverrides || {}), ...(customOverrides || {}) };
 
-        const getValue = (keys: string[], defaultVal: string = '') => {
-            for (const k of keys) {
-                if (facts[k]?.value) return { value: facts[k].value, source: facts[k].source || 'Extracted Fact', confidence: facts[k].confidence || 'high' };
-                if (answers[k]) return { value: answers[k], source: 'Questionnaire Answer', confidence: 'high' };
-            }
-            return { value: defaultVal, source: 'Missing', confidence: 'low' };
-        };
-
-        const familyName = getValue(['beneficiary_family_name', 'family_name', 'last_name', 'applicant_name']);
-        const givenName = getValue(['beneficiary_given_name', 'given_name', 'first_name']);
-        const dob = getValue(['beneficiary_dob', 'dob', 'date_of_birth']);
-        const nationality = getValue(['beneficiary_nationality', 'nationality', 'country_of_citizenship'], 'China');
-        const aNumber = getValue(['alien_registration_number', 'a_number', 'u_s_social_security_number']);
-        const address = getValue(['us_address', 'address', 'current_address'], 'N/A');
-        const employer = getValue(['petitioner_name', 'company_name', 'employer_name'], 'Self-Petitioned');
-        const jobTitle = getValue(['proposed_employment_title', 'job_title', 'position'], 'Senior Researcher / Executive');
-        const passportNo = getValue(['passport_number', 'passport_no']);
-        const i94No = getValue(['i94_number', 'i94_no']);
-        const status = getValue(['current_nonimmigrant_status', 'visa_status'], 'H-1B Specialty Occupation');
-
-        const formsData: Record<string, any> = {
-            'I-140': {
-                formTitle: 'Immigrant Petition for Alien Workers (Form I-140)',
-                fields: [
-                    { part: 'Part 1, Line 1a', name: 'Family Name (Last Name)', ...familyName, fieldId: 'Pt1Line1a_FamilyName' },
-                    { part: 'Part 1, Line 1b', name: 'Given Name (First Name)', ...givenName, fieldId: 'Pt1Line1b_GivenName' },
-                    { part: 'Part 1, Line 3', name: 'Company or Organization Name', ...employer, fieldId: 'Pt1Line3_CompanyName' },
-                    { part: 'Part 1, Line 4', name: 'IRS Employer Identification No.', value: 'XX-XXXXXXX', source: 'Default Template', confidence: 'medium', fieldId: 'Pt1Line4_EIN' },
-                    { part: 'Part 1, Line 6', name: 'Alien Registration Number (A-Number)', ...aNumber, fieldId: 'Pt1Line6_ANumber' },
-                    { part: 'Part 3, Line 1', name: 'Petition Category Requested', value: caseType === 'eb1a' ? 'EB-1A Extraordinary Ability (204.5(h))' : caseType === 'eb2_niw' ? 'EB-2 National Interest Waiver (204.5(k))' : 'L-1A Multinational Executive', source: 'Playbook Scenario', confidence: 'high', fieldId: 'Pt3Line1_Category' },
-                    { part: 'Part 3, Line 4', name: 'Date of Birth', ...dob, fieldId: 'Pt3Line4_DOB' },
-                    { part: 'Part 3, Line 5', name: 'Country of Citizenship/Nationality', ...nationality, fieldId: 'Pt3Line5_Nationality' },
-                    { part: 'Part 3, Line 7', name: 'Passport Number', ...passportNo, fieldId: 'Pt3Line7_Passport' },
-                    { part: 'Part 4, Line 1', name: 'Proposed Job Title', ...jobTitle, fieldId: 'Pt4Line1_JobTitle' },
-                    { part: 'Part 4, Line 2', name: 'U.S. Physical Address', ...address, fieldId: 'Pt4Line2_Address' }
-                ]
-            },
-            'I-485': {
-                formTitle: 'Application to Register Permanent Residence or Adjust Status (Form I-485)',
-                fields: [
-                    { part: 'Part 1, Line 1a', name: 'Family Name (Last Name)', ...familyName, fieldId: 'I485_FamilyName' },
-                    { part: 'Part 1, Line 1b', name: 'Given Name (First Name)', ...givenName, fieldId: 'I485_GivenName' },
-                    { part: 'Part 1, Line 4', name: 'Date of Birth (mm/dd/yyyy)', ...dob, fieldId: 'I485_DOB' },
-                    { part: 'Part 1, Line 6', name: 'Country of Citizenship / Nationality', ...nationality, fieldId: 'I485_Nationality' },
-                    { part: 'Part 1, Line 8', name: 'Alien Registration Number (A-Number)', ...aNumber, fieldId: 'I485_ANumber' },
-                    { part: 'Part 1, Line 11', name: 'Current Nonimmigrant Status', ...status, fieldId: 'I485_Status' },
-                    { part: 'Part 1, Line 12', name: 'Form I-94 Arrival-Departure Record No.', ...i94No, fieldId: 'I485_I94' },
-                    { part: 'Part 1, Line 14', name: 'Current Physical Address', ...address, fieldId: 'I485_Address' }
-                ]
-            },
-            'G-28': {
-                formTitle: 'Notice of Entry of Appearance as Attorney or Accredited Representative (Form G-28)',
-                fields: [
-                    { part: 'Part 1, Line 1a', name: 'Attorney Family Name', value: 'Miao', source: 'Law Firm Setting', confidence: 'high', fieldId: 'G28_AttyLastName' },
-                    { part: 'Part 1, Line 1b', name: 'Attorney Given Name', value: 'Attorney Miao', source: 'Law Firm Setting', confidence: 'high', fieldId: 'G28_AttyFirstName' },
-                    { part: 'Part 1, Line 2', name: 'Name of Law Firm', value: 'Miao & Associates, P.C.', source: 'Law Firm Setting', confidence: 'high', fieldId: 'G28_LawFirm' },
-                    { part: 'Part 2, Line 1a', name: 'Client Family Name', ...familyName, fieldId: 'G28_ClientLastName' },
-                    { part: 'Part 2, Line 1b', name: 'Client Given Name', ...givenName, fieldId: 'G28_ClientFirstName' },
-                    { part: 'Part 2, Line 4', name: 'Client Street Address', ...address, fieldId: 'G28_ClientAddress' }
-                ]
-            },
-            'I-765': {
-                formTitle: 'Application for Employment Authorization (Form I-765)',
-                fields: [
-                    { part: 'Part 1, Line 1', name: 'Reason for Applying', value: 'Initial permission to accept employment (c)(9)', source: 'Filing Scenario', confidence: 'high', fieldId: 'I765_Reason' },
-                    { part: 'Part 2, Line 1a', name: 'Family Name', ...familyName, fieldId: 'I765_FamilyName' },
-                    { part: 'Part 2, Line 1b', name: 'Given Name', ...givenName, fieldId: 'I765_GivenName' },
-                    { part: 'Part 2, Line 18', name: 'Country of Citizenship', ...nationality, fieldId: 'I765_Nationality' },
-                    { part: 'Part 2, Line 27', name: 'Eligibility Category', value: '(c)(9) Pending I-485 Adjustment', source: 'Scenario Resolution', confidence: 'high', fieldId: 'I765_Category' }
-                ]
-            }
-        };
-
-        if (customOverrides && typeof customOverrides === 'object') {
-            Object.keys(formsData).forEach(formKey => {
-                formsData[formKey].fields.forEach((field: any) => {
-                    if (customOverrides[field.fieldId] !== undefined) {
-                        field.value = customOverrides[field.fieldId];
-                        field.source = 'Attorney Override (Verified)';
-                        field.confidence = 'verified';
+        if (persist && customOverrides && typeof customOverrides === 'object') {
+            // A sign-off is the attorney certifying the data was correct at that moment. If a
+            // field on an already-signed-off form actually changes value afterward (not just
+            // re-saved unchanged), that certification no longer reflects what's on screen, so it
+            // must be invalidated rather than silently keep showing "Signed Off" against stale data.
+            const previousOverrides = record.formOverrides || {};
+            const changedFieldIds = Object.keys(customOverrides).filter(
+                (fieldId) => customOverrides[fieldId] !== previousOverrides[fieldId]
+            );
+            if (changedFieldIds.length > 0 && record.formSignOff) {
+                const affectedFormKeys = new Set(changedFieldIds.map(formKeyForFieldId).filter(Boolean));
+                affectedFormKeys.forEach((formKey) => {
+                    if (formKey && record.formSignOff[formKey as string]) {
+                        delete record.formSignOff[formKey as string];
                     }
                 });
-            });
+            }
+
+            record.formOverrides = mergedOverrides;
+            saveRecords(records);
         }
 
-        let totalFields = 0;
-        let autoFilledCount = 0;
-        let needsReviewCount = 0;
-        let missingCount = 0;
-
-        Object.values(formsData).forEach(f => {
-            f.fields.forEach((field: any) => {
-                totalFields++;
-                if (!field.value || field.value === 'N/A' || field.source === 'Missing') {
-                    missingCount++;
-                } else if (field.confidence === 'low' || field.confidence === 'medium') {
-                    needsReviewCount++;
-                } else {
-                    autoFilledCount++;
-                }
-            });
-        });
+        const { formsData, caseType, metrics } = buildAutofillFormsData(record, mergedOverrides);
 
         res.json({
             success: true,
             recordId,
             caseType,
-            metrics: {
-                totalFields,
-                autoFilledCount,
-                needsReviewCount,
-                missingCount,
-                completionRate: Math.round(((autoFilledCount) / (totalFields || 1)) * 100)
-            },
-            formsData
+            metrics,
+            formsData,
+            signOff: record.formSignOff || {}
         });
     } catch (err: any) {
         console.error("Autofill Forms Error:", err);
         res.status(500).json({ error: "Failed to autofill forms", details: err?.message });
+    }
+});
+
+app.post('/api/intake/autofill-forms/sign-off', (req, res) => {
+    try {
+        const { recordId, formKey } = req.body;
+        if (!formKey) return res.status(400).json({ error: 'formKey is required' });
+
+        const records = getRecords();
+        const record = records.find(r => r.id === recordId);
+        if (!record) return res.status(404).json({ error: 'Record not found' });
+
+        const mergedOverrides: Record<string, string> = { ...(record.formOverrides || {}) };
+        const { formsData } = buildAutofillFormsData(record, mergedOverrides);
+        const targetForm = formsData[formKey];
+        if (!targetForm) return res.status(404).json({ error: `Unknown form ${formKey}` });
+
+        const missingFields = targetForm.fields.filter((f: any) => f.required !== false && (!f.value || f.source === 'Missing')).map((f: any) => f.name);
+        if (missingFields.length > 0) {
+            return res.status(400).json({ error: 'Form has missing required fields and cannot be signed off yet', missingFields });
+        }
+
+        record.formSignOff = { ...(record.formSignOff || {}), [formKey]: { approvedAt: new Date().toISOString() } };
+        saveRecords(records);
+
+        res.json({ success: true, formKey, signOff: record.formSignOff });
+    } catch (err: any) {
+        console.error("Autofill Sign-Off Error:", err);
+        res.status(500).json({ error: "Failed to sign off form", details: err?.message });
+    }
+});
+
+// Real official USCIS PDF templates (downloaded from uscis.gov, repaired with pikepdf so
+// pdf-lib can parse their cross-reference tables) live in server/uscis-forms/.
+const USCIS_TEMPLATE_FILES: Record<string, string> = {
+    'I-140': 'i-140.pdf',
+    'I-485': 'i-485.pdf',
+    'G-28': 'g-28.pdf',
+    'I-765': 'i-765.pdf',
+};
+
+// Many `toggle` fields aren't a single attestation checkbox (checked = yes, blank = unanswered) -
+// they're a genuine Yes/No PAIR of independent checkboxes on the real form (confirmed by
+// inspecting the template: e.g. I-485 Part 9's ~85 legal-history questions are each two separate
+// fields sharing a base name, `..._YesNo[0]`/`..._YesNo[1]`, one with onValue /Y and the other /N).
+// def.realField only ever records the Yes box. Answering "No" on the review table used to leave
+// BOTH boxes unchecked on the exported PDF - indistinguishable from "never answered" on an actual
+// USCIS filing, which is a real problem specifically for Part 9's inadmissibility questions. This
+// looks up the sibling by trying nearby indices at export time (rather than hardcoding ~94 pairs
+// in the field defs) and checks it only if it's confirmed to be the /N counterpart; fields that
+// are genuinely standalone (no sibling with onValue /N exists) are left exactly as before.
+const findNoCheckboxSibling = (form: any, yesFieldName: string): string | null => {
+    const m = yesFieldName.match(/^(.*)\[(\d+)\]$/);
+    if (!m) return null;
+    const base = m[1];
+    const yesIdx = parseInt(m[2], 10);
+    for (let i = 0; i <= 3; i++) {
+        if (i === yesIdx) continue;
+        const candidate = `${base}[${i}]`;
+        try {
+            const cb = form.getCheckBox(candidate);
+            if (cb.acroField.getOnValue()?.toString() === '/N') return candidate;
+        } catch (e) {
+            // no field at this index - not a pair, or not this shape
+        }
+    }
+    return null;
+};
+
+app.post('/api/intake/generate-filled-pdf', async (req, res) => {
+    try {
+        const { recordId, formKey, customOverrides } = req.body;
+        const records = getRecords();
+        const record = records.find(r => r.id === recordId);
+
+        if (!record) {
+            return res.status(404).json({ error: 'Record not found' });
+        }
+
+        const targetFormKey = formKey || 'I-140';
+        const templateFile = USCIS_TEMPLATE_FILES[targetFormKey];
+        if (!templateFile) {
+            return res.status(400).json({ error: `Unknown form ${targetFormKey}` });
+        }
+
+        // Enforced server-side, not just by disabling the button client-side: the official PDF
+        // must not be producible for a form the attorney hasn't certified via sign-off (and
+        // sign-off itself already requires every required field to be filled - see the sign-off
+        // endpoint above). This also means editing a field after sign-off (which revokes it, see
+        // the invalidation logic in the autofill-forms endpoint above) immediately re-blocks export.
+        if (!record.formSignOff?.[targetFormKey]) {
+            return res.status(403).json({ error: `${targetFormKey} has not been signed off by the attorney yet. Sign off on the review table before exporting the official PDF.` });
+        }
+
+        // Reuse the exact same field resolution (persisted overrides + cross-form semantic
+        // propagation) that the on-screen review table uses, so the official PDF export can
+        // never drift from what the attorney reviewed on screen.
+        const mergedOverrides: Record<string, string> = { ...(record.formOverrides || {}), ...(customOverrides || {}) };
+        const { formsData } = buildAutofillFormsData(record, mergedOverrides);
+
+        const templatePath = path.join(serverRootDir, 'uscis-forms', templateFile);
+        const templateBytes = fs.readFileSync(templatePath);
+        const pdfDoc = await PDFDocument.load(templateBytes, { ignoreEncryption: true });
+        const form = pdfDoc.getForm();
+        const fillFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+
+        // All 4 forms are manifest-driven ("full coverage"): write every row the attorney
+        // reviewed on screen directly to its real PDF field. The same field list drives both
+        // the review table and this export, so there is no separate mapping layer that can
+        // silently drift out of sync with what's shown on screen.
+        const defs = targetFormKey === 'G-28' ? G28_FIELD_DEFS : targetFormKey === 'I-140' ? I140_FIELD_DEFS : targetFormKey === 'I-765' ? I765_FIELD_DEFS : targetFormKey === 'I-485' ? I485_FIELD_DEFS : [];
+        if (!defs.length) {
+            return res.status(400).json({ error: `Unknown form ${targetFormKey}` });
+        }
+        const rowsByFieldId: Record<string, any> = {};
+        (formsData[targetFormKey]?.fields || []).forEach((f: any) => { rowsByFieldId[f.fieldId] = f; });
+
+        defs.forEach((def) => {
+            const row = rowsByFieldId[def.fieldId];
+            if (!row || !row.value) return;
+            try {
+                if (def.type === 'text' && def.realField) {
+                    const field = form.getTextField(def.realField);
+                    const maxLen = field.getMaxLength();
+                    const value = typeof maxLen === 'number' && row.value.length > maxLen ? row.value.slice(0, maxLen) : row.value;
+                    field.setText(value);
+                    // Many viewers (Chrome/PDF.js in particular) don't honor the template's
+                    // NeedAppearances flag and show filled values as blank without a cached
+                    // appearance stream, so we render each touched field's appearance ourselves
+                    // (not form.updateFieldAppearances(), which walks every field in the form and
+                    // crashes on unrelated rich-text fields elsewhere that pdf-lib cannot read).
+                    field.updateAppearances(fillFont);
+                } else if (def.type === 'toggle' && def.realField) {
+                    if (row.value === 'Yes') {
+                        form.getCheckBox(def.realField).check();
+                    } else if (row.value === 'No') {
+                        const noField = findNoCheckboxSibling(form, def.realField);
+                        if (noField) form.getCheckBox(noField).check();
+                    }
+                } else if (def.type === 'select' && def.options) {
+                    const chosen = def.options.find(o => o.label === row.value);
+                    if (chosen?.realField) form.getCheckBox(chosen.realField).check();
+                }
+            } catch (e: any) {
+                console.warn(`generate-filled-pdf: could not set ${targetFormKey}.${def.fieldId}:`, e?.message);
+            }
+        });
+
+        const pdfBytes = await pdfDoc.save({ updateFieldAppearances: false });
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${targetFormKey}_Official_Filled.pdf"`);
+        res.send(Buffer.from(pdfBytes));
+    } catch (err: any) {
+        console.error("Generate Filled PDF Error:", err);
+        res.status(500).json({ error: "Failed to generate prefilled PDF", details: err?.message });
     }
 });
 
@@ -1098,7 +2194,7 @@ app.put('/api/records/:id/summary', (req, res) => {
         }
 
         records[recordIndex].summary = summary;
-        fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
+        saveRecords(records);
 
         res.status(200).json({ success: true, record: records[recordIndex] });
     } catch (error: any) {
@@ -1301,34 +2397,6 @@ app.post('/api/twilio/call-out/bridge', (req, res) => {
 });
 
 // ── Document Classification Helper ───────────────────────────────────────────
-// Category metadata for display on the frontend
-const CATEGORY_LABELS: Record<string, string> = {
-    passport: 'Passport',
-    visa: 'Visa',
-    employment_letter: 'Employment Letter',
-    support_letter: 'Support Letter',
-    award_certificate: 'Award / Certificate',
-    publication: 'Publication',
-    media_coverage: 'Media Coverage',
-    tax_document: 'Tax Document',
-    degree_certificate: 'Degree / Diploma',
-    affidavit: 'Affidavit',
-    court_document: 'Court Document',
-    immigration_form: 'USCIS / Immigration Form',
-    photo_id: 'Photo ID',
-    contract: 'Contract / Agreement',
-    financial_document: 'Financial Document',
-    medical_record: 'Medical Record',
-    // Audio categories
-    consultation_call: 'Consultation Call',
-    deposition: 'Deposition',
-    witness_statement: 'Witness Statement',
-    court_hearing: 'Court Hearing',
-    interview: 'Interview Recording',
-    voicemail: 'Voicemail',
-    audio_recording: 'Audio Recording',
-    other: 'Other Document',
-};
 
 interface FileClassification {
     originalname: string;
@@ -1778,7 +2846,7 @@ app.post('/api/intake/process', upload.array('files'), async (req, res) => {
             records.unshift(record);
         }
 
-        fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
+        saveRecords(records);
         res.json({ success: true, record });
     } catch (error: any) {
         console.error('❌ Multimodal processing failed:', error.message);
@@ -1871,7 +2939,7 @@ app.post('/api/intake/regenerate', async (req, res) => {
             fs.appendFileSync(path.join(serverRootDir, 'error.log'), `[${new Date().toISOString()}] Playbook analysis regeneration failed: ${err.message}\n${err.stack}\n\n`);
         }
 
-        fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
+        saveRecords(records);
 
         res.json({ success: true, record: records[recordIndex] });
     } catch (error: any) {
@@ -1967,7 +3035,7 @@ Deliver the response now.`;
         } else {
             records[recordIndex].summary = updatedSummary;
         }
-        fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
+        saveRecords(records);
 
         res.json({ success: true, record: records[recordIndex], explanation });
     } catch (error: any) {
@@ -2464,7 +3532,7 @@ app.put('/api/records/:id/rename-item', async (req, res) => {
                 .split('04_05Joint_Account_Statement_Nov2024_Aug2025_Sample.pdf').join('Johnson-Martinez_Bank_2025.pdf');
         }
 
-        fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
+        saveRecords(records);
         res.json({ success: true, newName: sanitized, record: records[recordIndex] });
     } catch (error: any) {
         console.error('❌ Rename failed:', error.message);
@@ -2487,7 +3555,7 @@ app.put('/api/records/:id/case-type', (req, res) => {
         }
 
         records[recordIndex].caseType = caseType;
-        fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
+        saveRecords(records);
 
         res.json({ success: true, record: records[recordIndex] });
     } catch (error: any) {
@@ -2536,7 +3604,7 @@ app.delete('/api/records/:id/delete-item', async (req, res) => {
              }
         }
 
-        fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
+        saveRecords(records);
         res.json({ success: true, record });
     } catch (error: any) {
         console.error('❌ Failed to delete item:', error.message);
@@ -2655,7 +3723,7 @@ app.put('/api/records/:id/rename-items-batch', async (req, res) => {
             }
         }
 
-        fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
+        saveRecords(records);
         res.json({ success: true, renamedCount: renamedItems.length, record: records[recordIndex] });
     } catch (error: any) {
         console.error('❌ Batch Rename failed:', error.message);
@@ -2702,7 +3770,7 @@ app.post('/api/records/:id/upload', upload.array('files'), async (req, res) => {
             });
         }
 
-        fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
+        saveRecords(records);
         res.json({ success: true, record: existingRecord });
     } catch (error: any) {
         console.error('❌ Failed to upload files to record:', error.message);
@@ -2746,7 +3814,7 @@ app.put('/api/records/questionnaire/:id', async (req, res) => {
             ...(playbookName && { playbookName })
         };
         
-        fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
+        saveRecords(records);
         res.json({ success: true, record: records[recordIndex] });
     } catch (error: any) {
         console.error('❌ Failed to update questionnaire:', error.message);
@@ -2858,7 +3926,7 @@ app.post('/api/records/:id/reclassify', async (req, res) => {
             }
         }
 
-        fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
+        saveRecords(records);
         console.log(`[Reclassify] Updated ${updatedCount} item(s) for record ${id}`);
 
         res.json({ success: true, classifiedCount: updatedCount, record: records[recordIndex] });
@@ -2888,7 +3956,7 @@ app.post('/api/records/:id/auto-research', async (req, res) => {
         
         await runAutoResearchForRecord(records[recordIndex], targetEntities, genAI);
         
-        fs.writeFileSync(recordsPath, JSON.stringify(records, null, 2));
+        saveRecords(records);
         
         res.json({ success: true, record: records[recordIndex] });
     } catch (error: any) {
