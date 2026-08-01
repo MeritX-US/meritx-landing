@@ -1,16 +1,18 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500;1,9..144,600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
 :root {
-  --bg-dark: #0f1115;
-  --bg-card: rgba(25, 28, 35, 0.6);
-  --border-color: rgba(255, 255, 255, 0.1);
-  --text-primary: #ffffff;
-  --text-secondary: #94a3b8;
-  --accent-primary: #3b82f6;
-  --accent-secondary: #8b5cf6;
-  --success: #22c55e;
-  --danger: #ef4444;
-  --font-family: 'Inter', sans-serif;
+  --bg-dark: #12151C;
+  --bg-card: #1A1E27;
+  --border-color: rgba(201, 162, 39, 0.16);
+  --text-primary: #F4F1E8;
+  --text-secondary: #9B9686;
+  --accent-primary: #C9A227;
+  --accent-secondary: #A9871F;
+  --success: #7E9A6D;
+  --danger: #A23C3C;
+  --font-family: 'IBM Plex Sans', sans-serif;
+  --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --font-mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
 }
 
 * {
@@ -25,8 +27,7 @@ body {
   color: var(--text-primary);
   line-height: 1.5;
   min-height: 100vh;
-  background-image: radial-gradient(circle at top right, rgba(59, 130, 246, 0.1), transparent 40%),
-                    radial-gradient(circle at bottom left, rgba(139, 92, 246, 0.1), transparent 40%);
+  background-image: radial-gradient(circle at top right, rgba(201, 162, 39, 0.05), transparent 40%);
   background-attachment: fixed;
 }
 

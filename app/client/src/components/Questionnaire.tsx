@@ -212,8 +212,8 @@ const Questionnaire: React.FC<QuestionnaireProps> = ({ initialRecord, onSaveComp
                       textAlign: 'left',
                       padding: '1rem',
                       borderRadius: '12px',
-                      background: isActive ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
-                      border: `1px solid ${isActive ? 'rgba(59, 130, 246, 0.3)' : 'transparent'}`,
+                      background: isActive ? 'rgba(201, 162, 39, 0.15)' : 'transparent',
+                      border: `1px solid ${isActive ? 'rgba(201, 162, 39, 0.3)' : 'transparent'}`,
                       color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
                       fontWeight: isActive ? 600 : 400,
                       transition: 'all 0.2s ease',
@@ -299,7 +299,7 @@ const Questionnaire: React.FC<QuestionnaireProps> = ({ initialRecord, onSaveComp
                               style={{
                                 display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer',
                                 padding: '0.75rem 1.5rem', borderRadius: '8px',
-                                background: isSelected ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255,255,255,0.03)',
+                                background: isSelected ? 'rgba(201, 162, 39, 0.15)' : 'rgba(255,255,255,0.03)',
                                 border: `1px solid ${isSelected ? 'var(--accent-primary)' : 'var(--border-color)'}`,
                                 transition: 'all 0.2s ease'
                               }}
@@ -389,7 +389,7 @@ const Questionnaire: React.FC<QuestionnaireProps> = ({ initialRecord, onSaveComp
                     padding: '0.75rem 1.5rem', borderRadius: '8px',
                     background: 'linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))',
                     color: 'white', border: 'none', cursor: 'pointer',
-                    fontWeight: 500, boxShadow: '0 4px 14px rgba(59, 130, 246, 0.4)'
+                    fontWeight: 500, boxShadow: '0 4px 14px rgba(201, 162, 39, 0.4)'
                   }}
                 >
                   Next <ChevronRight size={18} />
