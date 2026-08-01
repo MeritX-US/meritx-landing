@@ -47,7 +47,7 @@
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500;1,9..144,600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
     <!-- Styles -->
     <link rel="stylesheet" href="css/styles.css">
@@ -76,6 +76,7 @@
         <section class="hero">
             <div class="container hero-container">
                 <div class="hero-content">
+                    <span class="eyebrow">AI-Native Petition Assembly</span>
                     <h1>From Client Intake to <br><span class="gradient-text">Attorney-Ready</span> Packages</h1>
                     <p class="hero-subtitle">Structured, source-traced, and ready for your review — never a substitute for it.</p>
                     <p class="hero-description">Cut the time from intake to a review-ready package by up to 80%. A case-prep assistant that never tires and never misses a detail.</p>
@@ -90,21 +91,26 @@
                 <!-- Hero visual/graphic: Intake Completeness Dashboard Mockup -->
                 <div class="hero-visual">
                     <div class="visual-placeholder">
+                        <svg class="seal" viewBox="0 0 100 100" aria-hidden="true">
+                            <circle class="seal-ring" cx="50" cy="50" r="47" />
+                            <circle class="seal-ring" cx="50" cy="50" r="39" />
+                            <defs>
+                                <path id="seal-circle" d="M 50,50 m -43,0 a 43,43 0 1,1 86,0 a 43,43 0 1,1 -86,0" />
+                            </defs>
+                            <text class="seal-text" font-size="6.2" letter-spacing="2">
+                                <textPath href="#seal-circle" startOffset="0%">MERITX · ATTORNEY REVIEWED · SOURCE TRACED ·</textPath>
+                            </text>
+                            <circle class="seal-center" cx="50" cy="50" r="3" />
+                        </svg>
                         <div class="completeness-dashboard">
                             <div class="dashboard-header">
                                 <span class="case-badge">USC_AOS Playbook v1.0</span>
                                 <span class="time">Active Case</span>
                             </div>
-                            
+
                             <div class="completeness-gauge-container">
                                 <div class="completeness-ring-wrapper">
                                     <svg>
-                                        <defs>
-                                            <linearGradient id="ring-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                                <stop offset="0%" stop-color="#3B82F6" />
-                                                <stop offset="100%" stop-color="#8B5CF6" />
-                                            </linearGradient>
-                                        </defs>
                                         <circle class="ring-bg" cx="40" cy="40" r="35" />
                                         <circle class="ring-fill" cx="40" cy="40" r="35" />
                                     </svg>
@@ -119,48 +125,28 @@
                             <div class="dimension-list">
                                 <div class="dimension-item">
                                     <div class="dimension-label">
-                                        <span class="name">Identity & Relationship</span>
-                                        <span class="value">90%</span>
-                                    </div>
-                                    <div class="dimension-bar-bg">
-                                        <div class="dimension-bar-fill" style="width: 90%;"></div>
-                                    </div>
-                                </div>
-                                
-                                <div class="dimension-item">
-                                    <div class="dimension-label">
-                                        <span class="name">Bona Fide Marriage <span class="warning-icon">⚠️</span></span>
+                                        <span class="name">Bona Fide Marriage <span class="warning-icon">▲</span></span>
                                         <span class="value">45%</span>
                                     </div>
                                     <div class="dimension-bar-bg">
                                         <div class="dimension-bar-fill warning" style="width: 45%;"></div>
                                     </div>
                                 </div>
-                                
+
                                 <div class="dimension-item">
                                     <div class="dimension-label">
-                                        <span class="name">Financial Support (I-864) <span class="warning-icon">⚠️</span></span>
+                                        <span class="name">Financial Support (I-864) <span class="warning-icon">▲</span></span>
                                         <span class="value">50%</span>
                                     </div>
                                     <div class="dimension-bar-bg">
                                         <div class="dimension-bar-fill warning" style="width: 50%;"></div>
                                     </div>
                                 </div>
-
-                                <div class="dimension-item">
-                                    <div class="dimension-label">
-                                        <span class="name">Admissibility & Status</span>
-                                        <span class="value">70%</span>
-                                    </div>
-                                    <div class="dimension-bar-bg">
-                                        <div class="dimension-bar-fill" style="width: 70%;"></div>
-                                    </div>
-                                </div>
                             </div>
 
                             <div class="blocking-alert">
-                                <span class="blocking-alert-icon">🛑</span>
-                                <span>BLOCKING: bona_fide_weak (Assembly Locked)</span>
+                                <span class="blocking-alert-tag">Blocked</span>
+                                <span>bona_fide_weak — assembly locked pending review</span>
                             </div>
                         </div>
                     </div>
@@ -168,25 +154,39 @@
             </div>
         </section>
 
+        <div class="partner-strip">
+            <div class="container partner-strip-inner">
+                <span class="partner-strip-label">Strategic Law Firm Partner</span>
+                <div class="partner-strip-divider"></div>
+                <div class="partner-strip-name">
+                    <span class="partner-name-cn">美达律师事务所</span>
+                    <span class="partner-name-en">Miao <span class="amp">&amp;</span> Associates, PLLC</span>
+                </div>
+                <div class="partner-strip-divider"></div>
+                <span class="partner-strip-credential">2025 NY Top 10 Immigration Law Firm — <em>Lawyer &amp; Practice</em> Magazine</span>
+            </div>
+        </div>
+
         <section class="problem" id="problem">
             <div class="container">
                 <div class="section-header text-center">
+                    <span class="eyebrow">The Problem</span>
                     <h2>The Immigration Intake Bottleneck</h2>
                     <p>Preparing petition packages manually wastes up to 50% of an immigration firm's billable hours.</p>
                 </div>
                 <div class="grid grid-3">
                     <div class="feature-card warning">
-                        <div class="icon">🔍</div>
+                        <div class="card-index">01</div>
                         <h3>Chasing Documents</h3>
                         <p>Clients struggle to provide exact civil certificates, tax transcripts, or translation proofs. Following up takes weeks of email ping-pong.</p>
                     </div>
                     <div class="feature-card warning">
-                        <div class="icon">⚠️</div>
-                        <h3>RFE & Rejection Risks</h3>
+                        <div class="card-index">02</div>
+                        <h3>RFE <span class="amp">&amp;</span> Rejection Risks</h3>
                         <p>Lacking sufficient evidence weight (such as weak bona fide marriage records) or using incorrect form editions triggers devastating RFEs.</p>
                     </div>
                     <div class="feature-card warning">
-                        <div class="icon">✍️</div>
+                        <div class="card-index">03</div>
                         <h3>Manual Fact Mapping</h3>
                         <p>Paralegals manually copy-paste names, addresses, and entry dates across Form I-130, I-485, and I-864, risking formatting and transcribing errors.</p>
                     </div>
@@ -197,6 +197,7 @@
         <section class="solution" id="how-it-works">
             <div class="container">
                 <div class="section-header text-center">
+                    <span class="eyebrow">How It Works</span>
                     <h2>The AI-Native Petition Assembly Engine</h2>
                     <p>MeritX bridges the gap between messy client consultations and polished USCIS petition packages.</p>
                 </div>
@@ -204,7 +205,7 @@
                 <!-- Step 1 -->
                 <div class="grid grid-2 align-center">
                     <div class="feature-content">
-                        <h3>1. Case Playbooks & Evidence Mapping</h3>
+                        <h3>1. Case Playbooks <span class="amp">&amp;</span> Evidence Mapping</h3>
                         <p>Upload consultation audio or case files. Our engine identifies the case scenario (e.g. USC Petitioner with Adjustment of Status) and extracts required facts, mapping evidence directly to USCIS eligibility criteria.</p>
                         <ul class="feature-list">
                             <li><strong>Dynamic Fact Extraction:</strong> Captures lawful entry records, tax filings, and prior marriages.</li>
@@ -240,24 +241,20 @@
                             <div class="mockup-header">Deterministic Red Flag Checks</div>
                             <div class="mockup-body">
                                 <div class="mockup-alert critical">
-                                    <div class="mockup-alert-icon">🛑</div>
-                                    <div>
-                                        <div class="mockup-alert-title">AOS Bar Risk (Unlawful Entry)</div>
-                                        <div class="mockup-alert-desc">Last entry was not inspected. Assess Consular Processing and I-601A Provisional Waiver.</div>
-                                    </div>
+                                    <span class="mockup-alert-tag">Critical</span>
+                                    <div class="mockup-alert-title">AOS Bar Risk (Unlawful Entry)</div>
+                                    <div class="mockup-alert-desc">Last entry was not inspected. Assess Consular Processing and I-601A Provisional Waiver.</div>
                                 </div>
                                 <div class="mockup-alert warning">
-                                    <div class="mockup-alert-icon">⚠️</div>
-                                    <div>
-                                        <div class="mockup-alert-title">Income Below I-864 Guideline</div>
-                                        <div class="mockup-alert-desc">Petitioner household income appears below 125% of poverty guidelines. Joint sponsor evaluated.</div>
-                                    </div>
+                                    <span class="mockup-alert-tag">Warning</span>
+                                    <div class="mockup-alert-title">Income Below I-864 Guideline</div>
+                                    <div class="mockup-alert-desc">Petitioner household income appears below 125% of poverty guidelines. Joint sponsor evaluated.</div>
                                 </div>
                             </div>
                         </div>
                     </div>
                     <div class="feature-content">
-                        <h3>2. Completeness Scoring & Red Flag Checks</h3>
+                        <h3>2. Completeness Scoring <span class="amp">&amp;</span> Red Flag Checks</h3>
                         <p>No more manual file auditing. MeritX's deterministic check layer evaluates evidence counts and flags inadmissibility bars, calculating a clear completeness breakdown.</p>
                         <ul class="feature-list">
                             <li><strong>Completeness Score:</strong> Four-dimension breakdown showing exact case readiness.</li>
@@ -270,7 +267,7 @@
                 <!-- Step 3 -->
                 <div class="grid grid-2 align-center">
                     <div class="feature-content">
-                        <h3>3. Form Mapping & Package Assembly</h3>
+                        <h3>3. Form Mapping <span class="amp">&amp;</span> Package Assembly</h3>
                         <p>Generate attorney-ready outputs in minutes. The engine maps facts directly to USCIS forms, builds the cover letter, and structures the evidence binder.</p>
                         <ul class="feature-list">
                             <li><strong>Form Field Mapping:</strong> Maps intake facts into Form I-130, I-130A, I-485, and I-864 schema.</li>
@@ -299,19 +296,20 @@ Exhibit H: Joint Bank Account</div>
         <section class="audience" id="playbooks">
             <div class="container">
                 <div class="audience-box">
+                    <span class="eyebrow">Case Playbooks</span>
                     <h2>Supported Case Playbooks</h2>
                     <p style="margin-bottom: 3rem;">MeritX operates on deterministic legal configurations. Custom playbooks are compiled to your firm's standards.</p>
                     <div class="grid grid-3">
                         <div class="audience-card">
-                            <h3 style="margin-bottom: 0.75rem; color: #fff;">Family-Based (MVP)</h3>
+                            <h3 style="margin-bottom: 0.75rem; color: var(--heading-color);">Family-Based (MVP)</h3>
                             <p style="font-size: 0.9rem; line-height: 1.5; color: var(--text-muted);">Form I-130, I-130A, I-485, and I-864 packages. Incorporates scenario logic for lawful entry, income sufficiency, and prior marriage certificates.</p>
                         </div>
                         <div class="audience-card">
-                            <h3 style="margin-bottom: 0.75rem; color: #fff;">Extraordinary Ability</h3>
+                            <h3 style="margin-bottom: 0.75rem; color: var(--heading-color);">Extraordinary Ability</h3>
                             <p style="font-size: 0.9rem; line-height: 1.5; color: var(--text-muted);">O-1 and EB-1A playbooks. Mapped facts are checked against media coverage, expert letters, awards, and original contribution thresholds.</p>
                         </div>
                         <div class="audience-card">
-                            <h3 style="margin-bottom: 0.75rem; color: #fff;">National Interest Waiver</h3>
+                            <h3 style="margin-bottom: 0.75rem; color: var(--heading-color);">National Interest Waiver</h3>
                             <p style="font-size: 0.9rem; line-height: 1.5; color: var(--text-muted);">Structures professional endeavors against the three-prong Dhanasar test. Auto-drafts cover letters focusing on national importance and capability.</p>
                         </div>
                     </div>
@@ -322,38 +320,39 @@ Exhibit H: Joint Bank Account</div>
         <section class="why-us" id="about">
             <div class="container">
                 <div class="section-header text-center">
+                    <span class="eyebrow">Trust & Compliance</span>
                     <h2>Why MeritX?</h2>
                     <p>Built for the strict compliance, safety, and precision requirements of modern immigration law firms.</p>
                 </div>
                 <div class="trust-grid">
                     <div class="trust-card">
-                        <div class="icon">🔒</div>
-                        <h3>1. Encryption</h3>
+                        <div class="card-index">01</div>
+                        <h3>Encryption</h3>
                         <p>All client data is encrypted in transit and at rest using TLS 1.2+ and AES-256. We are pursuing SOC 2 Type II certification as we scale; today our focus is a safe, controlled workflow — attorney review, source traceability, limited access, and careful handling of client information.</p>
                     </div>
                     <div class="trust-card">
-                        <div class="icon">📁</div>
-                        <h3>2. Data ownership & use</h3>
+                        <div class="card-index">02</div>
+                        <h3>Data ownership <span class="amp">&amp;</span> use</h3>
                         <p>Your firm owns all client data. We never resell it, and we never use it to train AI models — ours or our providers.</p>
                     </div>
                     <div class="trust-card">
-                        <div class="icon">🔍</div>
-                        <h3>3. Traceability</h3>
+                        <div class="card-index">03</div>
+                        <h3>Traceability</h3>
                         <p>Every fact, summary, and draft paragraph links back to its source — a transcript timestamp or document page — so attorneys can verify each output against the underlying record. No claim appears without a traceable basis.</p>
                     </div>
                     <div class="trust-card">
-                        <div class="icon">📋</div>
-                        <h3>4. Audit-ability</h3>
+                        <div class="card-index">04</div>
+                        <h3>Audit-ability</h3>
                         <p>Every workflow action — edits, approvals, escalations, and rejections — is logged with user and timestamp, creating a record of who reviewed what and when. This supports each attorney's professional responsibility and any later review of how a matter was handled.</p>
                     </div>
                     <div class="trust-card">
-                        <div class="icon">🔑</div>
-                        <h3>5. Access control</h3>
+                        <div class="card-index">05</div>
+                        <h3>Access control</h3>
                         <p>Role-based access control and PII masking ensure staff see only what their role permits.</p>
                     </div>
                     <div class="trust-card">
-                        <div class="icon">⚖️</div>
-                        <h3>6. Compliance position</h3>
+                        <div class="card-index">06</div>
+                        <h3>Compliance position</h3>
                         <p>MeritX is infrastructure, not decision-making AI. No legal advice, no autonomous decisions — the attorney remains responsible and in control at every step.</p>
                     </div>
                 </div>
@@ -362,6 +361,7 @@ Exhibit H: Joint Bank Account</div>
 
         <section class="cta" id="contact">
             <div class="container cta-container">
+                <span class="eyebrow" style="justify-content: center;">Get Started</span>
                 <h2>Ready to automate your petition package assembly?</h2>
                 <p>Join the waitlist for early access to MeritX Playbooks.</p>
  
@@ -376,7 +376,7 @@ Exhibit H: Joint Bank Account</div>
                 </form>
  
                 <div class="success-message" style="display: none;">
-                    <div class="icon">✨</div>
+                    <div class="mark">✓</div>
                     <h3>You're on the list!</h3>
                     <p>We'll be in touch shortly with early access details.</p>
                 </div>

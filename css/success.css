@@ -1,22 +1,24 @@
 /* Success Message Style */
 .success-message {
     text-align: center;
-    background: rgba(16, 185, 129, 0.1);
-    border: 1px solid rgba(16, 185, 129, 0.3);
-    border-radius: 1rem;
+    background: var(--status-good-soft);
+    border: 1px solid rgba(126, 154, 109, 0.35);
+    border-radius: var(--radius);
     padding: 2rem;
     max-width: 500px;
     margin: 2rem auto 0;
-    backdrop-filter: blur(10px);
 }
 
-.success-message .icon {
-    font-size: 3rem;
+.success-message .mark {
+    font-family: var(--font-mono);
+    font-size: 1.75rem;
+    color: var(--status-good);
     margin-bottom: 1rem;
+    display: inline-block;
 }
 
 .success-message h3 {
-    color: #34D399;
+    color: var(--status-good);
     margin-bottom: 0.5rem;
 }
 
