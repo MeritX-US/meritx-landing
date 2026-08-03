@@ -85,20 +85,20 @@ function JsonIDEEditor({
   });
 
   const editorContent = (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#090d16', borderRadius: isFullscreen ? '0' : '10px', border: isFullscreen ? 'none' : `1px solid ${isValid ? 'var(--border-color)' : '#A23C3C'}`, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg-card)', borderRadius: isFullscreen ? '0' : '10px', border: isFullscreen ? 'none' : `1px solid ${isValid ? 'var(--border-color)' : '#A23C3C'}`, overflow: 'hidden' }}>
       {/* Editor Toolbar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1.25rem', background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid var(--border-color)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1.25rem', background: 'rgba(23, 20, 15, 0.03)', borderBottom: '1px solid var(--border-color)' }}>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
           <button
             onClick={() => setIsEditing(!isEditing)}
-            style={{ padding: '0.4rem 0.85rem', borderRadius: '6px', border: '1px solid var(--border-color)', background: isEditing ? '#C9A227' : 'rgba(255,255,255,0.05)', color: 'white', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+            style={{ padding: '0.4rem 0.85rem', borderRadius: '6px', border: '1px solid var(--border-color)', background: isEditing ? 'var(--accent-primary)' : 'rgba(23, 20, 15, 0.05)', color: 'white', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
           >
             {isEditing ? '👁 View Folded IDE' : '✏️ Raw Edit Mode'}
           </button>
           
           <button
             onClick={handleBeautify}
-            style={{ padding: '0.4rem 0.85rem', borderRadius: '6px', border: '1px solid rgba(126, 154, 109, 0.3)', background: 'rgba(126, 154, 109, 0.15)', color: '#9DBB8A', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+            style={{ padding: '0.4rem 0.85rem', borderRadius: '6px', border: '1px solid rgba(126, 154, 109, 0.3)', background: 'rgba(126, 154, 109, 0.15)', color: 'var(--success)', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
             title="Auto-indent and format JSON code"
           >
             ✨ Format / Beautify JSON
@@ -108,7 +108,7 @@ function JsonIDEEditor({
         {onToggleFullscreen && (
           <button
             onClick={onToggleFullscreen}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.9rem', background: isFullscreen ? '#C9A227' : 'rgba(255, 255, 255, 0.05)', color: isFullscreen ? 'white' : 'var(--text-secondary)', border: '1px solid var(--border-color)', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.9rem', background: isFullscreen ? 'var(--accent-primary)' : 'rgba(23, 20, 15, 0.05)', color: isFullscreen ? 'white' : 'var(--text-secondary)', border: '1px solid var(--border-color)', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem' }}
           >
             {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
             {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen Editor'}
@@ -117,7 +117,7 @@ function JsonIDEEditor({
       </div>
 
       {!isValid && (
-        <div style={{ background: 'rgba(162,60,60,0.15)', color: '#D9A3A3', padding: '0.5rem 1rem', fontSize: '0.82rem', borderBottom: '1px solid #A23C3C', fontFamily: 'monospace' }}>
+        <div style={{ background: 'rgba(162,60,60,0.15)', color: '#8B3232', padding: '0.5rem 1rem', fontSize: '0.82rem', borderBottom: '1px solid #A23C3C', fontFamily: 'monospace' }}>
           ⚠️ Invalid JSON Syntax. Format or fix line errors before saving.
         </div>
       )}
@@ -142,8 +142,8 @@ function JsonIDEEditor({
             flexGrow: 1,
             width: '100%',
             padding: '1.25rem',
-            background: '#12151C',
-            color: '#e2e8f0',
+            background: 'var(--bg-card-2)',
+            color: 'var(--text-primary)',
             fontFamily: 'Consolas, Monaco, monospace',
             fontSize: isFullscreen ? '15px' : '13.5px',
             border: 'none',
@@ -161,21 +161,21 @@ function JsonIDEEditor({
             const isFoldable = foldMap[idx] !== undefined;
             const isFolded = foldedLines.has(idx);
 
-            let lineElement = <span style={{ color: '#cbd5e1' }}>{lineText}</span>;
+            let lineElement = <span style={{ color: 'var(--text-secondary)' }}>{lineText}</span>;
             const keyMatch = lineText.match(/^(\s*)("[\w_]+")(\s*:\s*)(.*)$/);
 
             if (keyMatch) {
               const [, indent, keyStr, colon, valStr] = keyMatch;
-              let valStyled = <span style={{ color: '#e2e8f0' }}>{valStr}</span>;
+              let valStyled = <span style={{ color: 'var(--text-primary)' }}>{valStr}</span>;
 
-              if (valStr.startsWith('"')) valStyled = <span style={{ color: '#7E9A6D' }}>{valStr}</span>;
-              else if (valStr === 'true' || valStr === 'false' || !isNaN(Number(valStr.replace(',', '')))) valStyled = <span style={{ color: '#D9B84A' }}>{valStr}</span>;
+              if (valStr.startsWith('"')) valStyled = <span style={{ color: 'var(--success)' }}>{valStr}</span>;
+              else if (valStr === 'true' || valStr === 'false' || !isNaN(Number(valStr.replace(',', '')))) valStyled = <span style={{ color: 'var(--accent-primary)' }}>{valStr}</span>;
 
               lineElement = (
                 <span>
                   {indent}
-                  <span style={{ color: '#D9B84A', fontWeight: 600 }}>{keyStr}</span>
-                  <span style={{ color: '#94a3b8' }}>{colon}</span>
+                  <span style={{ color: 'var(--accent-primary)', fontWeight: 600 }}>{keyStr}</span>
+                  <span style={{ color: 'var(--text-secondary)' }}>{colon}</span>
                   {valStyled}
                 </span>
               );
@@ -184,7 +184,7 @@ function JsonIDEEditor({
             return (
               <div 
                 key={idx} 
-                style={{ display: 'flex', alignItems: 'center', padding: '0 1.25rem', background: isFolded ? 'rgba(201, 162, 39, 0.08)' : 'transparent' }}
+                style={{ display: 'flex', alignItems: 'center', padding: '0 1.25rem', background: isFolded ? 'rgba(156, 111, 23, 0.08)' : 'transparent' }}
               >
                 <span style={{ width: '40px', flexShrink: 0, color: '#475569', fontSize: '0.8rem', userSelect: 'none', textAlign: 'right', paddingRight: '0.85rem' }}>
                   {idx + 1}
@@ -192,7 +192,7 @@ function JsonIDEEditor({
 
                 <span 
                   onClick={() => isFoldable && toggleFold(idx)}
-                  style={{ width: '18px', flexShrink: 0, color: '#94a3b8', fontSize: '0.8rem', cursor: isFoldable ? 'pointer' : 'default', userSelect: 'none' }}
+                  style={{ width: '18px', flexShrink: 0, color: 'var(--text-secondary)', fontSize: '0.8rem', cursor: isFoldable ? 'pointer' : 'default', userSelect: 'none' }}
                 >
                   {isFoldable ? (isFolded ? '▶' : '▼') : ''}
                 </span>
@@ -202,7 +202,7 @@ function JsonIDEEditor({
                   {isFolded && (
                     <span 
                       onClick={() => toggleFold(idx)}
-                      style={{ background: 'rgba(201, 162, 39, 0.25)', color: '#E8D48A', padding: '0.1rem 0.4rem', borderRadius: '4px', fontSize: '0.75rem', marginLeft: '0.5rem', cursor: 'pointer', border: '1px solid rgba(201, 162, 39, 0.4)' }}
+                      style={{ background: 'rgba(156, 111, 23, 0.25)', color: 'var(--accent-primary)', padding: '0.1rem 0.4rem', borderRadius: '4px', fontSize: '0.75rem', marginLeft: '0.5rem', cursor: 'pointer', border: '1px solid rgba(156, 111, 23, 0.4)' }}
                     >
                       {foldMap[idx] - idx} lines folded {"{...}"}
                     </span>
@@ -218,7 +218,7 @@ function JsonIDEEditor({
 
   if (isFullscreen) {
     return (
-      <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 999999, background: '#070a12', display: 'flex', flexDirection: 'column', padding: '1rem 1.5rem', boxSizing: 'border-box' }}>
+      <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 999999, background: 'var(--bg-card)', display: 'flex', flexDirection: 'column', padding: '1rem 1.5rem', boxSizing: 'border-box' }}>
         {editorContent}
       </div>
     );
@@ -513,29 +513,29 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
 
   if (isTemplateFullscreen && playbookData) {
     return (
-      <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 999999, background: '#070a12', display: 'flex', flexDirection: 'column', padding: '1.5rem 2rem', boxSizing: 'border-box' }}>
+      <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 999999, background: 'var(--bg-card)', display: 'flex', flexDirection: 'column', padding: '1.5rem 2rem', boxSizing: 'border-box' }}>
         {/* Fullscreen Zen Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <FileText size={24} style={{ color: '#D9B84A' }} />
-            <h2 style={{ margin: 0, fontSize: '1.4rem', color: '#f8fafc' }}>
+            <FileText size={24} style={{ color: 'var(--accent-primary)' }} />
+            <h2 style={{ margin: 0, fontSize: '1.4rem', color: 'var(--text-primary)' }}>
               Cover Letter Zen Editor — {playbookData.metadata?.title || playbookData.playbook_id}
             </h2>
           </div>
           
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
             {/* Font Size Controls */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', background: 'rgba(255, 255, 255, 0.05)', padding: '0.3rem 0.6rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', background: 'rgba(23, 20, 15, 0.05)', padding: '0.3rem 0.6rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
               <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginRight: '0.2rem' }}>Font Size:</span>
-              <button onClick={() => setZenFontSize(Math.max(12, zenFontSize - 2))} style={{ background: 'transparent', border: 'none', color: '#D9B84A', cursor: 'pointer', fontWeight: 'bold', padding: '0.2rem 0.5rem', fontSize: '1rem' }}>A-</button>
-              <span style={{ fontSize: '0.9rem', color: '#e2e8f0', minWidth: '40px', textAlign: 'center', fontWeight: 'bold' }}>{zenFontSize}px</span>
-              <button onClick={() => setZenFontSize(Math.min(32, zenFontSize + 2))} style={{ background: 'transparent', border: 'none', color: '#D9B84A', cursor: 'pointer', fontWeight: 'bold', padding: '0.2rem 0.5rem', fontSize: '1rem' }}>A+</button>
+              <button onClick={() => setZenFontSize(Math.max(12, zenFontSize - 2))} style={{ background: 'transparent', border: 'none', color: 'var(--accent-primary)', cursor: 'pointer', fontWeight: 'bold', padding: '0.2rem 0.5rem', fontSize: '1rem' }}>A-</button>
+              <span style={{ fontSize: '0.9rem', color: 'var(--text-primary)', minWidth: '40px', textAlign: 'center', fontWeight: 'bold' }}>{zenFontSize}px</span>
+              <button onClick={() => setZenFontSize(Math.min(32, zenFontSize + 2))} style={{ background: 'transparent', border: 'none', color: 'var(--accent-primary)', cursor: 'pointer', fontWeight: 'bold', padding: '0.2rem 0.5rem', fontSize: '1rem' }}>A+</button>
             </div>
 
             {/* Variable Bar Toggle */}
             <button
               onClick={() => setShowZenVarBar(!showZenVarBar)}
-              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 1rem', background: showZenVarBar ? 'rgba(169, 135, 31, 0.25)' : 'rgba(255, 255, 255, 0.05)', color: showZenVarBar ? '#D9B84A' : 'var(--text-secondary)', border: '1px solid var(--border-color)', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600 }}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 1rem', background: showZenVarBar ? 'rgba(124, 88, 17, 0.25)' : 'rgba(23, 20, 15, 0.05)', color: showZenVarBar ? 'var(--accent-primary)' : 'var(--text-secondary)', border: '1px solid var(--border-color)', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600 }}
             >
               📌 Insert Variables ({Object.keys(VARIABLE_DICT).length})
             </button>
@@ -543,7 +543,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
             {/* Exit Button */}
             <button
               onClick={() => setIsTemplateFullscreen(false)}
-              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1.25rem', background: '#C9A227', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.95rem' }}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1.25rem', background: 'var(--accent-primary)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.95rem' }}
             >
               <Minimize2 size={18} /> Exit Fullscreen
             </button>
@@ -552,8 +552,8 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
 
         {/* Optional Collapsible Variable Bar */}
         {showZenVarBar && (
-          <div style={{ marginBottom: '1rem', background: 'rgba(169, 135, 31, 0.08)', padding: '0.75rem 1.25rem', borderRadius: '10px', border: '1px solid rgba(169, 135, 31, 0.3)', display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#D9B84A' }}>Click tag to insert:</span>
+          <div style={{ marginBottom: '1rem', background: 'rgba(124, 88, 17, 0.08)', padding: '0.75rem 1.25rem', borderRadius: '10px', border: '1px solid rgba(124, 88, 17, 0.3)', display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: 'var(--accent-primary)' }}>Click tag to insert:</span>
             {Object.entries(VARIABLE_DICT).map(([variable, info], vIdx) => (
               <button
                 key={vIdx}
@@ -565,9 +565,9 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                 style={{
                   padding: '0.3rem 0.6rem',
                   fontSize: '0.8rem',
-                  background: 'rgba(169, 135, 31, 0.2)',
-                  color: '#E8D48A',
-                  border: '1px solid rgba(169, 135, 31, 0.4)',
+                  background: 'rgba(124, 88, 17, 0.2)',
+                  color: 'var(--accent-primary)',
+                  border: '1px solid rgba(124, 88, 17, 0.4)',
                   borderRadius: '6px',
                   cursor: 'pointer',
                   fontWeight: 600,
@@ -591,17 +591,17 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
             width: '100%',
             height: '100%',
             padding: '2rem',
-            background: '#0d1322',
-            color: '#f8fafc',
+            background: 'var(--bg-card)',
+            color: 'var(--text-primary)',
             fontFamily: 'Consolas, Monaco, "Courier New", monospace',
             fontSize: `${zenFontSize}px`,
-            border: '1px solid rgba(255, 255, 255, 0.1)',
+            border: '1px solid rgba(23, 20, 15, 0.1)',
             borderRadius: '12px',
             resize: 'none',
             outline: 'none',
             lineHeight: 1.8,
             whiteSpace: 'pre-wrap',
-            boxShadow: 'inset 0 4px 12px 0 rgba(0, 0, 0, 0.6)',
+            boxShadow: 'inset 0 4px 12px 0 rgba(23, 20, 15, 0.08)',
             boxSizing: 'border-box'
           }}
         />
@@ -611,19 +611,19 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
 
   if (isJsonFullscreen && playbookData) {
     return (
-      <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 999999, background: '#070a12', display: 'flex', flexDirection: 'column', padding: '1.25rem 1.75rem', boxSizing: 'border-box' }}>
+      <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 999999, background: 'var(--bg-card)', display: 'flex', flexDirection: 'column', padding: '1.25rem 1.75rem', boxSizing: 'border-box' }}>
         {/* Fullscreen JSON Zen Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <Code size={24} style={{ color: '#D9B84A' }} />
-            <h2 style={{ margin: 0, fontSize: '1.4rem', color: '#f8fafc' }}>
+            <Code size={24} style={{ color: 'var(--accent-primary)' }} />
+            <h2 style={{ margin: 0, fontSize: '1.4rem', color: 'var(--text-primary)' }}>
               Advanced JSON Zen Editor — {playbookData.metadata?.title || playbookData.playbook_id}
             </h2>
           </div>
           
           <button
             onClick={() => setIsJsonFullscreen(false)}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1.25rem', background: '#C9A227', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.95rem' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1.25rem', background: 'var(--accent-primary)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.95rem' }}
           >
             <Minimize2 size={18} /> Exit Fullscreen
           </button>
@@ -669,14 +669,14 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
               <button
                 onClick={handleExport}
-                style={{ height: '40px', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0 1rem', background: 'rgba(255, 255, 255, 0.05)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', borderRadius: '8px', cursor: 'pointer', fontWeight: 500, fontSize: '0.88rem', whiteSpace: 'nowrap', boxSizing: 'border-box' }}
+                style={{ height: '40px', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0 1rem', background: 'rgba(23, 20, 15, 0.05)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', borderRadius: '8px', cursor: 'pointer', fontWeight: 500, fontSize: '0.88rem', whiteSpace: 'nowrap', boxSizing: 'border-box' }}
                 title="Export Playbook as JSON file"
               >
                 <Download size={15} /> Export
               </button>
 
               <label
-                style={{ height: '40px', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0 1rem', background: 'rgba(255, 255, 255, 0.05)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', borderRadius: '8px', cursor: 'pointer', fontWeight: 500, fontSize: '0.88rem', whiteSpace: 'nowrap', boxSizing: 'border-box' }}
+                style={{ height: '40px', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0 1rem', background: 'rgba(23, 20, 15, 0.05)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', borderRadius: '8px', cursor: 'pointer', fontWeight: 500, fontSize: '0.88rem', whiteSpace: 'nowrap', boxSizing: 'border-box' }}
                 title="Import Playbook JSON file"
               >
                 <Upload size={15} /> Import
@@ -727,7 +727,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
             borderRadius: '10px', 
             background: error ? 'rgba(162, 60, 60, 0.12)' : 'rgba(126, 154, 109, 0.12)', 
             border: `1px solid ${error ? 'rgba(162, 60, 60, 0.3)' : 'rgba(126, 154, 109, 0.3)'}`, 
-            color: error ? '#D9A3A3' : '#9DBB8A',
+            color: error ? '#8B3232' : 'var(--success)',
             fontSize: '0.9rem',
             fontWeight: 600,
             display: 'flex',
@@ -735,7 +735,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
             gap: '0.6rem'
           }}
         >
-          {error ? <AlertTriangle size={18} style={{ color: '#A23C3C' }} /> : <ShieldCheck size={18} style={{ color: '#7E9A6D' }} />}
+          {error ? <AlertTriangle size={18} style={{ color: '#A23C3C' }} /> : <ShieldCheck size={18} style={{ color: 'var(--success)' }} />}
           <span>{error || success}</span>
         </div>
       )}
@@ -754,7 +754,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                   setNewPbAiPrompt('');
                   setShowNewPlaybookModal(true);
                 }}
-                style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', padding: '0.3rem 0.6rem', fontSize: '0.8rem', background: 'rgba(201, 162, 39, 0.15)', color: '#D9B84A', border: '1px solid rgba(201, 162, 39, 0.3)', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', padding: '0.3rem 0.6rem', fontSize: '0.8rem', background: 'rgba(156, 111, 23, 0.15)', color: 'var(--accent-primary)', border: '1px solid rgba(156, 111, 23, 0.3)', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
               >
                 <Plus size={12} /> New
               </button>
@@ -768,7 +768,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     padding: '0.6rem 0.75rem',
-                    background: selectedPlaybook === pb.id ? 'rgba(201, 162, 39, 0.1)' : 'transparent',
+                    background: selectedPlaybook === pb.id ? 'rgba(156, 111, 23, 0.1)' : 'transparent',
                     border: `1px solid ${selectedPlaybook === pb.id ? 'var(--accent-primary)' : 'var(--border-color)'}`,
                     borderRadius: '6px',
                     cursor: 'pointer',
@@ -824,7 +824,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                   display: 'flex', alignItems: 'center', gap: '0.75rem',
                   padding: '0.75rem 1rem',
                   textAlign: 'left',
-                  background: activeTab === tab.id ? 'rgba(201, 162, 39, 0.1)' : 'transparent',
+                  background: activeTab === tab.id ? 'rgba(156, 111, 23, 0.1)' : 'transparent',
                   border: 'none',
                   borderRadius: '6px',
                   color: activeTab === tab.id ? 'var(--accent-primary)' : 'var(--text-secondary)',
@@ -850,14 +850,14 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
               <div style={{ display: 'grid', gap: '1.5rem', maxWidth: '600px' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Playbook ID (Read Only)</label>
-                  <input type="text" value={playbookData.playbook_id || ''} readOnly style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)' }} />
+                  <input type="text" value={playbookData.playbook_id || ''} readOnly style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'rgba(23, 20, 15, 0.05)', color: 'var(--text-secondary)' }} />
                 </div>
                 <div>
                   <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Associated Visa / Case Category</label>
                   <select
                     value={playbookData.case_type || 'eb1a'}
                     onChange={e => updateData(['case_type'], e.target.value)}
-                    style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid var(--border-color)', background: '#12151C', color: 'var(--text-primary)', fontSize: '0.9rem' }}
+                    style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--bg-card-2)', color: 'var(--text-primary)', fontSize: '0.9rem' }}
                   >
                     <option value="eb1a">EB-1A (Extraordinary Ability)</option>
                     <option value="eb2_niw">EB-2 NIW (National Interest Waiver)</option>
@@ -869,7 +869,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                   </select>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.6rem 0.8rem', background: 'rgba(201, 162, 39, 0.08)', borderRadius: '6px', border: '1px solid rgba(201, 162, 39, 0.25)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.6rem 0.8rem', background: 'rgba(156, 111, 23, 0.08)', borderRadius: '6px', border: '1px solid rgba(156, 111, 23, 0.25)' }}>
                   <input
                     type="checkbox"
                     id="is_default_checkbox"
@@ -877,7 +877,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                     onChange={e => updateData(['is_default'], e.target.checked)}
                     style={{ width: '16px', height: '16px', cursor: 'pointer' }}
                   />
-                  <label htmlFor="is_default_checkbox" style={{ fontSize: '0.85rem', color: '#E8D48A', cursor: 'pointer', fontWeight: 600 }}>
+                  <label htmlFor="is_default_checkbox" style={{ fontSize: '0.85rem', color: 'var(--accent-primary)', cursor: 'pointer', fontWeight: 600 }}>
                     Set as Default Playbook for this Case Category (Auto-loaded when AI detects case)
                   </label>
                 </div>
@@ -917,10 +917,10 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                 {Object.entries(playbookData.scenarios || {}).map(([scenKey, scenVal]: [string, any]) => (
                   <div key={scenKey} className="glass-card" style={{ padding: '1.25rem', border: '1px solid var(--border-color)', borderRadius: '10px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '0.75rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid rgba(23, 20, 15, 0.08)', paddingBottom: '0.75rem' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ fontWeight: 'bold', color: '#D9B84A', fontSize: '1rem' }}>{scenVal.label || scenKey}</span>
-                        <span style={{ fontSize: '0.78rem', background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary)', padding: '0.15rem 0.5rem', borderRadius: '4px', fontFamily: 'monospace' }}>Key: {scenKey}</span>
+                        <span style={{ fontWeight: 'bold', color: 'var(--accent-primary)', fontSize: '1rem' }}>{scenVal.label || scenKey}</span>
+                        <span style={{ fontSize: '0.78rem', background: 'rgba(23, 20, 15, 0.06)', color: 'var(--text-secondary)', padding: '0.15rem 0.5rem', borderRadius: '4px', fontFamily: 'monospace' }}>Key: {scenKey}</span>
                       </div>
                     </div>
 
@@ -931,7 +931,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                           type="text"
                           value={scenVal.label || ''}
                           onChange={(e) => updateData(['scenarios', scenKey, 'label'], e.target.value)}
-                          style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid var(--border-color)', background: '#12151C', color: '#e2e8f0', fontSize: '0.88rem' }}
+                          style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--bg-card-2)', color: 'var(--text-primary)', fontSize: '0.88rem' }}
                         />
                       </div>
 
@@ -941,7 +941,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                           type="text"
                           value={scenVal.notes || ''}
                           onChange={(e) => updateData(['scenarios', scenKey, 'notes'], e.target.value)}
-                          style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid var(--border-color)', background: '#12151C', color: '#e2e8f0', fontSize: '0.88rem' }}
+                          style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--bg-card-2)', color: 'var(--text-primary)', fontSize: '0.88rem' }}
                         />
                       </div>
                     </div>
@@ -956,7 +956,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                           updateData(['scenarios', scenKey, 'forms'], formsArr);
                         }}
                         placeholder="e.g. I-140, I-485, I-765, I-131"
-                        style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid var(--border-color)', background: '#12151C', color: '#9DBB8A', fontFamily: 'monospace', fontSize: '0.88rem' }}
+                        style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--bg-card-2)', color: 'var(--success)', fontFamily: 'monospace', fontSize: '0.88rem' }}
                       />
                     </div>
                   </div>
@@ -979,7 +979,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem' }}>
                 {(playbookData.required_facts || []).map((fact: any, fIdx: number) => (
                   <div key={fact.id || fIdx} className="glass-card" style={{ padding: '1rem', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
-                    <div style={{ fontWeight: 'bold', color: '#D9B84A', marginBottom: '0.5rem', fontSize: '0.92rem' }}>
+                    <div style={{ fontWeight: 'bold', color: 'var(--accent-primary)', marginBottom: '0.5rem', fontSize: '0.92rem' }}>
                       {fact.label || fact.id}
                     </div>
                     <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontFamily: 'monospace' }}>
@@ -994,7 +994,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                         updateData(['required_facts'], updated);
                       }}
                       placeholder="Fact prompt label..."
-                      style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border-color)', background: '#12151C', color: '#e2e8f0', fontSize: '0.84rem' }}
+                      style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--bg-card-2)', color: 'var(--text-primary)', fontSize: '0.84rem' }}
                     />
                   </div>
                 ))}
@@ -1016,7 +1016,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                     setNewCatMin(1);
                     setShowCategoryModal(true);
                   }}
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1rem', background: 'rgba(201, 162, 39, 0.15)', color: '#D9B84A', border: '1px solid rgba(201, 162, 39, 0.4)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1rem', background: 'rgba(156, 111, 23, 0.15)', color: 'var(--accent-primary)', border: '1px solid rgba(156, 111, 23, 0.4)', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
                 >
                   <Plus size={16} /> Add Category
                 </button>
@@ -1024,10 +1024,10 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
               
               <div style={{ display: 'grid', gap: '2rem' }}>
                 {Object.entries(playbookData.evidence_map).map(([key, category]: [string, any]) => (
-                  <div key={key} style={{ padding: '1.5rem', border: '1px solid var(--border-color)', borderRadius: '8px', background: 'rgba(255,255,255,0.02)' }}>
+                  <div key={key} style={{ padding: '1.5rem', border: '1px solid var(--border-color)', borderRadius: '8px', background: 'rgba(23, 20, 15, 0.02)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                       <h3 style={{ margin: 0, color: 'var(--accent-primary)' }}>{category.label || key}</h3>
-                      <span style={{ fontSize: '0.8rem', padding: '0.2rem 0.6rem', background: 'rgba(255,255,255,0.1)', borderRadius: '99px' }}>{key}</span>
+                      <span style={{ fontSize: '0.8rem', padding: '0.2rem 0.6rem', background: 'rgba(23, 20, 15, 0.1)', borderRadius: '99px' }}>{key}</span>
                     </div>
                     
                     <div style={{ display: 'flex', gap: '2rem', marginBottom: '1.5rem' }}>
@@ -1049,7 +1049,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                         <select
                           value={category.weight || 'medium'}
                           onChange={(e) => updateData(['evidence_map', key, 'weight'], e.target.value)}
-                          style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border-color)', background: '#12151C', color: 'var(--text-primary)' }}
+                          style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--bg-card-2)', color: 'var(--text-primary)' }}
                         >
                           <option value="critical">Critical</option>
                           <option value="high">High</option>
@@ -1063,7 +1063,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                       <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Preferred Evidence Types ({category.preferred?.length || 0})</label>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                         {category.preferred?.map((pref: any, idx: number) => (
-                          <div key={idx} style={{ display: 'flex', alignItems: 'center', padding: '0.3rem 0.6rem', fontSize: '0.8rem', background: 'rgba(201, 162, 39, 0.1)', color: 'var(--text-primary)', borderRadius: '4px', border: '1px solid rgba(201, 162, 39, 0.3)' }}>
+                          <div key={idx} style={{ display: 'flex', alignItems: 'center', padding: '0.3rem 0.6rem', fontSize: '0.8rem', background: 'rgba(156, 111, 23, 0.1)', color: 'var(--text-primary)', borderRadius: '4px', border: '1px solid rgba(156, 111, 23, 0.3)' }}>
                             {pref.id} <span style={{ opacity: 0.5, margin: '0 0.3rem' }}>({pref.strength})</span>
                             <button 
                               onClick={() => {
@@ -1086,7 +1086,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                             setNewEvidenceStrength('high');
                             setShowEvidenceModal(true);
                           }}
-                          style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.3rem 0.6rem', fontSize: '0.8rem', background: 'rgba(255, 255, 255, 0.05)', color: 'var(--text-secondary)', borderRadius: '4px', border: '1px dashed rgba(255, 255, 255, 0.3)', cursor: 'pointer' }}
+                          style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.3rem 0.6rem', fontSize: '0.8rem', background: 'rgba(23, 20, 15, 0.05)', color: 'var(--text-secondary)', borderRadius: '4px', border: '1px dashed rgba(23, 20, 15, 0.3)', cursor: 'pointer' }}
                         >
                           <Plus size={12} /> Add Evidence
                         </button>
@@ -1108,7 +1108,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                   const triggerTarget = flag.trigger?.evidence_category || flag.trigger?.fact || '';
                   
                   return (
-                  <div key={index} style={{ padding: '1.5rem', border: '1px solid var(--border-color)', borderRadius: '12px', background: 'rgba(255,255,255,0.02)', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div key={index} style={{ padding: '1.5rem', border: '1px solid var(--border-color)', borderRadius: '12px', background: 'rgba(23, 20, 15, 0.02)', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <input 
                         type="text" 
@@ -1131,8 +1131,8 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                     </div>
                     
                     {/* IF Block */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', background: 'rgba(201, 162, 39, 0.05)', padding: '0.75rem 1rem', borderRadius: '8px', borderLeft: '3px solid #C9A227' }}>
-                      <strong style={{ color: '#C9A227', marginRight: '0.5rem' }}>IF</strong>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', background: 'rgba(156, 111, 23, 0.05)', padding: '0.75rem 1rem', borderRadius: '8px', borderLeft: '3px solid var(--accent-primary)' }}>
+                      <strong style={{ color: 'var(--accent-primary)', marginRight: '0.5rem' }}>IF</strong>
                       
                       <select
                         value={triggerType}
@@ -1142,7 +1142,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                           updateData(['escalation_flags', String(index), 'trigger'], newTrigger);
                         }}
                         className="builder-select"
-                        style={{ padding: '0.4rem 0.8rem', borderRadius: '99px', border: '1px solid rgba(201,162,39,0.3)', backgroundColor: 'rgba(201,162,39,0.1)', color: '#D9B84A', fontWeight: 600, outline: 'none', cursor: 'pointer', appearance: 'none' }}
+                        style={{ padding: '0.4rem 0.8rem', borderRadius: '99px', border: '1px solid rgba(156,111,23,0.3)', backgroundColor: 'rgba(156,111,23,0.1)', color: 'var(--accent-primary)', fontWeight: 600, outline: 'none', cursor: 'pointer', appearance: 'none' }}
                       >
                         <option value="evidence">Evidence Category</option>
                         <option value="fact">Specific Fact</option>
@@ -1157,7 +1157,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                           updateData(['escalation_flags', String(index), 'trigger', key], e.target.value);
                         }}
                         className="builder-select"
-                        style={{ padding: '0.4rem 0.8rem', borderRadius: '99px', border: '1px solid rgba(255,255,255,0.2)', backgroundColor: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)', fontWeight: 600, outline: 'none', cursor: 'pointer', appearance: 'none' }}
+                        style={{ padding: '0.4rem 0.8rem', borderRadius: '99px', border: '1px solid rgba(23, 20, 15, 0.2)', backgroundColor: 'rgba(23, 20, 15, 0.05)', color: 'var(--text-primary)', fontWeight: 600, outline: 'none', cursor: 'pointer', appearance: 'none' }}
                       >
                         {triggerType === 'evidence' ? (
                           <>
@@ -1183,7 +1183,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                         value={flag.trigger?.condition || ''}
                         onChange={(e) => updateData(['escalation_flags', String(index), 'trigger', 'condition'], e.target.value)}
                         className="builder-select"
-                        style={{ padding: '0.4rem 0.8rem', borderRadius: '99px', border: '1px solid rgba(255,255,255,0.2)', backgroundColor: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)', fontWeight: 600, outline: 'none', cursor: 'pointer', appearance: 'none' }}
+                        style={{ padding: '0.4rem 0.8rem', borderRadius: '99px', border: '1px solid rgba(23, 20, 15, 0.2)', backgroundColor: 'rgba(23, 20, 15, 0.05)', color: 'var(--text-primary)', fontWeight: 600, outline: 'none', cursor: 'pointer', appearance: 'none' }}
                       >
                         {triggerType === 'evidence' ? (
                           <option value="count_lt_min_items">is less than minimum required</option>
@@ -1198,14 +1198,14 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                     </div>
 
                     {/* THEN Block */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', background: 'rgba(189, 123, 44, 0.05)', padding: '0.75rem 1rem', borderRadius: '8px', borderLeft: '3px solid #BD7B2C' }}>
-                      <strong style={{ color: '#BD7B2C', marginRight: '0.5rem' }}>THEN</strong>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', background: 'rgba(189, 123, 44, 0.05)', padding: '0.75rem 1rem', borderRadius: '8px', borderLeft: '3px solid var(--warn)' }}>
+                      <strong style={{ color: 'var(--warn)', marginRight: '0.5rem' }}>THEN</strong>
                       
                       <select
                         value={flag.action || 'notify_attorney'}
                         onChange={(e) => updateData(['escalation_flags', String(index), 'action'], e.target.value)}
                         className="builder-select"
-                        style={{ padding: '0.4rem 0.8rem', borderRadius: '99px', border: '1px solid rgba(189, 123, 44, 0.3)', backgroundColor: 'rgba(189, 123, 44, 0.1)', color: '#E0B96A', fontWeight: 600, outline: 'none', cursor: 'pointer', appearance: 'none' }}
+                        style={{ padding: '0.4rem 0.8rem', borderRadius: '99px', border: '1px solid rgba(189, 123, 44, 0.3)', backgroundColor: 'rgba(189, 123, 44, 0.1)', color: 'var(--warn)', fontWeight: 600, outline: 'none', cursor: 'pointer', appearance: 'none' }}
                       >
                         <option value="block_petition_assembly">Block Petition Assembly</option>
                         <option value="attorney_review_required">Require Attorney Review</option>
@@ -1221,8 +1221,8 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                         style={{ 
                           padding: '0.4rem 0.8rem', borderRadius: '99px', fontWeight: 'bold',
                           border: 'none', outline: 'none', cursor: 'pointer', appearance: 'none',
-                          backgroundColor: flag.severity === 'critical' ? 'rgba(162, 60, 60, 0.2)' : flag.severity === 'high' ? 'rgba(189, 123, 44, 0.2)' : 'rgba(201, 162, 39, 0.2)',
-                          color: flag.severity === 'critical' ? '#A23C3C' : flag.severity === 'high' ? '#BD7B2C' : '#C9A227'
+                          backgroundColor: flag.severity === 'critical' ? 'rgba(162, 60, 60, 0.2)' : flag.severity === 'high' ? 'rgba(189, 123, 44, 0.2)' : 'rgba(156, 111, 23, 0.2)',
+                          color: flag.severity === 'critical' ? '#A23C3C' : flag.severity === 'high' ? 'var(--warn)' : 'var(--accent-primary)'
                         }}
                       >
                         <option value="critical">🔴 CRITICAL</option>
@@ -1232,7 +1232,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                     </div>
 
                     {/* MESSAGE Block */}
-                    <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '1rem', borderRadius: '8px', border: '1px dashed var(--border-color)' }}>
+                    <div style={{ background: 'rgba(23, 20, 15, 0.02)', padding: '1rem', borderRadius: '8px', border: '1px dashed var(--border-color)' }}>
                       <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                         <AlertCircle size={14} /> Message displayed to Attorney
                       </label>
@@ -1241,7 +1241,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                         onChange={(e) => updateData(['escalation_flags', String(index), 'message'], e.target.value)}
                         rows={2}
                         placeholder="Type warning message here..."
-                        style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid var(--border-color)', background: '#12151C', color: 'var(--text-primary)', resize: 'vertical' }}
+                        style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--bg-card-2)', color: 'var(--text-primary)', resize: 'vertical' }}
                       />
                     </div>
                   </div>
@@ -1264,14 +1264,14 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                 <div style={{ display: 'flex', gap: '0.75rem' }}>
                   <button
                     onClick={() => setShowVarGuide(!showVarGuide)}
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.9rem', background: showVarGuide ? 'rgba(201, 162, 39, 0.25)' : 'rgba(255, 255, 255, 0.05)', color: showVarGuide ? '#D9B84A' : 'var(--text-secondary)', border: '1px solid var(--border-color)', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem' }}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.9rem', background: showVarGuide ? 'rgba(156, 111, 23, 0.25)' : 'rgba(23, 20, 15, 0.05)', color: showVarGuide ? 'var(--accent-primary)' : 'var(--text-secondary)', border: '1px solid var(--border-color)', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem' }}
                   >
                     <HelpCircle size={15} /> Attorney Guide
                   </button>
 
                   <button
                     onClick={() => setIsTemplateFullscreen(true)}
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.9rem', background: '#C9A227', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.9rem', background: 'var(--accent-primary)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}
                   >
                     <Maximize2 size={15} /> Fullscreen Zen Mode
                   </button>
@@ -1280,12 +1280,12 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
 
               {/* How Variables Work Guide Banner */}
               {showVarGuide && (
-                <div style={{ marginBottom: '1.5rem', background: 'rgba(201, 162, 39, 0.08)', padding: '1.25rem', borderRadius: '12px', border: '1px solid rgba(201, 162, 39, 0.3)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#D9B84A', fontWeight: 'bold', fontSize: '0.95rem' }}>
+                <div style={{ marginBottom: '1.5rem', background: 'rgba(156, 111, 23, 0.08)', padding: '1.25rem', borderRadius: '12px', border: '1px solid rgba(156, 111, 23, 0.3)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--accent-primary)', fontWeight: 'bold', fontSize: '0.95rem' }}>
                     <Info size={18} /> How AI Template Variables Work (Attorney Reference Guide)
                   </div>
                   <p style={{ margin: 0, fontSize: '0.88rem', color: 'var(--text-primary)', lineHeight: 1.6 }}>
-                    Placeholders enclosed in double curly braces (e.g. <code style={{ color: '#D9B84A', background: 'rgba(0,0,0,0.3)', padding: '0.1rem 0.4rem', borderRadius: '4px' }}>{"{{BENEFICIARY_NAME}}"}</code>) represent <strong>dynamic AI slots</strong>. 
+                    Placeholders enclosed in double curly braces (e.g. <code style={{ color: 'var(--accent-primary)', background: 'var(--bg-card-2)', padding: '0.1rem 0.4rem', borderRadius: '4px' }}>{"{{BENEFICIARY_NAME}}"}</code>) represent <strong>dynamic AI slots</strong>. 
                     When a client case is processed, the system automatically pulls extracted intake facts and AI-generated legal arguments, substituting them directly into your template. 
                     You can freely arrange, reword surrounding legal boilerplate, or add your firm's standard disclaimer text around these variables.
                   </p>
@@ -1293,8 +1293,8 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
               )}
 
               {/* Dynamic Variable Chips Bar with Tooltips */}
-              <div style={{ marginBottom: '1.5rem', background: 'rgba(169, 135, 31, 0.05)', padding: '1.25rem', borderRadius: '12px', border: '1px solid rgba(169, 135, 31, 0.2)' }}>
-                <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#D9B84A', marginBottom: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ marginBottom: '1.5rem', background: 'rgba(124, 88, 17, 0.05)', padding: '1.25rem', borderRadius: '12px', border: '1px solid rgba(124, 88, 17, 0.2)' }}>
+                <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: 'var(--accent-primary)', marginBottom: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span>📌 Hover for description / Click to insert variable:</span>
                   <span style={{ fontSize: '0.75rem', opacity: 0.7, fontWeight: 'normal' }}>Hover over any tag to see how AI replaces it</span>
                 </div>
@@ -1310,9 +1310,9 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                       style={{
                         padding: '0.35rem 0.7rem',
                         fontSize: '0.8rem',
-                        background: 'rgba(169, 135, 31, 0.15)',
-                        color: '#E8D48A',
-                        border: '1px solid rgba(169, 135, 31, 0.35)',
+                        background: 'rgba(124, 88, 17, 0.15)',
+                        color: 'var(--accent-primary)',
+                        border: '1px solid rgba(124, 88, 17, 0.35)',
                         borderRadius: '6px',
                         cursor: 'pointer',
                         fontWeight: 600,
@@ -1343,8 +1343,8 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                     minHeight: '350px',
                     width: '100%',
                     padding: '1.25rem',
-                    background: '#12151C',
-                    color: '#e2e8f0',
+                    background: 'var(--bg-card-2)',
+                    color: 'var(--text-primary)',
                     fontFamily: 'monospace',
                     fontSize: '14px',
                     border: '1px solid var(--border-color)',
@@ -1383,8 +1383,8 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
 
           {/* AI Copilot Bar */}
           {playbookData && (
-            <div style={{ marginTop: 'auto', padding: '1.5rem', background: 'rgba(255,255,255,0.02)', borderTop: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#A9871F', fontWeight: 600, fontSize: '0.9rem' }}>
+            <div style={{ marginTop: 'auto', padding: '1.5rem', background: 'rgba(23, 20, 15, 0.02)', borderTop: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--accent-secondary)', fontWeight: 600, fontSize: '0.9rem' }}>
                 <Wand2 size={16} /> AI Playbook Assistant
               </div>
               <form onSubmit={handleCopilotSubmit} style={{ display: 'flex', gap: '0.5rem' }}>
@@ -1394,12 +1394,12 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                   onChange={(e) => setCopilotPrompt(e.target.value)}
                   placeholder="e.g., 'Add a critical risk flag if they have no degree' or 'Add Patent Citations as preferred evidence'"
                   disabled={isCopilotLoading}
-                  style={{ flexGrow: 1, padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: '#12151C', color: 'var(--text-primary)', outline: 'none' }}
+                  style={{ flexGrow: 1, padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-card-2)', color: 'var(--text-primary)', outline: 'none' }}
                 />
                 <button 
                   type="submit" 
                   disabled={isCopilotLoading || !copilotPrompt.trim()}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 1.25rem', background: '#A9871F', color: 'white', border: 'none', borderRadius: '8px', cursor: isCopilotLoading ? 'wait' : (!copilotPrompt.trim() ? 'default' : 'pointer'), opacity: (isCopilotLoading || !copilotPrompt.trim()) ? 0.6 : 1, transition: 'all 0.2s' }}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 1.25rem', background: 'var(--accent-secondary)', color: 'white', border: 'none', borderRadius: '8px', cursor: isCopilotLoading ? 'wait' : (!copilotPrompt.trim() ? 'default' : 'pointer'), opacity: (isCopilotLoading || !copilotPrompt.trim()) ? 0.6 : 1, transition: 'all 0.2s' }}
                   title={isCopilotLoading ? 'Gemini AI is updating playbook...' : 'Send prompt to AI Assistant'}
                 >
                   {isCopilotLoading ? <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={18} />}
@@ -1411,23 +1411,23 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
       {/* Sleek Modal for Create New Playbook */}
       {showNewPlaybookModal && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
-          <div style={{ background: '#1A1E27', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '520px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '520px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--text-primary)' }}>Create New Playbook</h3>
               <button onClick={() => setShowNewPlaybookModal(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}><X size={18} /></button>
             </div>
 
             {/* Mode Switcher Tabs */}
-            <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(0,0,0,0.3)', padding: '0.25rem', borderRadius: '8px' }}>
+            <div style={{ display: 'flex', gap: '0.5rem', background: 'var(--bg-card-2)', padding: '0.25rem', borderRadius: '8px' }}>
               <button
                 onClick={() => setCreationMode('clone')}
-                style={{ flex: 1, padding: '0.5rem', borderRadius: '6px', border: 'none', background: creationMode === 'clone' ? '#C9A227' : 'transparent', color: creationMode === 'clone' ? 'white' : 'var(--text-secondary)', fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}
+                style={{ flex: 1, padding: '0.5rem', borderRadius: '6px', border: 'none', background: creationMode === 'clone' ? 'var(--accent-primary)' : 'transparent', color: creationMode === 'clone' ? 'white' : 'var(--text-secondary)', fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}
               >
                 📋 Clone Existing Template
               </button>
               <button
                 onClick={() => setCreationMode('ai')}
-                style={{ flex: 1, padding: '0.5rem', borderRadius: '6px', border: 'none', background: creationMode === 'ai' ? '#A9871F' : 'transparent', color: creationMode === 'ai' ? 'white' : 'var(--text-secondary)', fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}
+                style={{ flex: 1, padding: '0.5rem', borderRadius: '6px', border: 'none', background: creationMode === 'ai' ? 'var(--accent-secondary)' : 'transparent', color: creationMode === 'ai' ? 'white' : 'var(--text-secondary)', fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}
               >
                 ✨ AI Auto-Generate
               </button>
@@ -1444,7 +1444,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                       const sourcePb = playbooks.find(p => p.id === e.target.value);
                       if (sourcePb) setNewPbTitle(`${sourcePb.name} (Copy)`);
                     }}
-                    style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: '#12151C', color: 'var(--text-primary)', outline: 'none' }}
+                    style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-card-2)', color: 'var(--text-primary)', outline: 'none' }}
                   >
                     {playbooks.map(pb => (
                       <option key={pb.id} value={pb.id}>{pb.name} ({pb.id})</option>
@@ -1459,7 +1459,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                     placeholder="e.g. O-1A Extraordinary Ability (Firm Custom)" 
                     value={newPbTitle} 
                     onChange={(e) => setNewPbTitle(e.target.value)} 
-                    style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: '#12151C', color: 'var(--text-primary)', outline: 'none' }}
+                    style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-card-2)', color: 'var(--text-primary)', outline: 'none' }}
                   />
                   <p style={{ margin: '0.4rem 0 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                     Copies all Evidence Map rules, Risk Flags, and Cover Letter formatting so you never start from zero.
@@ -1468,7 +1468,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
               </div>
             ) : (
               <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: '#D9B84A', fontWeight: 'bold' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--accent-primary)', fontWeight: 'bold' }}>
                   AI Generation Prompt (Describe your visa/case requirements)
                 </label>
                 <textarea
@@ -1476,7 +1476,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                   placeholder="e.g., 'Create an O-1A Extraordinary Ability playbook focusing on 8 criteria and critical risk flags for low peer-reviewed citations and salary requirement'"
                   value={newPbAiPrompt}
                   onChange={(e) => setNewPbAiPrompt(e.target.value)}
-                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: '#12151C', color: 'var(--text-primary)', outline: 'none', resize: 'vertical', lineHeight: 1.5 }}
+                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-card-2)', color: 'var(--text-primary)', outline: 'none', resize: 'vertical', lineHeight: 1.5 }}
                 />
                 <p style={{ margin: '0.4rem 0 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                   ✨ AI will automatically deduce the title, structure the evidence criteria, and write the risk flags.
@@ -1518,7 +1518,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                     setIsCreatingPb(false);
                   }
                 }} 
-                style={{ padding: '0.6rem 1.25rem', borderRadius: '8px', border: 'none', background: creationMode === 'ai' ? '#A9871F' : '#C9A227', color: 'white', fontWeight: 600, cursor: isCreatingPb ? 'wait' : ((creationMode === 'ai' && !newPbAiPrompt.trim()) ? 'default' : 'pointer'), opacity: (isCreatingPb || (creationMode === 'ai' && !newPbAiPrompt.trim())) ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                style={{ padding: '0.6rem 1.25rem', borderRadius: '8px', border: 'none', background: creationMode === 'ai' ? 'var(--accent-secondary)' : 'var(--accent-primary)', color: 'white', fontWeight: 600, cursor: isCreatingPb ? 'wait' : ((creationMode === 'ai' && !newPbAiPrompt.trim()) ? 'default' : 'pointer'), opacity: (isCreatingPb || (creationMode === 'ai' && !newPbAiPrompt.trim())) ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '0.5rem' }}
               >
                 {isCreatingPb ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : creationMode === 'ai' ? <Wand2 size={16} /> : <Plus size={16} />}
                 {isCreatingPb ? (creationMode === 'ai' ? '✨ AI Generating Playbook...' : 'Cloning Template...') : creationMode === 'ai' ? 'Generate Playbook' : 'Create Playbook'}
@@ -1531,18 +1531,18 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
       {/* Custom Sleek Delete Confirmation Modal */}
       {playbookToDelete && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
-          <div style={{ background: '#1A1E27', border: '1px solid rgba(162, 60, 60, 0.3)', borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '440px', boxShadow: '0 25px 50px -12px rgba(162, 60, 60, 0.25)', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(162, 60, 60, 0.3)', borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '440px', boxShadow: '0 25px 50px -12px rgba(162, 60, 60, 0.25)', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <div style={{ background: 'rgba(162, 60, 60, 0.15)', padding: '0.6rem', borderRadius: '12px', border: '1px solid rgba(162, 60, 60, 0.3)' }}>
                 <Trash2 size={24} style={{ color: '#A23C3C' }} />
               </div>
               <div>
-                <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#f8fafc' }}>Delete Playbook</h3>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--text-primary)' }}>Delete Playbook</h3>
                 <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>This action cannot be undone.</p>
               </div>
             </div>
 
-            <div style={{ background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+            <div style={{ background: 'var(--bg-card-2)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
               <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Are you sure you want to permanently delete:</span>
               <div style={{ fontWeight: 'bold', fontSize: '1rem', color: '#A23C3C', marginTop: '0.4rem', wordBreak: 'break-word' }}>
                 {playbookToDelete.name}
@@ -1598,7 +1598,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
       {/* Sleek Modal for Add Category */}
       {showCategoryModal && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
-          <div style={{ background: '#1A1E27', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '480px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '480px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--text-primary)' }}>Add Evidence Category</h3>
               <button onClick={() => setShowCategoryModal(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}><X size={18} /></button>
@@ -1611,7 +1611,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                 placeholder="e.g. Scholarly Articles & Citations" 
                 value={newCatName} 
                 onChange={(e) => setNewCatName(e.target.value)} 
-                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: '#12151C', color: 'var(--text-primary)', outline: 'none' }}
+                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-card-2)', color: 'var(--text-primary)', outline: 'none' }}
               />
             </div>
 
@@ -1623,7 +1623,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                   min={1}
                   value={newCatMin} 
                   onChange={(e) => setNewCatMin(parseInt(e.target.value) || 1)} 
-                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: '#12151C', color: 'var(--text-primary)', outline: 'none' }}
+                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-card-2)', color: 'var(--text-primary)', outline: 'none' }}
                 />
               </div>
               <div>
@@ -1631,7 +1631,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                 <select 
                   value={newCatWeight} 
                   onChange={(e) => setNewCatWeight(e.target.value)} 
-                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: '#12151C', color: 'var(--text-primary)', outline: 'none' }}
+                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-card-2)', color: 'var(--text-primary)', outline: 'none' }}
                 >
                   <option value="critical">Critical</option>
                   <option value="high">High</option>
@@ -1656,7 +1656,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                   });
                   setShowCategoryModal(false);
                 }} 
-                style={{ padding: '0.6rem 1.25rem', borderRadius: '8px', border: 'none', background: '#C9A227', color: 'white', fontWeight: 600, cursor: !newCatName.trim() ? 'default' : 'pointer', opacity: !newCatName.trim() ? 0.6 : 1 }}
+                style={{ padding: '0.6rem 1.25rem', borderRadius: '8px', border: 'none', background: 'var(--accent-primary)', color: 'white', fontWeight: 600, cursor: !newCatName.trim() ? 'default' : 'pointer', opacity: !newCatName.trim() ? 0.6 : 1 }}
               >
                 Create Category
               </button>
@@ -1668,7 +1668,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
       {/* Sleek Modal for Add Evidence Type */}
       {showEvidenceModal && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
-          <div style={{ background: '#1A1E27', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '440px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '440px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--text-primary)' }}>Add Evidence Type</h3>
               <button onClick={() => setShowEvidenceModal(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}><X size={18} /></button>
@@ -1681,7 +1681,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                 placeholder="e.g. patent_citations" 
                 value={newEvidenceName} 
                 onChange={(e) => setNewEvidenceName(e.target.value)} 
-                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: '#12151C', color: 'var(--text-primary)', outline: 'none' }}
+                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-card-2)', color: 'var(--text-primary)', outline: 'none' }}
               />
             </div>
 
@@ -1690,7 +1690,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
               <select 
                 value={newEvidenceStrength} 
                 onChange={(e) => setNewEvidenceStrength(e.target.value)} 
-                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: '#12151C', color: 'var(--text-primary)', outline: 'none' }}
+                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-card-2)', color: 'var(--text-primary)', outline: 'none' }}
               >
                 <option value="high">High</option>
                 <option value="medium">Medium</option>
@@ -1710,7 +1710,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                   updateData(['evidence_map', targetCatKey, 'preferred'], newPref);
                   setShowEvidenceModal(false);
                 }} 
-                style={{ padding: '0.6rem 1.25rem', borderRadius: '8px', border: 'none', background: '#C9A227', color: 'white', fontWeight: 600, cursor: !newEvidenceName.trim() ? 'default' : 'pointer', opacity: !newEvidenceName.trim() ? 0.6 : 1 }}
+                style={{ padding: '0.6rem 1.25rem', borderRadius: '8px', border: 'none', background: 'var(--accent-primary)', color: 'white', fontWeight: 600, cursor: !newEvidenceName.trim() ? 'default' : 'pointer', opacity: !newEvidenceName.trim() ? 0.6 : 1 }}
               >
                 Add Evidence
               </button>
@@ -1722,14 +1722,14 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
       {/* Playbook Dry-Run Simulator Modal */}
       {showSimulatorModal && playbookData && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0, 0, 0, 0.8)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
-          <div style={{ background: '#1A1E27', border: '1px solid rgba(169, 135, 31, 0.35)', borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '680px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 25px 50px -12px rgba(169, 135, 31, 0.3)', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(124, 88, 17, 0.35)', borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '680px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 25px 50px -12px rgba(124, 88, 17, 0.3)', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <div style={{ background: 'rgba(169, 135, 31, 0.2)', padding: '0.6rem', borderRadius: '12px', color: '#D9B84A' }}>
+                <div style={{ background: 'rgba(124, 88, 17, 0.2)', padding: '0.6rem', borderRadius: '12px', color: 'var(--accent-primary)' }}>
                   <Play size={24} />
                 </div>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#f8fafc' }}>AI Playbook Audit Simulator</h3>
+                  <h3 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--text-primary)' }}>AI Playbook Audit Simulator</h3>
                   <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                     Test how rules in '{playbookData.metadata?.title || playbookData.playbook_id}' audit real client profiles.
                   </p>
@@ -1739,8 +1739,8 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
             </div>
 
             {/* Client Profile Presets */}
-            <div style={{ background: 'rgba(0,0,0,0.2)', padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#D9B84A' }}>1. Select a Sample Client Profile:</span>
+            <div style={{ background: 'var(--bg-card-2)', padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: 'var(--accent-primary)' }}>1. Select a Sample Client Profile:</span>
               
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem' }}>
                 <button
@@ -1748,9 +1748,9 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                     setSimDegree('phd');
                     setSimCitations(450);
                   }}
-                  style={{ padding: '0.6rem', borderRadius: '8px', border: `1px solid ${simDegree === 'phd' ? '#A9871F' : 'var(--border-color)'}`, background: simDegree === 'phd' ? 'rgba(169,135,31,0.15)' : '#12151C', color: '#f8fafc', fontSize: '0.8rem', textAlign: 'left', cursor: 'pointer' }}
+                  style={{ padding: '0.6rem', borderRadius: '8px', border: `1px solid ${simDegree === 'phd' ? 'var(--accent-secondary)' : 'var(--border-color)'}`, background: simDegree === 'phd' ? 'rgba(124,88,17,0.15)' : 'var(--bg-card-2)', color: 'var(--text-primary)', fontSize: '0.8rem', textAlign: 'left', cursor: 'pointer' }}
                 >
-                  <div style={{ fontWeight: 'bold', color: '#D9B84A' }}>👨‍🔬 Star Researcher</div>
+                  <div style={{ fontWeight: 'bold', color: 'var(--accent-primary)' }}>👨‍🔬 Star Researcher</div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>PhD Degree • 450 Citations • 8 Patents</div>
                 </button>
 
@@ -1759,9 +1759,9 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                     setSimDegree('bachelors');
                     setSimCitations(2);
                   }}
-                  style={{ padding: '0.6rem', borderRadius: '8px', border: `1px solid ${simDegree === 'bachelors' ? '#A9871F' : 'var(--border-color)'}`, background: simDegree === 'bachelors' ? 'rgba(169,135,31,0.15)' : '#12151C', color: '#f8fafc', fontSize: '0.8rem', textAlign: 'left', cursor: 'pointer' }}
+                  style={{ padding: '0.6rem', borderRadius: '8px', border: `1px solid ${simDegree === 'bachelors' ? 'var(--accent-secondary)' : 'var(--border-color)'}`, background: simDegree === 'bachelors' ? 'rgba(124,88,17,0.15)' : 'var(--bg-card-2)', color: 'var(--text-primary)', fontSize: '0.8rem', textAlign: 'left', cursor: 'pointer' }}
                 >
-                  <div style={{ fontWeight: 'bold', color: '#BD7B2C' }}>💼 Junior Engineer</div>
+                  <div style={{ fontWeight: 'bold', color: 'var(--warn)' }}>💼 Junior Engineer</div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>Bachelor's Only • 2 Citations • No Degree Eval</div>
                 </button>
 
@@ -1770,7 +1770,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                     setSimDegree('none');
                     setSimCitations(0);
                   }}
-                  style={{ padding: '0.6rem', borderRadius: '8px', border: `1px solid ${simDegree === 'none' ? '#A9871F' : 'var(--border-color)'}`, background: simDegree === 'none' ? 'rgba(169,135,31,0.15)' : '#12151C', color: '#f8fafc', fontSize: '0.8rem', textAlign: 'left', cursor: 'pointer' }}
+                  style={{ padding: '0.6rem', borderRadius: '8px', border: `1px solid ${simDegree === 'none' ? 'var(--accent-secondary)' : 'var(--border-color)'}`, background: simDegree === 'none' ? 'rgba(124,88,17,0.15)' : 'var(--bg-card-2)', color: 'var(--text-primary)', fontSize: '0.8rem', textAlign: 'left', cursor: 'pointer' }}
                 >
                   <div style={{ fontWeight: 'bold', color: '#A23C3C' }}>🎨 Non-Degree Applicant</div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>No Degree • High Salary • 10 Industry Awards</div>
@@ -1812,7 +1812,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                   setIsCopilotLoading(false);
                 }
               }}
-              style={{ width: '100%', padding: '0.85rem', borderRadius: '10px', border: 'none', background: 'linear-gradient(90deg, #8a6d1a, #C9A227)', color: 'white', fontWeight: 600, fontSize: '0.95rem', cursor: isCopilotLoading ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', boxShadow: '0 4px 14px 0 rgba(147, 51, 234, 0.39)' }}
+              style={{ width: '100%', padding: '0.85rem', borderRadius: '10px', border: 'none', background: 'linear-gradient(90deg, var(--accent-secondary), var(--accent-primary))', color: 'white', fontWeight: 600, fontSize: '0.95rem', cursor: isCopilotLoading ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', boxShadow: '0 4px 14px 0 rgba(124, 88, 17, 0.39)' }}
             >
               {isCopilotLoading ? <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> : <Play size={18} />}
               {isCopilotLoading ? '✨ Gemini AI Auditing Case & Draft Preview...' : 'Run Real-Time AI Playbook Audit'}
@@ -1820,10 +1820,10 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
 
             {/* Simulation Results & Petition Preview */}
             {simResult && (
-              <div style={{ background: '#12151C', padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#f8fafc', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ background: 'var(--bg-card-2)', padding: '1.25rem', borderRadius: '12px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{ fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--text-primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span>🎯 AI Audit Diagnostic Results:</span>
-                  <span style={{ color: '#7E9A6D', fontSize: '0.85rem' }}>✓ {simResult.evidenceCount} Categories Qualified</span>
+                  <span style={{ color: 'var(--success)', fontSize: '0.85rem' }}>✓ {simResult.evidenceCount} Categories Qualified</span>
                 </div>
 
                 {/* Risk Flags Section */}
@@ -1832,7 +1832,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                   {simResult.triggeredFlags.length > 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                       {simResult.triggeredFlags.map((tf: any, i: number) => (
-                        <div key={i} style={{ background: tf.severity === 'critical' ? 'rgba(162,60,60,0.15)' : 'rgba(189,123,44,0.15)', border: `1px solid ${tf.severity === 'critical' ? '#A23C3C' : '#BD7B2C'}`, padding: '0.6rem 0.8rem', borderRadius: '8px', color: tf.severity === 'critical' ? '#D9A3A3' : '#E0B96A', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <div key={i} style={{ background: tf.severity === 'critical' ? 'rgba(162,60,60,0.15)' : 'rgba(189,123,44,0.15)', border: `1px solid ${tf.severity === 'critical' ? '#A23C3C' : 'var(--warn)'}`, padding: '0.6rem 0.8rem', borderRadius: '8px', color: tf.severity === 'critical' ? '#8B3232' : 'var(--warn)', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                           <AlertTriangle size={16} />
                           <div>
                             <strong>[{tf.severity?.toUpperCase() || 'RISK'}]</strong> {tf.rule || tf.description || 'Risk threshold identified'}
@@ -1841,7 +1841,7 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                       ))}
                     </div>
                   ) : (
-                    <div style={{ background: 'rgba(126, 154, 109, 0.15)', border: '1px solid #7E9A6D', padding: '0.75rem', borderRadius: '8px', color: '#9DBB8A', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <div style={{ background: 'rgba(126, 154, 109, 0.15)', border: '1px solid var(--success)', padding: '0.75rem', borderRadius: '8px', color: 'var(--success)', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       <ShieldCheck size={18} /> No Risk Flags Triggered! Case satisfies all Playbook criteria.
                     </div>
                   )}
@@ -1850,8 +1850,8 @@ export default function PlaybookBuilder({ onBack }: PlaybookBuilderProps) {
                 {/* Generated Petition Excerpt */}
                 {(simResult as any).petitionPreview && (
                   <div>
-                    <div style={{ fontSize: '0.8rem', color: '#D9B84A', marginBottom: '0.5rem', fontWeight: 600 }}>2. Live Auto-Generated Petition Excerpt:</div>
-                    <div style={{ background: 'rgba(0,0,0,0.3)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(169, 135, 31, 0.3)', color: '#e2e8f0', fontSize: '0.85rem', fontFamily: 'monospace', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--accent-primary)', marginBottom: '0.5rem', fontWeight: 600 }}>2. Live Auto-Generated Petition Excerpt:</div>
+                    <div style={{ background: 'var(--bg-card-2)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(124, 88, 17, 0.3)', color: 'var(--text-primary)', fontSize: '0.85rem', fontFamily: 'monospace', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
                       {(simResult as any).petitionPreview}
                     </div>
                   </div>

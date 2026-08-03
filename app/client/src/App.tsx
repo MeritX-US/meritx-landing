@@ -416,8 +416,8 @@ const AutofillFieldRow = React.memo(function AutofillFieldRow({ field, overrideV
 
   return (
     <tr id={`autofill-row-${f.fieldId}`} style={{ borderBottom: '1px solid var(--border-color)' }}>
-      <td style={{ padding: '0.75rem', fontWeight: 600, color: '#A9871F' }}>{f.part}</td>
-      <td style={{ padding: '0.75rem', color: '#f8fafc' }}>{f.name}</td>
+      <td style={{ padding: '0.75rem', fontWeight: 600, color: 'var(--accent-secondary)' }}>{f.part}</td>
+      <td style={{ padding: '0.75rem', color: 'var(--text-primary)' }}>{f.name}</td>
       <td style={{ padding: '0.75rem' }}>
         {f.type === 'toggle' ? (
           <div style={{ display: 'flex', gap: '0.4rem' }}>
@@ -427,9 +427,9 @@ const AutofillFieldRow = React.memo(function AutofillFieldRow({ field, overrideV
                 onClick={() => onFieldChange(f.fieldId, opt.v, true)}
                 style={{
                   padding: '0.35rem 0.8rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
-                  background: rawValue === opt.v ? 'rgba(169, 135, 31, 0.3)' : '#12151C',
-                  border: rawValue === opt.v ? '1px solid #A9871F' : '1px solid rgba(169, 135, 31, 0.3)',
-                  color: rawValue === opt.v ? '#f8fafc' : 'var(--text-secondary)'
+                  background: rawValue === opt.v ? 'rgba(124, 88, 17, 0.3)' : 'var(--bg-card-2)',
+                  border: rawValue === opt.v ? '1px solid var(--accent-secondary)' : '1px solid rgba(124, 88, 17, 0.3)',
+                  color: rawValue === opt.v ? 'var(--text-primary)' : 'var(--text-secondary)'
                 }}
               >
                 {opt.label}
@@ -442,8 +442,8 @@ const AutofillFieldRow = React.memo(function AutofillFieldRow({ field, overrideV
             onChange={(e) => onFieldChange(f.fieldId, e.target.value, true)}
             style={{
               width: '100%', padding: '0.4rem 0.6rem', borderRadius: '6px',
-              background: '#12151C', border: '1px solid rgba(169, 135, 31, 0.3)',
-              color: '#f8fafc', fontSize: '0.85rem', outline: 'none'
+              background: 'var(--bg-card-2)', border: '1px solid rgba(124, 88, 17, 0.3)',
+              color: 'var(--text-primary)', fontSize: '0.85rem', outline: 'none'
             }}
           >
             <option value="">-- Select --</option>
@@ -467,26 +467,26 @@ const AutofillFieldRow = React.memo(function AutofillFieldRow({ field, overrideV
             }}
             style={{
               width: '100%', padding: '0.4rem 0.6rem', borderRadius: '6px',
-              background: '#12151C', border: '1px solid rgba(169, 135, 31, 0.3)',
-              color: '#f8fafc', fontSize: '0.85rem', outline: 'none'
+              background: 'var(--bg-card-2)', border: '1px solid rgba(124, 88, 17, 0.3)',
+              color: 'var(--text-primary)', fontSize: '0.85rem', outline: 'none'
             }}
           />
         )}
       </td>
       <td style={{ padding: '0.75rem' }}>
-        <span style={{ fontSize: '0.75rem', background: 'rgba(255, 255, 255, 0.06)', padding: '0.2rem 0.5rem', borderRadius: '4px', color: '#94a3b8' }}>
+        <span style={{ fontSize: '0.75rem', background: 'rgba(23, 20, 15, 0.06)', padding: '0.2rem 0.5rem', borderRadius: '4px', color: 'var(--text-secondary)' }}>
           {f.source}
         </span>
       </td>
       <td style={{ padding: '0.75rem' }}>
         {f.confidence === 'verified' ? (
-          <span style={{ color: '#D9B84A', fontSize: '0.75rem', fontWeight: 600 }}>✍️ Verified</span>
+          <span style={{ color: 'var(--accent-primary)', fontSize: '0.75rem', fontWeight: 600 }}>✍️ Verified</span>
         ) : f.confidence === 'high' ? (
-          <span style={{ color: '#9DBB8A', fontSize: '0.75rem', fontWeight: 600 }}>✨ Auto (High)</span>
+          <span style={{ color: 'var(--success)', fontSize: '0.75rem', fontWeight: 600 }}>✨ Auto (High)</span>
         ) : f.confidence === 'medium' ? (
-          <span style={{ color: '#E0B96A', fontSize: '0.75rem', fontWeight: 600 }}>⚠️ Check</span>
+          <span style={{ color: 'var(--warn)', fontSize: '0.75rem', fontWeight: 600 }}>⚠️ Check</span>
         ) : (
-          <span style={{ color: '#f87171', fontSize: '0.75rem', fontWeight: 600 }}>❗ Missing</span>
+          <span style={{ color: 'var(--danger)', fontSize: '0.75rem', fontWeight: 600 }}>❗ Missing</span>
         )}
       </td>
     </tr>
@@ -1434,23 +1434,23 @@ function App() {
   };
 
   const CATEGORY_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-    passport:            { bg: 'rgba(201,162,39,0.15)',  border: 'rgba(201,162,39,0.4)',  text: '#D9B84A' },
-    visa:                { bg: 'rgba(169,135,31,0.15)', border: 'rgba(169,135,31,0.4)', text: '#D9B84A' },
-    employment_letter:   { bg: 'rgba(126,154,109,0.12)',  border: 'rgba(126,154,109,0.35)',  text: '#9DBB8A' },
-    support_letter:      { bg: 'rgba(126,154,109,0.12)',  border: 'rgba(126,154,109,0.35)',  text: '#9DBB8A' },
-    award_certificate:   { bg: 'rgba(189,123,44,0.12)',  border: 'rgba(189,123,44,0.35)',  text: '#E0B96A' },
-    publication:         { bg: 'rgba(107,142,140,0.12)',  border: 'rgba(107,142,140,0.35)',  text: '#7BA9A6' },
-    media_coverage:      { bg: 'rgba(201,125,74,0.12)', border: 'rgba(201,125,74,0.35)', text: '#C97D4A' },
-    tax_document:        { bg: 'rgba(162,60,60,0.12)',  border: 'rgba(162,60,60,0.35)',  text: '#f87171' },
-    degree_certificate:  { bg: 'rgba(124,144,176,0.12)', border: 'rgba(124,144,176,0.35)', text: '#7C90B0' },
-    affidavit:           { bg: 'rgba(100,116,139,0.12)', border: 'rgba(100,116,139,0.35)', text: '#94a3b8' },
-    court_document:      { bg: 'rgba(162,60,60,0.12)',  border: 'rgba(162,60,60,0.35)',  text: '#f87171' },
-    immigration_form:    { bg: 'rgba(71,85,105,0.15)',  border: 'rgba(71,85,105,0.4)',  text: '#94a3b8' },
-    photo_id:            { bg: 'rgba(201,162,39,0.15)',  border: 'rgba(201,162,39,0.4)',  text: '#D9B84A' },
-    contract:            { bg: 'rgba(126,154,109,0.15)',   border: 'rgba(126,154,109,0.4)',   text: '#9DBB8A' },
-    financial_document:  { bg: 'rgba(107,134,89,0.12)',  border: 'rgba(107,134,89,0.35)',  text: '#9DBB8A' },
-    medical_record:      { bg: 'rgba(185,140,160,0.12)', border: 'rgba(185,140,160,0.35)', text: '#B98CA0' },
-    audio_recording:     { bg: 'rgba(124,58,237,0.12)', border: 'rgba(124,58,237,0.35)', text: '#D9B84A' },
+    passport:            { bg: 'rgba(156,111,23,0.15)',  border: 'rgba(156,111,23,0.4)',  text: 'var(--accent-primary)' },
+    visa:                { bg: 'rgba(124,88,17,0.15)', border: 'rgba(124,88,17,0.4)', text: 'var(--accent-primary)' },
+    employment_letter:   { bg: 'rgba(126,154,109,0.12)',  border: 'rgba(126,154,109,0.35)',  text: 'var(--success)' },
+    support_letter:      { bg: 'rgba(126,154,109,0.12)',  border: 'rgba(126,154,109,0.35)',  text: 'var(--success)' },
+    award_certificate:   { bg: 'rgba(189,123,44,0.12)',  border: 'rgba(189,123,44,0.35)',  text: 'var(--warn)' },
+    publication:         { bg: 'rgba(107,142,140,0.12)',  border: 'rgba(107,142,140,0.35)',  text: '#4F7875' },
+    media_coverage:      { bg: 'rgba(201,125,74,0.12)', border: 'rgba(201,125,74,0.35)', text: '#A15E30' },
+    tax_document:        { bg: 'rgba(162,60,60,0.12)',  border: 'rgba(162,60,60,0.35)',  text: 'var(--danger)' },
+    degree_certificate:  { bg: 'rgba(124,144,176,0.12)', border: 'rgba(124,144,176,0.35)', text: '#56708C' },
+    affidavit:           { bg: 'rgba(100,116,139,0.12)', border: 'rgba(100,116,139,0.35)', text: 'var(--text-secondary)' },
+    court_document:      { bg: 'rgba(162,60,60,0.12)',  border: 'rgba(162,60,60,0.35)',  text: 'var(--danger)' },
+    immigration_form:    { bg: 'rgba(71,85,105,0.15)',  border: 'rgba(71,85,105,0.4)',  text: 'var(--text-secondary)' },
+    photo_id:            { bg: 'rgba(156,111,23,0.15)',  border: 'rgba(156,111,23,0.4)',  text: 'var(--accent-primary)' },
+    contract:            { bg: 'rgba(126,154,109,0.15)',   border: 'rgba(126,154,109,0.4)',   text: 'var(--success)' },
+    financial_document:  { bg: 'rgba(107,134,89,0.12)',  border: 'rgba(107,134,89,0.35)',  text: 'var(--success)' },
+    medical_record:      { bg: 'rgba(185,140,160,0.12)', border: 'rgba(185,140,160,0.35)', text: '#8F5C70' },
+    audio_recording:     { bg: 'rgba(124,58,237,0.12)', border: 'rgba(124,58,237,0.35)', text: 'var(--accent-primary)' },
     other:               { bg: 'rgba(71,85,105,0.1)',   border: 'rgba(71,85,105,0.3)',   text: '#64748b' },
   };
 
@@ -1509,7 +1509,7 @@ function App() {
               gap: '0.4rem',
               padding: '0.75rem',
               borderRadius: '10px',
-              background: 'rgba(255, 255, 255, 0.02)',
+              background: 'rgba(23, 20, 15, 0.02)',
               border: '1px solid var(--border-color)',
               transition: 'all 0.2s',
               position: 'relative'
@@ -1591,7 +1591,7 @@ function App() {
                     padding: '0.2rem', borderRadius: '4px', display: 'flex', alignItems: 'center',
                     transition: 'color 0.15s'
                   }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = '#D9B84A')}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent-primary)')}
                   onMouseLeave={(e) => (e.currentTarget.style.color = '#64748b')}
                 >
                   <Pencil size={12} />
@@ -1693,10 +1693,10 @@ function App() {
               alignItems: 'center',
               gap: '0.3rem',
               padding: '0.25rem 0.6rem',
-              background: isReclassifying ? 'rgba(169,135,31,0.15)' : 'rgba(169,135,31,0.1)',
-              border: '1px solid rgba(169,135,31,0.35)',
+              background: isReclassifying ? 'rgba(124,88,17,0.15)' : 'rgba(124,88,17,0.1)',
+              border: '1px solid rgba(124,88,17,0.35)',
               borderRadius: '20px',
-              color: '#D9B84A',
+              color: 'var(--accent-primary)',
               fontSize: '0.7rem',
               fontWeight: 600,
               cursor: isReclassifying ? 'not-allowed' : 'pointer',
@@ -1723,10 +1723,10 @@ function App() {
                 alignItems: 'center',
                 gap: '0.4rem',
                 padding: '0.25rem 0.6rem',
-                background: 'rgba(201,162,39,0.15)',
-                border: '1px solid rgba(201,162,39,0.4)',
+                background: 'rgba(156,111,23,0.15)',
+                border: '1px solid rgba(156,111,23,0.4)',
                 borderRadius: '20px',
-                color: '#D9B84A',
+                color: 'var(--accent-primary)',
                 fontSize: '0.7rem',
                 fontWeight: 600,
                 cursor: isRenamingBatch ? 'not-allowed' : 'pointer',
@@ -1746,7 +1746,7 @@ function App() {
         </div>
             
         {researchItemsWithIdx.length > 0 && (
-          <details style={{ marginTop: '1rem', background: 'rgba(255,255,255,0.02)', padding: '0.75rem', borderRadius: '10px', border: '1px dashed var(--border-color)' }}>
+          <details style={{ marginTop: '1rem', background: 'rgba(23, 20, 15, 0.02)', padding: '0.75rem', borderRadius: '10px', border: '1px dashed var(--border-color)' }}>
             <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-secondary)', userSelect: 'none', display: 'flex', alignItems: 'center' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>🤖 <span style={{ textDecoration: 'underline' }}>AI Auto-Generated Research Candidates ({researchItemsWithIdx.length})</span></span>
             </summary>
@@ -2140,7 +2140,7 @@ function App() {
                         alignItems: 'center',
                         gap: '0.4rem',
                         padding: '0.5rem 1rem',
-                        background: activeResultTab === 'questionnaire' ? 'rgba(201, 162, 39, 0.15)' : 'none',
+                        background: activeResultTab === 'questionnaire' ? 'rgba(156, 111, 23, 0.15)' : 'none',
                         border: activeResultTab === 'questionnaire' ? '1px solid var(--accent-primary)' : '1px solid transparent',
                         color: activeResultTab === 'questionnaire' ? 'var(--text-primary)' : 'var(--text-secondary)',
                         borderRadius: '8px',
@@ -2162,7 +2162,7 @@ function App() {
                       alignItems: 'center',
                       gap: '0.35rem',
                       padding: '0.45rem 0.75rem',
-                      background: activeResultTab === 'package' ? 'rgba(201, 162, 39, 0.15)' : 'none',
+                      background: activeResultTab === 'package' ? 'rgba(156, 111, 23, 0.15)' : 'none',
                       border: activeResultTab === 'package' ? '1px solid var(--accent-primary)' : '1px solid transparent',
                       color: activeResultTab === 'package' ? 'var(--text-primary)' : 'var(--text-secondary)',
                       borderRadius: '8px',
@@ -2184,7 +2184,7 @@ function App() {
                       alignItems: 'center',
                       gap: '0.35rem',
                       padding: '0.45rem 0.75rem',
-                      background: activeResultTab === 'completeness' ? 'rgba(201, 162, 39, 0.15)' : 'none',
+                      background: activeResultTab === 'completeness' ? 'rgba(156, 111, 23, 0.15)' : 'none',
                       border: activeResultTab === 'completeness' ? '1px solid var(--accent-primary)' : '1px solid transparent',
                       color: activeResultTab === 'completeness' ? 'var(--text-primary)' : 'var(--text-secondary)',
                       borderRadius: '8px',
@@ -2206,7 +2206,7 @@ function App() {
                       alignItems: 'center',
                       gap: '0.35rem',
                       padding: '0.45rem 0.75rem',
-                      background: activeResultTab === 'evidence' ? 'rgba(201, 162, 39, 0.15)' : 'none',
+                      background: activeResultTab === 'evidence' ? 'rgba(156, 111, 23, 0.15)' : 'none',
                       border: activeResultTab === 'evidence' ? '1px solid var(--accent-primary)' : '1px solid transparent',
                       color: activeResultTab === 'evidence' ? 'var(--text-primary)' : 'var(--text-secondary)',
                       borderRadius: '8px',
@@ -2231,7 +2231,7 @@ function App() {
                           alignItems: 'center',
                           gap: '0.35rem',
                           padding: '0.45rem 0.75rem',
-                          background: activeResultTab === 'transcript' ? 'rgba(201, 162, 39, 0.15)' : 'none',
+                          background: activeResultTab === 'transcript' ? 'rgba(156, 111, 23, 0.15)' : 'none',
                           border: activeResultTab === 'transcript' ? '1px solid var(--accent-primary)' : '1px solid transparent',
                           color: activeResultTab === 'transcript' ? 'var(--text-primary)' : 'var(--text-secondary)',
                           borderRadius: '8px',
@@ -2249,8 +2249,8 @@ function App() {
                           fontSize: '0.7rem',
                           padding: '0.1rem 0.4rem',
                           borderRadius: '10px',
-                          background: audioCount > 0 ? 'rgba(169, 135, 31, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-                          color: audioCount > 0 ? '#D9B84A' : '#64748b',
+                          background: audioCount > 0 ? 'rgba(124, 88, 17, 0.2)' : 'rgba(23, 20, 15, 0.05)',
+                          color: audioCount > 0 ? 'var(--accent-primary)' : '#64748b',
                           fontWeight: 600,
                           marginLeft: '0.15rem'
                         }}>
@@ -2267,7 +2267,7 @@ function App() {
                       alignItems: 'center',
                       gap: '0.35rem',
                       padding: '0.45rem 0.75rem',
-                      background: activeResultTab === 'assembly' ? 'rgba(201, 162, 39, 0.15)' : 'none',
+                      background: activeResultTab === 'assembly' ? 'rgba(156, 111, 23, 0.15)' : 'none',
                       border: activeResultTab === 'assembly' ? '1px solid var(--accent-primary)' : '1px solid transparent',
                       color: activeResultTab === 'assembly' ? 'var(--text-primary)' : 'var(--text-secondary)',
                       borderRadius: '8px',
@@ -2290,9 +2290,9 @@ function App() {
                       alignItems: 'center',
                       gap: '0.35rem',
                       padding: '0.45rem 0.75rem',
-                      background: activeResultTab === 'autofill' ? 'rgba(169, 135, 31, 0.2)' : 'none',
-                      border: activeResultTab === 'autofill' ? '1px solid #A9871F' : '1px solid transparent',
-                      color: activeResultTab === 'autofill' ? '#D9B84A' : 'var(--text-secondary)',
+                      background: activeResultTab === 'autofill' ? 'rgba(124, 88, 17, 0.2)' : 'none',
+                      border: activeResultTab === 'autofill' ? '1px solid var(--accent-secondary)' : '1px solid transparent',
+                      color: activeResultTab === 'autofill' ? 'var(--accent-primary)' : 'var(--text-secondary)',
                       borderRadius: '8px',
                       cursor: 'pointer',
                       fontSize: '0.85rem',
@@ -2401,7 +2401,7 @@ function App() {
 
                     {!summary && (
                       <div style={{ padding: '4rem 2rem', textAlign: 'center', border: '1px dashed var(--border-color)', borderRadius: '12px', margin: '2rem 0' }}>
-                        <div style={{ background: 'rgba(169, 135, 31, 0.1)', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem auto' }}>
+                        <div style={{ background: 'rgba(124, 88, 17, 0.1)', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem auto' }}>
                           <Wand2 size={32} color="var(--primary)" />
                         </div>
                         <h3 style={{ marginBottom: '1rem', color: 'var(--text-primary)', fontSize: '1.4rem' }}>No AI Analysis Generated Yet</h3>
@@ -2416,7 +2416,7 @@ function App() {
                             color: 'white', border: 'none', padding: '0.8rem 1.5rem', borderRadius: '8px',
                             fontWeight: 'bold', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
                             opacity: isRegenerating ? 0.7 : 1,
-                            boxShadow: '0 4px 15px rgba(169, 135, 31, 0.3)'
+                            boxShadow: '0 4px 15px rgba(124, 88, 17, 0.3)'
                           }}
                         >
                           <RefreshCw size={18} className={isRegenerating ? 'spin' : ''} />
@@ -2446,7 +2446,7 @@ function App() {
                             border: `1px solid ${isPackageCaseTypeOpen ? 'var(--accent-primary)' : 'var(--border-color)'}`,
                             fontSize: '0.85rem',
                             fontWeight: 500,
-                            background: 'rgba(255, 255, 255, 0.05)',
+                            background: 'rgba(23, 20, 15, 0.05)',
                             color: 'var(--text-primary)',
                             cursor: 'pointer',
                             boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
@@ -2472,7 +2472,7 @@ function App() {
                             top: 'calc(100% + 0.5rem)',
                             left: 0,
                             right: 0,
-                            background: '#1A1E27',
+                            background: 'var(--bg-card)',
                             border: '1px solid var(--border-color)',
                             borderRadius: '12px',
                             boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)',
@@ -2488,7 +2488,7 @@ function App() {
                                   handleCaseTypeChange(pb.case_type || pb.id);
                                   setIsPackageCaseTypeOpen(false);
                                 }}
-                                onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)')}
+                                onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(23, 20, 15, 0.1)')}
                                 onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                                 style={{
                                   padding: '0.6rem 1rem',
@@ -2509,7 +2509,7 @@ function App() {
                         )}
                       </div>
                       {analysis?.scenarioLabel && record?.caseType !== 'auto' ? (
-                        <span style={{ color: 'var(--accent-primary)', fontSize: '0.8rem', fontWeight: 500, background: 'rgba(201, 162, 39, 0.1)', padding: '0.3rem 0.8rem', borderRadius: '12px' }}>
+                        <span style={{ color: 'var(--accent-primary)', fontSize: '0.8rem', fontWeight: 500, background: 'rgba(156, 111, 23, 0.1)', padding: '0.3rem 0.8rem', borderRadius: '12px' }}>
                           {analysis.scenarioLabel}
                         </span>
                       ) : null}
@@ -2518,9 +2518,9 @@ function App() {
                         onClick={() => setIsFeedbackModalOpen(true)}
                         style={{
                           marginLeft: 'auto',
-                          background: 'linear-gradient(135deg, rgba(169, 135, 31, 0.2), rgba(201, 162, 39, 0.2))',
-                          border: '1px solid rgba(169, 135, 31, 0.4)',
-                          color: '#D9B84A',
+                          background: 'linear-gradient(135deg, rgba(124, 88, 17, 0.2), rgba(156, 111, 23, 0.2))',
+                          border: '1px solid rgba(124, 88, 17, 0.4)',
+                          color: 'var(--accent-primary)',
                           padding: '0.4rem 0.9rem',
                           borderRadius: '20px',
                           fontSize: '0.85rem',
@@ -2530,7 +2530,7 @@ function App() {
                           alignItems: 'center',
                           gap: '0.4rem',
                           transition: 'all 0.2s',
-                          boxShadow: '0 2px 10px rgba(169, 135, 31, 0.15)'
+                          boxShadow: '0 2px 10px rgba(124, 88, 17, 0.15)'
                         }}
                       >
                         <Sparkles size={14} /> 💡 Feed Back to Playbook
@@ -2540,7 +2540,7 @@ function App() {
                     <div className="markdown-body" onMouseUp={handleSelection} onTouchEnd={handleSelection} onKeyUp={handleSelection}>
                       {refinementFeedback && refinementTarget === 'summary' && !isEditing && (
                         <div style={{
-                          background: 'rgba(169, 135, 31, 0.15)',
+                          background: 'rgba(124, 88, 17, 0.15)',
                           border: '1px solid var(--primary)',
                           borderRadius: '8px',
                           padding: '1rem',
@@ -2625,7 +2625,7 @@ function App() {
                           })}
                         </div>
                       ) : (
-                        <div style={{ padding: '1rem', borderRadius: '8px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', textAlign: 'center' }}>
+                        <div style={{ padding: '1rem', borderRadius: '8px', background: 'rgba(23, 20, 15, 0.02)', border: '1px solid var(--border-color)', textAlign: 'center' }}>
                           {record?.analysisError ? (
                             <>
                               <p style={{ color: 'var(--danger)', fontSize: '0.8rem', marginBottom: '0.75rem', fontWeight: 600 }}>Analysis Failed</p>
@@ -2657,7 +2657,7 @@ function App() {
                               <div key={q.id} style={{
                                 padding: '0.6rem',
                                 borderRadius: '6px',
-                                background: 'rgba(255, 255, 255, 0.02)',
+                                background: 'rgba(23, 20, 15, 0.02)',
                                 border: '1px solid var(--border-color)',
                                 fontSize: '0.75rem',
                                 color: 'var(--text-secondary)'
@@ -2712,15 +2712,15 @@ function App() {
                             let color = 'var(--success)';
                             let statusLabel = 'Strong';
                             if (score < 40) { color = 'var(--danger)'; statusLabel = 'Not Established'; }
-                            else if (score < 60) { color = '#BD7B2C'; statusLabel = 'Weak / Substantial Gaps'; }
-                            else if (score < 75) { color = '#C9A227'; statusLabel = 'Potentially Usable'; }
+                            else if (score < 60) { color = 'var(--warn)'; statusLabel = 'Weak / Substantial Gaps'; }
+                            else if (score < 75) { color = 'var(--accent-primary)'; statusLabel = 'Potentially Usable'; }
                             else if (score < 85) { color = 'var(--success)'; statusLabel = 'Strong'; }
-                            else { color = '#A9871F'; statusLabel = 'Very Strong'; }
+                            else { color = 'var(--accent-secondary)'; statusLabel = 'Very Strong'; }
                             
                             const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
                             
                             return (
-                            <div key={idx} style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '1rem 1.25rem', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            <div key={idx} style={{ background: 'rgba(23, 20, 15, 0.02)', padding: '1rem 1.25rem', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <span style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '0.95rem' }}>{label}</span>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -2730,7 +2730,7 @@ function App() {
                                   <span style={{ color: 'var(--text-primary)', fontWeight: 'bold', fontSize: '1.1rem' }}>{score}%</span>
                                 </div>
                               </div>
-                              <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden', margin: '0.5rem 0' }}>
+                              <div style={{ height: '6px', background: 'rgba(23, 20, 15, 0.05)', borderRadius: '3px', overflow: 'hidden', margin: '0.5rem 0' }}>
                                 <div style={{ width: `${score}%`, height: '100%', background: color, borderRadius: '3px', transition: 'width 0.5s ease-in-out' }} />
                               </div>
                               {data.reasoning && (
@@ -2754,9 +2754,9 @@ function App() {
                             analysis.riskFlags.map((flag: any) => {
                               const isCritical = flag.severity === 'critical';
                               const isHigh = flag.severity === 'high';
-                              const severityColor = isCritical ? 'var(--danger)' : isHigh ? '#BD7B2C' : 'var(--accent-primary)';
-                              const severityBg = isCritical ? 'rgba(162, 60, 60, 0.08)' : isHigh ? 'rgba(189, 123, 44, 0.08)' : 'rgba(201, 162, 39, 0.08)';
-                              const severityBorder = isCritical ? 'rgba(162, 60, 60, 0.2)' : isHigh ? 'rgba(189, 123, 44, 0.2)' : 'rgba(201, 162, 39, 0.2)';
+                              const severityColor = isCritical ? 'var(--danger)' : isHigh ? 'var(--warn)' : 'var(--accent-primary)';
+                              const severityBg = isCritical ? 'rgba(162, 60, 60, 0.08)' : isHigh ? 'rgba(189, 123, 44, 0.08)' : 'rgba(156, 111, 23, 0.08)';
+                              const severityBorder = isCritical ? 'rgba(162, 60, 60, 0.2)' : isHigh ? 'rgba(189, 123, 44, 0.2)' : 'rgba(156, 111, 23, 0.2)';
 
                               return (
                                 <div key={flag.id} style={{
@@ -2772,7 +2772,7 @@ function App() {
                                   <div style={{ flex: 1, minWidth: 0 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.25rem', alignItems: 'center' }}>
                                       <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>{flag.label}</h4>
-                                      <span style={{ fontSize: '0.65rem', fontWeight: 'bold', textTransform: 'uppercase', color: severityColor, background: `rgba(255,255,255,0.05)`, padding: '0.1rem 0.3rem', borderRadius: '4px' }}>
+                                      <span style={{ fontSize: '0.65rem', fontWeight: 'bold', textTransform: 'uppercase', color: severityColor, background: `rgba(23, 20, 15, 0.05)`, padding: '0.1rem 0.3rem', borderRadius: '4px' }}>
                                         {flag.severity}
                                       </span>
                                     </div>
@@ -2782,7 +2782,7 @@ function App() {
                                         <strong>Specific Problem:</strong> {flag.factValue}
                                       </div>
                                     )}
-                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.3rem', marginTop: '0.3rem' }}>
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', borderTop: '1px solid rgba(23, 20, 15, 0.05)', paddingTop: '0.3rem', marginTop: '0.3rem' }}>
                                       <strong>Source File / Trace:</strong> {flag.source}
                                     </div>
                                     {flag.action && (
@@ -2798,7 +2798,7 @@ function App() {
                         </div>
                       </div>
                     ) : (
-                      <div style={{ padding: '2rem', textAlign: 'center', background: 'rgba(255, 255, 255, 0.01)', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
+                      <div style={{ padding: '2rem', textAlign: 'center', background: 'rgba(23, 20, 15, 0.01)', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
                         <AlertCircle size={36} style={{ opacity: 0.2, marginBottom: '0.75rem' }} />
                         <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>No Playbook Analysis has been run for this case yet.</p>
                         <button className="btn-history" onClick={handleRegenerateSummary} disabled={isRegenerating}>
@@ -2821,8 +2821,8 @@ function App() {
                         <button 
                           onClick={openAutoResearchModal}
                           style={{
-                            background: 'rgba(169, 135, 31, 0.1)', border: '1px solid #A9871F',
-                            color: '#D9B84A', padding: '0.5rem 1rem', borderRadius: '8px',
+                            background: 'rgba(124, 88, 17, 0.1)', border: '1px solid var(--accent-secondary)',
+                            color: 'var(--accent-primary)', padding: '0.5rem 1rem', borderRadius: '8px',
                             display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer',
                             fontSize: '0.85rem'
                           }}
@@ -2833,7 +2833,7 @@ function App() {
                         <button 
                           onClick={() => document.getElementById('exhibit-upload-input')?.click()}
                           style={{
-                            background: 'rgba(201, 162, 39, 0.1)', border: '1px solid var(--accent-primary)',
+                            background: 'rgba(156, 111, 23, 0.1)', border: '1px solid var(--accent-primary)',
                             color: 'var(--text-primary)', padding: '0.5rem 1rem', borderRadius: '8px',
                             display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer',
                             fontSize: '0.85rem'
@@ -2897,11 +2897,11 @@ function App() {
                               <tbody>
                                 {analysis.documents.map((doc: any) => {
                                   const isProvided = doc.status === 'provided';
-                                  const statusColor = isProvided ? 'var(--success)' : doc.status === 'needs_supplementation' ? '#BD7B2C' : 'var(--danger)';
+                                  const statusColor = isProvided ? 'var(--success)' : doc.status === 'needs_supplementation' ? 'var(--warn)' : 'var(--danger)';
                                   const statusLabel = doc.status.toUpperCase().replace(/_/g, ' ');
 
                                   return (
-                                    <tr key={doc.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                    <tr key={doc.id} style={{ borderBottom: '1px solid rgba(23, 20, 15, 0.03)' }}>
                                       <td style={{ padding: '0.6rem 0.5rem', color: 'var(--text-primary)', fontWeight: 550 }}>{doc.label}</td>
                                       <td style={{ padding: '0.6rem 0.5rem', color: 'var(--text-secondary)', textTransform: 'capitalize' }}>{doc.category.replace(/_/g, ' ')}</td>
                                       <td style={{ padding: '0.6rem 0.5rem', color: statusColor, fontWeight: 'bold', fontSize: '0.75rem' }}>{statusLabel}</td>
@@ -2925,7 +2925,7 @@ function App() {
                                                 target="_blank" 
                                                 rel="noopener noreferrer"
                                                 title={doc.fileName}
-                                                style={{ color: '#A9871F', textDecoration: 'none' }}
+                                                style={{ color: 'var(--accent-secondary)', textDecoration: 'none' }}
                                                 onMouseOver={(e) => e.currentTarget.style.textDecoration = 'underline'}
                                                 onMouseOut={(e) => e.currentTarget.style.textDecoration = 'none'}
                                               >
@@ -2954,7 +2954,7 @@ function App() {
                             Bona fide relationship files classified and graded by weight strength.
                           </p>
                           {analysis.evidence.length === 0 ? (
-                            <div style={{ padding: '1.5rem', textAlign: 'center', background: 'rgba(255, 255, 255, 0.01)', border: '1px dashed var(--border-color)', borderRadius: '8px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                            <div style={{ padding: '1.5rem', textAlign: 'center', background: 'rgba(23, 20, 15, 0.01)', border: '1px dashed var(--border-color)', borderRadius: '8px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
                               No relationship evidence found in case files yet.
                             </div>
                           ) : (
@@ -2970,7 +2970,7 @@ function App() {
                                 </thead>
                                 <tbody>
                                   {analysis.evidence.map((ev: any, idx: number) => {
-                                    const strengthColor = ev.strength === 'high' ? 'var(--success)' : ev.strength === 'medium' ? '#BD7B2C' : 'var(--danger)';
+                                    const strengthColor = ev.strength === 'high' ? 'var(--success)' : ev.strength === 'medium' ? 'var(--warn)' : 'var(--danger)';
                                     
                                     // Dynamically resolve renamed file name from record.items
                                     const targetFileName = ev.file_name || ev.fileName;
@@ -2989,7 +2989,7 @@ function App() {
                                     console.log(`[Bona Fide Match] Target: ${targetFileName}`, matchedItem ? `Found URL: ${matchedItem.url || matchedItem.fileUri}` : 'NOT FOUND IN record.items (using fallback)', matchedItem);
 
                                     return (
-                                      <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                      <tr key={idx} style={{ borderBottom: '1px solid rgba(23, 20, 15, 0.03)' }}>
                                         <td style={{ padding: '0.6rem 0.5rem', color: 'var(--text-primary)', fontWeight: 550, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }} title={displayName}>
                                           {(() => {
                                             if (matchedItem && (matchedItem.url || matchedItem.fileUri)) {
@@ -3002,7 +3002,7 @@ function App() {
                                                   target="_blank" 
                                                   rel="noopener noreferrer"
                                                   title={displayName}
-                                                  style={{ color: '#A9871F', textDecoration: 'none' }}
+                                                  style={{ color: 'var(--accent-secondary)', textDecoration: 'none' }}
                                                   onMouseOver={(e) => e.currentTarget.style.textDecoration = 'underline'}
                                                   onMouseOut={(e) => e.currentTarget.style.textDecoration = 'none'}
                                                 >
@@ -3067,7 +3067,7 @@ function App() {
                         </div>
 
                         {audioUrl && (
-                          <div className="audio-player-container" style={{ margin: '1rem 0', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                          <div className="audio-player-container" style={{ margin: '1rem 0', background: 'rgba(23, 20, 15, 0.02)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                             <audio 
                               ref={audioRef} 
                               controls 
@@ -3092,7 +3092,7 @@ function App() {
                           </div>
                         )}
 
-                        <div className="transcript-card" style={{ maxHeight: '480px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '1rem', background: 'rgba(0,0,0,0.1)' }}>
+                        <div className="transcript-card" style={{ maxHeight: '480px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '1rem', background: 'var(--bg-card-2)' }}>
                           {transcript?.utterances ? (
                             (() => {
                               const audioItems = record?.items?.filter((i: any) => i.type === 'audio') || [];
@@ -3135,7 +3135,7 @@ function App() {
                                               borderRadius: '6px',
                                               fontSize: '0.75rem',
                                               fontWeight: 600,
-                                              background: isSelected ? 'var(--accent-primary)' : 'rgba(255,255,255,0.05)',
+                                              background: isSelected ? 'var(--accent-primary)' : 'rgba(23, 20, 15, 0.05)',
                                               color: isSelected ? 'white' : 'var(--text-secondary)',
                                               border: isSelected ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
                                               cursor: 'pointer',
@@ -3181,7 +3181,7 @@ function App() {
                                                 cursor: 'pointer',
                                                 borderRadius: '2px',
                                                 padding: '0 2px',
-                                                background: isActiveWord(utt, word) ? 'rgba(201, 162, 39, 0.3)' : 'transparent',
+                                                background: isActiveWord(utt, word) ? 'rgba(156, 111, 23, 0.3)' : 'transparent',
                                                 color: isActiveWord(utt, word) ? 'var(--text-primary)' : 'inherit',
                                                 transition: 'background 0.1s'
                                               }}
@@ -3221,7 +3221,7 @@ function App() {
                         style={{
                           textAlign: 'center',
                           padding: '2.5rem 1.5rem',
-                          background: 'rgba(255, 255, 255, 0.01)',
+                          background: 'rgba(23, 20, 15, 0.01)',
                           border: '1px dashed var(--border-color)',
                           borderRadius: '12px',
                           display: 'flex',
@@ -3235,20 +3235,20 @@ function App() {
                           width: '52px',
                           height: '52px',
                           borderRadius: '16px',
-                          background: 'rgba(201, 162, 39, 0.1)',
-                          border: '1px solid rgba(201, 162, 39, 0.25)',
+                          background: 'rgba(156, 111, 23, 0.1)',
+                          border: '1px solid rgba(156, 111, 23, 0.25)',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          color: '#D9B84A',
+                          color: 'var(--accent-primary)',
                           marginBottom: '0.2rem'
                         }}>
                           <Mic size={26} />
                         </div>
-                        <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 600, color: '#f8fafc' }}>
+                        <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                           No Consultation Audio Uploaded
                         </h4>
-                        <p style={{ color: '#94a3b8', fontSize: '0.82rem', maxWidth: '440px', margin: 0, lineHeight: '1.5' }}>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', maxWidth: '440px', margin: 0, lineHeight: '1.5' }}>
                           This matter collection currently focuses on document and image analysis. You can upload audio recordings or conduct phone intake anytime to generate transcripts.
                         </p>
                         <button
@@ -3257,9 +3257,9 @@ function App() {
                             marginTop: '0.4rem',
                             padding: '0.55rem 1.1rem',
                             borderRadius: '8px',
-                            background: 'linear-gradient(135deg, rgba(201,162,39,0.2), rgba(169,135,31,0.2))',
-                            border: '1px solid rgba(201, 162, 39, 0.4)',
-                            color: '#D9B84A',
+                            background: 'linear-gradient(135deg, rgba(156,111,23,0.2), rgba(124,88,17,0.2))',
+                            border: '1px solid rgba(156, 111, 23, 0.4)',
+                            color: 'var(--accent-primary)',
                             fontSize: '0.82rem',
                             fontWeight: 600,
                             cursor: 'pointer',
@@ -3327,7 +3327,7 @@ function App() {
                                   fontSize: '0.75rem',
                                   fontWeight: 'bold',
                                   cursor: 'pointer',
-                                  boxShadow: '0 2px 8px rgba(201, 162, 39, 0.3)',
+                                  boxShadow: '0 2px 8px rgba(156, 111, 23, 0.3)',
                                   opacity: isAssembling ? 0.7 : 1
                                 }}
                               >
@@ -3351,7 +3351,7 @@ function App() {
                                   alignItems: 'center',
                                   gap: '0.4rem',
                                   padding: '0.4rem 0.75rem',
-                                  background: '#6B8659',
+                                  background: 'var(--success)',
                                   border: 'none',
                                   borderRadius: '6px',
                                   color: 'white',
@@ -3387,7 +3387,7 @@ function App() {
                                       alignItems: 'center',
                                       gap: '0.4rem',
                                       padding: '0.5rem 0.8rem',
-                                      background: isSelected ? 'rgba(201, 162, 39, 0.15)' : 'rgba(255, 255, 255, 0.02)',
+                                      background: isSelected ? 'rgba(156, 111, 23, 0.15)' : 'rgba(23, 20, 15, 0.02)',
                                       border: `1px solid ${isSelected ? 'var(--accent-primary)' : 'var(--border-color)'}`,
                                       color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)',
                                       borderRadius: '8px',
@@ -3473,7 +3473,7 @@ function App() {
                                     <div style={{ fontWeight: 'bold', color: '#475569' }}>STATUS:</div>
                                     <div>
                                       {isComplete ? (
-                                        <span style={{ display: 'inline-block', padding: '0.15rem 0.4rem', borderRadius: '4px', background: 'rgba(126, 154, 109, 0.1)', color: '#6B8659', fontSize: '0.75rem', fontWeight: 600 }}>
+                                        <span style={{ display: 'inline-block', padding: '0.15rem 0.4rem', borderRadius: '4px', background: 'rgba(126, 154, 109, 0.1)', color: 'var(--success)', fontSize: '0.75rem', fontWeight: 600 }}>
                                           READY FOR ASSEMBLY (COMPLETE)
                                         </span>
                                       ) : (
@@ -3513,8 +3513,8 @@ function App() {
                               <div className="legal-markdown-preview" onMouseUp={handleSelection} onTouchEnd={handleSelection} onKeyUp={handleSelection}>
                                 {refinementFeedback && refinementTarget === 'coverLetter' && (
                                   <div style={{
-                                    background: 'rgba(169, 135, 31, 0.1)',
-                                    border: '1px solid #C9A227',
+                                    background: 'rgba(124, 88, 17, 0.1)',
+                                    border: '1px solid var(--accent-primary)',
                                     borderRadius: '8px',
                                     padding: '1rem',
                                     marginBottom: '1rem',
@@ -3522,7 +3522,7 @@ function App() {
                                     gap: '0.8rem',
                                     alignItems: 'flex-start'
                                   }}>
-                                    <Wand2 size={20} color="#C9A227" style={{ flexShrink: 0, marginTop: '2px' }} />
+                                    <Wand2 size={20} color="var(--accent-primary)" style={{ flexShrink: 0, marginTop: '2px' }} />
                                     <div style={{ flex: 1 }}>
                                       <h4 style={{ margin: '0 0 0.4rem 0', color: '#12151C', fontSize: '0.95rem', fontWeight: 600 }}>✨ AI Refinement Complete</h4>
                                       <p style={{ margin: 0, color: '#334155', fontSize: '0.9rem', lineHeight: '1.5' }}>{refinementFeedback}</p>
@@ -3650,7 +3650,7 @@ function App() {
                                         <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
                                           <table style={{ width: '100%', minWidth: '500px', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
                                             <thead>
-                                              <tr style={{ borderBottom: '1px solid #94a3b8', textAlign: 'left' }}>
+                                              <tr style={{ borderBottom: '1px solid var(--text-secondary)', textAlign: 'left' }}>
                                                 <th style={{ padding: '0.4rem', fontWeight: 'bold' }}>Field Name</th>
                                                 <th style={{ padding: '0.4rem', fontWeight: 'bold' }}>Mapped Value</th>
                                                 <th style={{ padding: '0.4rem', fontWeight: 'bold' }}>Source Record</th>
@@ -3723,12 +3723,12 @@ function App() {
                                                 fontSize: '0.7rem',
                                                 fontWeight: 'bold',
                                                 background: isProvided ? 'rgba(126, 154, 109, 0.1)' : 'rgba(162, 60, 60, 0.1)',
-                                                color: isProvided ? '#6B8659' : '#8B3232'
+                                                color: isProvided ? 'var(--success)' : '#8B3232'
                                               }}>
                                                 {isProvided ? '✓ MATCHED' : '⚠️ MISSING'}
                                               </span>
                                             </td>
-                                            <td style={{ padding: '0.6rem 0.5rem', color: isProvided ? '#12151C' : '#94a3b8', fontStyle: isProvided ? 'normal' : 'italic', fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' }}>
+                                            <td style={{ padding: '0.6rem 0.5rem', color: isProvided ? '#12151C' : 'var(--text-secondary)', fontStyle: isProvided ? 'normal' : 'italic', fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' }}>
                                               {(() => {
                                                 if (!isProvided) return 'Not Provided';
                                                 const physicalItem = record.items?.find((i: any) => i.name === doc.fileName || i.file_name === doc.fileName || (doc.fileName && i.name && doc.fileName.includes(i.name)));
@@ -3741,7 +3741,7 @@ function App() {
                                                       target="_blank" 
                                                       rel="noopener noreferrer"
                                                       title={doc.fileName}
-                                                      style={{ color: '#A9871F', textDecoration: 'none' }}
+                                                      style={{ color: 'var(--accent-secondary)', textDecoration: 'none' }}
                                                       onMouseOver={(e) => e.currentTarget.style.textDecoration = 'underline'}
                                                       onMouseOut={(e) => e.currentTarget.style.textDecoration = 'none'}
                                                     >
@@ -3819,7 +3819,7 @@ function App() {
                                             disabled={assemblyCheckedItems.length < checklistItems.length || isAssembling}
                                             style={{
                                               padding: '0.75rem 2rem',
-                                              background: assemblyCheckedItems.length === checklistItems.length ? 'var(--accent-primary)' : 'rgba(255,255,255,0.05)',
+                                              background: assemblyCheckedItems.length === checklistItems.length ? 'var(--accent-primary)' : 'rgba(23, 20, 15, 0.05)',
                                               color: assemblyCheckedItems.length === checklistItems.length ? 'white' : 'var(--text-secondary)',
                                               border: assemblyCheckedItems.length === checklistItems.length ? 'none' : '1px solid var(--border-color)',
                                               borderRadius: '8px',
@@ -3830,7 +3830,7 @@ function App() {
                                               display: 'inline-flex',
                                               alignItems: 'center',
                                               gap: '0.5rem',
-                                              boxShadow: assemblyCheckedItems.length === checklistItems.length ? '0 4px 15px rgba(201, 162, 39, 0.4)' : 'none'
+                                              boxShadow: assemblyCheckedItems.length === checklistItems.length ? '0 4px 15px rgba(156, 111, 23, 0.4)' : 'none'
                                             }}
                                           >
                                             {isAssembling ? (
@@ -3874,7 +3874,7 @@ function App() {
                               alignItems: 'center',
                               gap: '0.6rem',
                               padding: '0.75rem 1rem',
-                              background: isSelected ? 'rgba(201, 162, 39, 0.15)' : 'rgba(255, 255, 255, 0.02)',
+                              background: isSelected ? 'rgba(156, 111, 23, 0.15)' : 'rgba(23, 20, 15, 0.02)',
                               border: `1px solid ${isSelected ? 'var(--accent-primary)' : 'var(--border-color)'}`,
                               color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)',
                               borderRadius: '8px',
@@ -3898,14 +3898,14 @@ function App() {
               {activeResultTab === 'autofill' && (
                 <div style={{ padding: '0.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%' }}>
                   {/* Top Header Card */}
-                  <div className="glass-card" style={{ padding: '1.5rem', borderRadius: '12px', background: 'linear-gradient(135deg, rgba(18, 21, 28, 0.9), rgba(26, 30, 39, 0.8))', border: '1px solid rgba(169, 135, 31, 0.3)' }}>
+                  <div className="glass-card" style={{ padding: '1.5rem', borderRadius: '12px', background: 'linear-gradient(135deg, #FFFFFF, var(--bg-card-2))', border: '1px solid rgba(124, 88, 17, 0.3)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.4rem' }}>
-                          <FileText size={22} style={{ color: '#D9B84A' }} />
-                          <h2 style={{ margin: 0, fontSize: '1.3rem', color: '#f8fafc' }}>Automatic Form Filling & Review Hub</h2>
+                          <FileText size={22} style={{ color: 'var(--accent-primary)' }} />
+                          <h2 style={{ margin: 0, fontSize: '1.3rem', color: 'var(--text-primary)' }}>Automatic Form Filling & Review Hub</h2>
                         </div>
-                        <p style={{ margin: 0, fontSize: '0.85rem', color: '#94a3b8' }}>
+                        <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                           Structured facts and questionnaire answers are mapped onto the real official USCIS PDF for each form - only the fields shown below are filled in; everything else is left blank. <strong>Attorney must review and complete every remaining field, then sign off, before the official PDF can be exported.</strong> Editing any field after sign-off revokes it and re-locks export until it's re-approved.
                         </p>
                       </div>
@@ -3914,7 +3914,7 @@ function App() {
                         <button
                           onClick={() => fetchAutofillData(undefined, formCustomOverrides)}
                           style={{
-                            background: 'rgba(255, 255, 255, 0.05)', border: '1px solid var(--border-color)',
+                            background: 'rgba(23, 20, 15, 0.05)', border: '1px solid var(--border-color)',
                             borderRadius: '8px', padding: '0.55rem 1rem', color: 'var(--text-primary)',
                             fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem'
                           }}
@@ -3967,10 +3967,10 @@ function App() {
                                   }
                                 }}
                                 style={{
-                                  background: exportDisabled ? 'rgba(148, 163, 184, 0.2)' : 'linear-gradient(135deg, #C9A227, #A9871F)', border: 'none',
-                                  borderRadius: '8px', padding: '0.55rem 1.2rem', color: exportDisabled ? '#94a3b8' : 'white',
+                                  background: exportDisabled ? 'rgba(148, 163, 184, 0.2)' : 'linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))', border: 'none',
+                                  borderRadius: '8px', padding: '0.55rem 1.2rem', color: exportDisabled ? 'var(--text-secondary)' : 'white',
                                   fontSize: '0.85rem', fontWeight: 600, cursor: exportDisabled ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem',
-                                  boxShadow: exportDisabled ? 'none' : '0 4px 15px rgba(201, 162, 39, 0.4)'
+                                  boxShadow: exportDisabled ? 'none' : '0 4px 15px rgba(156, 111, 23, 0.4)'
                                 }}
                               >
                                 <Download size={15} /> Export Official USCIS PDF
@@ -3980,12 +3980,12 @@ function App() {
                                 title={hasMissingFields ? 'Resolve all missing fields on this form before signing off' : undefined}
                                 onClick={() => signOffAutofillForm(activeAutofillForm)}
                                 style={{
-                                  background: hasMissingFields ? 'rgba(148, 163, 184, 0.2)' : 'linear-gradient(135deg, #A9871F, #A9871F)',
+                                  background: hasMissingFields ? 'rgba(148, 163, 184, 0.2)' : 'linear-gradient(135deg, var(--accent-secondary), var(--accent-secondary))',
                                   border: 'none',
-                                  borderRadius: '8px', padding: '0.55rem 1.2rem', color: hasMissingFields ? '#94a3b8' : 'white',
+                                  borderRadius: '8px', padding: '0.55rem 1.2rem', color: hasMissingFields ? 'var(--text-secondary)' : 'white',
                                   fontSize: '0.85rem', fontWeight: 600, cursor: hasMissingFields || isSigningOffForm ? 'not-allowed' : 'pointer',
                                   display: 'flex', alignItems: 'center', gap: '0.4rem',
-                                  boxShadow: hasMissingFields ? 'none' : '0 4px 15px rgba(169, 135, 31, 0.4)'
+                                  boxShadow: hasMissingFields ? 'none' : '0 4px 15px rgba(124, 88, 17, 0.4)'
                                 }}
                               >
                                 <CheckCircle size={15} />
@@ -3999,26 +3999,26 @@ function App() {
 
                     {/* Summary Metrics Row */}
                     {autofillData && autofillData.metrics && (
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginTop: '1.25rem', paddingTop: '1.25rem', borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                        <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '0.8rem 1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                          <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Total Form Fields</div>
-                          <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#f8fafc' }}>{autofillData.metrics.totalFields}</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginTop: '1.25rem', paddingTop: '1.25rem', borderTop: '1px solid rgba(23, 20, 15, 0.1)' }}>
+                        <div style={{ background: 'rgba(23, 20, 15, 0.03)', padding: '0.8rem 1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Total Form Fields</div>
+                          <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>{autofillData.metrics.totalFields}</div>
                         </div>
                         <div style={{ background: 'rgba(126, 154, 109, 0.1)', padding: '0.8rem 1rem', borderRadius: '8px', border: '1px solid rgba(126, 154, 109, 0.3)' }}>
-                          <div style={{ fontSize: '0.75rem', color: '#9DBB8A' }}>✨ Auto-Filled by AI</div>
-                          <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#9DBB8A' }}>{autofillData.metrics.autoFilledCount}</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--success)' }}>✨ Auto-Filled by AI</div>
+                          <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: 'var(--success)' }}>{autofillData.metrics.autoFilledCount}</div>
                         </div>
                         <div style={{ background: 'rgba(189, 123, 44, 0.1)', padding: '0.8rem 1rem', borderRadius: '8px', border: '1px solid rgba(189, 123, 44, 0.3)' }}>
-                          <div style={{ fontSize: '0.75rem', color: '#E0B96A' }}>⚠️ Needs Attorney Review</div>
-                          <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#E0B96A' }}>{autofillData.metrics.needsReviewCount}</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--warn)' }}>⚠️ Needs Attorney Review</div>
+                          <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: 'var(--warn)' }}>{autofillData.metrics.needsReviewCount}</div>
                         </div>
                         <div style={{ background: 'rgba(162, 60, 60, 0.1)', padding: '0.8rem 1rem', borderRadius: '8px', border: '1px solid rgba(162, 60, 60, 0.3)' }}>
-                          <div style={{ fontSize: '0.75rem', color: '#f87171' }}>❗ Missing (Required for Sign-Off)</div>
-                          <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#f87171' }}>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--danger)' }}>❗ Missing (Required for Sign-Off)</div>
+                          <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: 'var(--danger)' }}>
                             {autofillData.metrics.missingRequiredCount ?? autofillData.metrics.missingCount}
                           </div>
                           {autofillData.metrics.missingCount > (autofillData.metrics.missingRequiredCount ?? autofillData.metrics.missingCount) && (
-                            <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '0.15rem' }}>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
                               +{autofillData.metrics.missingCount - (autofillData.metrics.missingRequiredCount ?? 0)} optional fields also blank
                             </div>
                           )}
@@ -4037,9 +4037,9 @@ function App() {
                             onClick={() => setActiveAutofillForm(formKey)}
                             style={{
                               padding: '0.5rem 1.2rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600,
-                              background: activeAutofillForm === formKey ? 'rgba(169, 135, 31, 0.2)' : 'transparent',
-                              border: activeAutofillForm === formKey ? '1px solid #A9871F' : '1px solid transparent',
-                              color: activeAutofillForm === formKey ? '#D9B84A' : 'var(--text-secondary)'
+                              background: activeAutofillForm === formKey ? 'rgba(124, 88, 17, 0.2)' : 'transparent',
+                              border: activeAutofillForm === formKey ? '1px solid var(--accent-secondary)' : '1px solid transparent',
+                              color: activeAutofillForm === formKey ? 'var(--accent-primary)' : 'var(--text-secondary)'
                             }}
                           >
                             {formKey} Form
@@ -4076,13 +4076,13 @@ function App() {
                             if (!el) return;
                             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                             el.style.transition = 'background-color 0.3s';
-                            el.style.backgroundColor = 'rgba(169, 135, 31, 0.35)';
+                            el.style.backgroundColor = 'rgba(124, 88, 17, 0.35)';
                             setTimeout(() => { el.style.backgroundColor = ''; }, 1400);
                           }, 100);
                         };
                         return (
                         <div>
-                          <div style={{ fontSize: '1rem', fontWeight: 600, color: '#f8fafc', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                          <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
                             <span>{autofillData.formsData[activeAutofillForm].formTitle}</span>
                             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                               <a
@@ -4090,14 +4090,14 @@ function App() {
                                 target="_blank"
                                 rel="noreferrer"
                                 style={{
-                                  fontSize: '0.8rem', color: '#D9B84A', background: 'rgba(201, 162, 39, 0.1)',
-                                  padding: '0.35rem 0.75rem', borderRadius: '6px', border: '1px solid rgba(201, 162, 39, 0.3)',
+                                  fontSize: '0.8rem', color: 'var(--accent-primary)', background: 'rgba(156, 111, 23, 0.1)',
+                                  padding: '0.35rem 0.75rem', borderRadius: '6px', border: '1px solid rgba(156, 111, 23, 0.3)',
                                   textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600
                                 }}
                               >
                                 🏛️ Open Official USCIS {activeAutofillForm} Blank PDF
                               </a>
-                              <span style={{ fontSize: '0.8rem', color: '#D9B84A', background: 'rgba(169, 135, 31, 0.1)', padding: '0.35rem 0.75rem', borderRadius: '6px', border: '1px solid rgba(169, 135, 31, 0.3)' }}>
+                              <span style={{ fontSize: '0.8rem', color: 'var(--accent-primary)', background: 'rgba(124, 88, 17, 0.1)', padding: '0.35rem 0.75rem', borderRadius: '6px', border: '1px solid rgba(124, 88, 17, 0.3)' }}>
                                 Official USCIS PDF Field Mapping
                               </span>
                             </div>
@@ -4115,9 +4115,9 @@ function App() {
                                 onClick={() => setAutofillFilter(opt.key)}
                                 style={{
                                   padding: '0.4rem 0.9rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
-                                  background: autofillFilter === opt.key ? 'rgba(169, 135, 31, 0.25)' : 'rgba(255, 255, 255, 0.04)',
-                                  border: autofillFilter === opt.key ? '1px solid #A9871F' : '1px solid var(--border-color)',
-                                  color: autofillFilter === opt.key ? '#D9B84A' : 'var(--text-secondary)'
+                                  background: autofillFilter === opt.key ? 'rgba(124, 88, 17, 0.25)' : 'rgba(23, 20, 15, 0.04)',
+                                  border: autofillFilter === opt.key ? '1px solid var(--accent-secondary)' : '1px solid var(--border-color)',
+                                  color: autofillFilter === opt.key ? 'var(--accent-primary)' : 'var(--text-secondary)'
                                 }}
                               >
                                 {opt.label}
@@ -4127,7 +4127,7 @@ function App() {
                               onClick={jumpToNextMissingRequired}
                               style={{
                                 marginLeft: 'auto', padding: '0.4rem 0.9rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
-                                background: 'rgba(201, 162, 39, 0.15)', border: '1px solid rgba(201, 162, 39, 0.4)', color: '#E8D48A',
+                                background: 'rgba(156, 111, 23, 0.15)', border: '1px solid rgba(156, 111, 23, 0.4)', color: 'var(--accent-primary)',
                                 display: 'flex', alignItems: 'center', gap: '0.35rem'
                               }}
                             >
@@ -4138,12 +4138,12 @@ function App() {
                           <div style={{ overflowX: 'auto', maxHeight: '70vh', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                               <thead>
-                                <tr style={{ background: '#171B24', textAlign: 'left', color: '#94a3b8' }}>
-                                  <th style={{ position: 'sticky', top: 0, background: '#171B24', padding: '0.75rem', borderBottom: '1px solid var(--border-color)', width: '150px', zIndex: 2 }}>USCIS Form Location</th>
-                                  <th style={{ position: 'sticky', top: 0, background: '#171B24', padding: '0.75rem', borderBottom: '1px solid var(--border-color)', width: '220px', zIndex: 2 }}>Field Description</th>
-                                  <th style={{ position: 'sticky', top: 0, background: '#171B24', padding: '0.75rem', borderBottom: '1px solid var(--border-color)', zIndex: 2 }}>Auto-Filled Value (Attorney Editable)</th>
-                                  <th style={{ position: 'sticky', top: 0, background: '#171B24', padding: '0.75rem', borderBottom: '1px solid var(--border-color)', width: '180px', zIndex: 2 }}>Source Provenance</th>
-                                  <th style={{ position: 'sticky', top: 0, background: '#171B24', padding: '0.75rem', borderBottom: '1px solid var(--border-color)', width: '120px', zIndex: 2 }}>Status</th>
+                                <tr style={{ background: 'var(--bg-card-2)', textAlign: 'left', color: 'var(--text-secondary)' }}>
+                                  <th style={{ position: 'sticky', top: 0, background: 'var(--bg-card-2)', padding: '0.75rem', borderBottom: '1px solid var(--border-color)', width: '150px', zIndex: 2 }}>USCIS Form Location</th>
+                                  <th style={{ position: 'sticky', top: 0, background: 'var(--bg-card-2)', padding: '0.75rem', borderBottom: '1px solid var(--border-color)', width: '220px', zIndex: 2 }}>Field Description</th>
+                                  <th style={{ position: 'sticky', top: 0, background: 'var(--bg-card-2)', padding: '0.75rem', borderBottom: '1px solid var(--border-color)', zIndex: 2 }}>Auto-Filled Value (Attorney Editable)</th>
+                                  <th style={{ position: 'sticky', top: 0, background: 'var(--bg-card-2)', padding: '0.75rem', borderBottom: '1px solid var(--border-color)', width: '180px', zIndex: 2 }}>Source Provenance</th>
+                                  <th style={{ position: 'sticky', top: 0, background: 'var(--bg-card-2)', padding: '0.75rem', borderBottom: '1px solid var(--border-color)', width: '120px', zIndex: 2 }}>Status</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -4160,12 +4160,12 @@ function App() {
                                     <React.Fragment key={groupKey}>
                                       <tr
                                         onClick={() => setCollapsedAutofillParts(prev => ({ ...prev, [groupKey]: !prev[groupKey] }))}
-                                        style={{ background: 'rgba(169, 135, 31, 0.08)', cursor: 'pointer', userSelect: 'none' }}
+                                        style={{ background: 'rgba(124, 88, 17, 0.08)', cursor: 'pointer', userSelect: 'none' }}
                                       >
-                                        <td colSpan={5} style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#D9B84A', borderBottom: '1px solid var(--border-color)' }}>
+                                        <td colSpan={5} style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: 'var(--accent-primary)', borderBottom: '1px solid var(--border-color)' }}>
                                           <span style={{ display: 'inline-block', width: '1rem' }}>{isCollapsed ? '▶' : '▼'}</span>
                                           {groupKey}
-                                          <span style={{ marginLeft: '0.75rem', fontSize: '0.75rem', fontWeight: 600, color: groupDone ? '#9DBB8A' : '#94a3b8' }}>
+                                          <span style={{ marginLeft: '0.75rem', fontSize: '0.75rem', fontWeight: 600, color: groupDone ? 'var(--success)' : 'var(--text-secondary)' }}>
                                             {requiredFields.length > 0
                                               ? `Required: ${requiredFilled}/${requiredFields.length}${groupDone ? ' ✓' : ''}`
                                               : 'No required fields'}
@@ -4193,7 +4193,7 @@ function App() {
                       })()}
                     </div>
                   ) : (
-                    <div className="glass-card" style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
+                    <div className="glass-card" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
                       <RefreshCw size={24} className="spin" style={{ marginBottom: '0.5rem' }} />
                       <div>Loading Form Autofill & Field Mapping...</div>
                     </div>
@@ -4293,7 +4293,7 @@ function App() {
                     top: 'calc(100% + 0.5rem)',
                     left: 0,
                     right: 0,
-                    background: '#1A1E27',
+                    background: 'var(--bg-card)',
                     border: '1px solid var(--border-color)',
                     borderRadius: '16px',
                     boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)',
@@ -4322,7 +4322,7 @@ function App() {
                           setLanguage(opt.id);
                           setIsAudioLangOpen(false);
                         }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)')}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(23, 20, 15, 0.1)')}
                         onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                         style={{
                           padding: '0.7rem 1.2rem',
@@ -4330,7 +4330,7 @@ function App() {
                           color: 'var(--text-primary)',
                           cursor: 'pointer',
                           transition: 'background 0.2s',
-                          borderBottom: opt.id === 'auto' ? '1px solid rgba(255, 255, 255, 0.05)' : 'none'
+                          borderBottom: opt.id === 'auto' ? '1px solid rgba(23, 20, 15, 0.05)' : 'none'
                         }}
                       >
                         {opt.label}
@@ -4384,7 +4384,7 @@ function App() {
                     top: 'calc(100% + 0.5rem)',
                     left: 0,
                     right: 0,
-                    background: '#1A1E27',
+                    background: 'var(--bg-card)',
                     border: '1px solid var(--border-color)',
                     borderRadius: '16px',
                     boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)',
@@ -4398,9 +4398,9 @@ function App() {
                         setSelectedCaseType('auto');
                         setIsIntakeCaseTypeOpen(false);
                       }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)')}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(23, 20, 15, 0.1)')}
                       onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                      style={{ padding: '0.7rem 1.2rem', fontSize: '0.95rem', color: 'var(--text-primary)', cursor: 'pointer', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}
+                      style={{ padding: '0.7rem 1.2rem', fontSize: '0.95rem', color: 'var(--text-primary)', cursor: 'pointer', borderBottom: '1px solid rgba(23, 20, 15, 0.05)' }}
                     >
                       ✨ Auto-detect (AI)
                     </div>
@@ -4411,7 +4411,7 @@ function App() {
                           setSelectedCaseType(pb.case_type || pb.id);
                           setIsIntakeCaseTypeOpen(false);
                         }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)')}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(23, 20, 15, 0.1)')}
                         onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                         style={{
                           padding: '0.7rem 1.2rem',
@@ -4554,27 +4554,27 @@ function App() {
             )}
             
             {uploadFiles.length > 0 && !isRecording && (
-              <div ref={selectedFilesRef} className="glass-card selected-files-card" style={{ marginTop: '2.5rem', maxWidth: '600px', margin: '2.5rem auto 0', padding: '1.5rem', border: '1px solid rgba(201, 162, 39, 0.3)', background: 'rgba(30, 41, 59, 0.4)', boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.2)', borderRadius: '16px' }}>
+              <div ref={selectedFilesRef} className="glass-card selected-files-card" style={{ marginTop: '2.5rem', maxWidth: '600px', margin: '2.5rem auto 0', padding: '1.5rem', border: '1px solid rgba(156, 111, 23, 0.3)', background: 'rgba(239, 234, 224, 0.5)', boxShadow: '0 8px 32px 0 rgba(23, 20, 15, 0.1)', borderRadius: '16px' }}>
                 <h4 style={{ marginBottom: '1.2rem', color: 'var(--accent-primary)', fontSize: '1.1rem', fontWeight: '600', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
                   <FileText size={18} />
                   Selected Audio Files ({uploadFiles.length})
                 </h4>
                 <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 1.5rem 0', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   {uploadFiles.map((file, idx) => (
-                    <li key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1rem', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.05)', transition: 'background 0.2s' }}>
+                    <li key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1rem', background: 'rgba(23, 20, 15, 0.03)', borderRadius: '8px', border: '1px solid rgba(23, 20, 15, 0.05)', transition: 'background 0.2s' }}>
                       <span style={{ fontSize: '0.95rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '350px', fontWeight: '500' }}>
                          {idx + 1}. {file.name}
                       </span>
                       <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                        <button onClick={() => moveFileUp(idx)} disabled={idx === 0} title="Move Up" style={{ background: 'rgba(255,255,255,0.05)', border: 'none', borderRadius: '4px', width: '28px', height: '28px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: idx === 0 ? 'var(--text-muted)' : 'var(--text-secondary)' }}>↑</button>
-                        <button onClick={() => moveFileDown(idx)} disabled={idx === uploadFiles.length - 1} title="Move Down" style={{ background: 'rgba(255,255,255,0.05)', border: 'none', borderRadius: '4px', width: '28px', height: '28px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: idx === uploadFiles.length - 1 ? 'var(--text-muted)' : 'var(--text-secondary)' }}>↓</button>
+                        <button onClick={() => moveFileUp(idx)} disabled={idx === 0} title="Move Up" style={{ background: 'rgba(23, 20, 15, 0.05)', border: 'none', borderRadius: '4px', width: '28px', height: '28px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: idx === 0 ? 'var(--text-muted)' : 'var(--text-secondary)' }}>↑</button>
+                        <button onClick={() => moveFileDown(idx)} disabled={idx === uploadFiles.length - 1} title="Move Down" style={{ background: 'rgba(23, 20, 15, 0.05)', border: 'none', borderRadius: '4px', width: '28px', height: '28px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: idx === uploadFiles.length - 1 ? 'var(--text-muted)' : 'var(--text-secondary)' }}>↓</button>
                         <button onClick={() => removeFile(idx)} title="Remove" style={{ background: 'rgba(162, 60, 60, 0.1)', border: 'none', borderRadius: '4px', width: '28px', height: '28px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--danger)' }}>✕</button>
                       </div>
                     </li>
                   ))}
                 </ul>
                 <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                  <button className="btn" onClick={() => fileInputRef.current?.click()} style={{ flex: '1 1 45%', justifyContent: 'center', padding: '0.8rem', background: 'rgba(255, 255, 255, 0.05)', color: 'var(--text-primary)', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                  <button className="btn" onClick={() => fileInputRef.current?.click()} style={{ flex: '1 1 45%', justifyContent: 'center', padding: '0.8rem', background: 'rgba(23, 20, 15, 0.05)', color: 'var(--text-primary)', border: '1px solid rgba(23, 20, 15, 0.1)' }}>
                     <Upload size={20} />
                     Add MORE Materials
                   </button>
@@ -4677,7 +4677,7 @@ function App() {
           <div className="loading-overlay" style={{ zIndex: 2000 }}>
             <div className="glass-card loading-card" style={{ maxWidth: '540px', width: '95%', padding: '2.5rem 2rem', textAlign: 'center', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
               <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.25rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(126, 154, 109, 0.1)', color: '#7E9A6D' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(126, 154, 109, 0.1)', color: 'var(--success)' }}>
                   <CheckCircle size={36} />
                 </div>
               </div>
@@ -4692,7 +4692,7 @@ function App() {
                 const record = records.find(r => r.id === selectedRecordId);
                 const documentCount = record?.items?.length || 0;
                 return (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.75rem', textAlign: 'left', background: 'rgba(0,0,0,0.15)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.75rem', textAlign: 'left', background: 'var(--bg-card-2)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                     <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.4rem', marginBottom: '0.4rem' }}>
                       ARCHIVE CONTENTS:
                     </div>
@@ -4732,7 +4732,7 @@ function App() {
             <div className={`toast ${notification.type}`}>
               <div className="toast-content">
                 <div className="toast-title">
-                  {notification.type === 'success' && <CheckCircle size={16} style={{ verticalAlign: 'middle', marginRight: '0.5rem', color: '#7E9A6D' }} />}
+                  {notification.type === 'success' && <CheckCircle size={16} style={{ verticalAlign: 'middle', marginRight: '0.5rem', color: 'var(--success)' }} />}
                   {notification.type === 'error' && <AlertCircle size={16} style={{ verticalAlign: 'middle', marginRight: '0.5rem', color: '#A23C3C' }} />}
                   {notification.title}
                 </div>
@@ -4770,12 +4770,12 @@ function App() {
             <button 
               onClick={(e) => { e.stopPropagation(); setShowRefineInput(true); }}
               style={{
-                background: 'linear-gradient(135deg, #A9871F, #C9A227)', 
+                background: 'linear-gradient(135deg, var(--accent-secondary), var(--accent-primary))', 
                 border: 'none', borderRadius: '20px',
                 padding: '0.6rem 1.2rem', color: 'white', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.9rem',
                 fontWeight: 600,
-                boxShadow: '0 4px 15px rgba(169, 135, 31, 0.4)'
+                boxShadow: '0 4px 15px rgba(124, 88, 17, 0.4)'
               }}
             >
               <Wand2 size={14} /> Refine Selection
@@ -4792,17 +4792,17 @@ function App() {
                   onKeyDown={(e) => { if (e.key === 'Enter') handleInlineRefine(); }}
                   style={{
                     flex: 1, padding: '0.55rem 0.75rem', borderRadius: '8px',
-                    border: '1px solid rgba(169, 135, 31, 0.4)', background: '#12151C',
+                    border: '1px solid rgba(124, 88, 17, 0.4)', background: 'var(--bg-card-2)',
                     color: 'var(--text-primary)', outline: 'none', fontSize: '0.85rem'
                   }}
                 />
                 <button 
                   onClick={handleInlineRefine}
                   style={{
-                    background: 'linear-gradient(135deg, #A9871F, #A9871F)', border: 'none', borderRadius: '8px',
+                    background: 'linear-gradient(135deg, var(--accent-secondary), var(--accent-secondary))', border: 'none', borderRadius: '8px',
                     padding: '0.55rem 0.9rem', color: 'white', cursor: 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', fontSize: '0.85rem', fontWeight: 600,
-                    boxShadow: '0 2px 10px rgba(169, 135, 31, 0.3)'
+                    boxShadow: '0 2px 10px rgba(124, 88, 17, 0.3)'
                   }}
                 >
                   <Send size={14} /> Refine
@@ -4818,12 +4818,12 @@ function App() {
                   <X size={14} />
                 </button>
               </div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: '#D9B84A', cursor: 'pointer', userSelect: 'none', fontWeight: 600, background: 'rgba(169, 135, 31, 0.1)', padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid rgba(169, 135, 31, 0.2)' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--accent-primary)', cursor: 'pointer', userSelect: 'none', fontWeight: 600, background: 'rgba(124, 88, 17, 0.1)', padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid rgba(124, 88, 17, 0.2)' }}>
                 <input 
                   type="checkbox" 
                   checked={saveToPlaybook} 
                   onChange={(e) => setSaveToPlaybook(e.target.checked)} 
-                  style={{ cursor: 'pointer', accentColor: '#A9871F', width: '15px', height: '15px' }}
+                  style={{ cursor: 'pointer', accentColor: 'var(--accent-secondary)', width: '15px', height: '15px' }}
                 />
                 <span>💡 Save refinement as permanent Playbook rule</span>
               </label>
@@ -4847,8 +4847,8 @@ function App() {
               <div
                 onClick={(e) => e.stopPropagation()}
                 style={{
-                  background: 'linear-gradient(145deg, #1A1E27, #12151C)',
-                  border: '1px solid rgba(169, 135, 31, 0.3)',
+                  background: 'linear-gradient(145deg, #FFFFFF, var(--bg-card-2))',
+                  border: '1px solid rgba(124, 88, 17, 0.3)',
                   borderRadius: '16px',
                   padding: '2rem',
                   maxWidth: '560px',
@@ -4858,7 +4858,7 @@ function App() {
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem' }}>
-                  <Sparkles size={22} style={{ color: '#D9B84A' }} />
+                  <Sparkles size={22} style={{ color: 'var(--accent-primary)' }} />
                   <h3 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--text-primary)' }}>Feed Back to Playbook</h3>
                 </div>
                 <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: '1.25rem' }}>
@@ -4876,7 +4876,7 @@ function App() {
                     padding: '0.8rem',
                     borderRadius: '8px',
                     border: '1px solid var(--border-color)',
-                    background: 'rgba(0, 0, 0, 0.2)',
+                    background: 'var(--bg-card-2)',
                     color: 'var(--text-primary)',
                     fontSize: '0.9rem',
                     fontFamily: 'inherit',
@@ -4934,7 +4934,7 @@ function App() {
                       padding: '0.6rem 1.2rem',
                       borderRadius: '8px',
                       border: 'none',
-                      background: 'linear-gradient(135deg, #A9871F, #A9871F)',
+                      background: 'linear-gradient(135deg, var(--accent-secondary), var(--accent-secondary))',
                       color: 'white',
                       fontWeight: 600,
                       cursor: isSubmittingFeedback || !feedbackInputText.trim() ? 'default' : 'pointer',
@@ -4967,33 +4967,33 @@ function App() {
                 className="custom-delete-modal"
                 onClick={(e) => e.stopPropagation()}
                 style={{
-                  background: 'linear-gradient(145deg, #1A1E27, #12151C)',
+                  background: 'linear-gradient(145deg, #FFFFFF, var(--bg-card-2))',
                   borderRadius: '16px', padding: '2rem', width: '90%', maxWidth: '400px',
                   boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(23, 20, 15, 0.1)',
                   animation: 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
                   display: 'flex', flexDirection: 'column', gap: '1.5rem', position: 'relative'
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#A23C3C' }}>
                    <Trash2 size={24} />
-                   <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#f8fafc', fontWeight: 600 }}>Confirm Deletion</h3>
+                   <h3 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--text-primary)', fontWeight: 600 }}>Confirm Deletion</h3>
                 </div>
                 
-                <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.95rem', lineHeight: '1.5' }}>
-                  Are you sure you want to delete <strong style={{ color: '#e2e8f0' }}>{deleteModal.itemName}</strong>? This action cannot be undone.
+                <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: '1.5' }}>
+                  Are you sure you want to delete <strong style={{ color: 'var(--text-primary)' }}>{deleteModal.itemName}</strong>? This action cannot be undone.
                 </p>
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
                   <button
                     onClick={() => setDeleteModal({ isOpen: false, recordId: '', itemIndex: -1, itemName: '' })}
                     style={{
-                      padding: '0.6rem 1.25rem', borderRadius: '8px', background: 'rgba(255, 255, 255, 0.05)',
-                      color: '#cbd5e1', border: '1px solid rgba(255, 255, 255, 0.1)', cursor: 'pointer',
+                      padding: '0.6rem 1.25rem', borderRadius: '8px', background: 'rgba(23, 20, 15, 0.05)',
+                      color: 'var(--text-secondary)', border: '1px solid rgba(23, 20, 15, 0.1)', cursor: 'pointer',
                       fontWeight: 500, transition: 'all 0.2s',
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)')}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(23, 20, 15, 0.1)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(23, 20, 15, 0.05)')}
                   >
                     Cancel
                   </button>
@@ -5044,21 +5044,21 @@ function App() {
                   maxWidth: '550px',
                   background: 'var(--bg-card)',
                   borderRadius: '16px',
-                  border: '1px solid rgba(169, 135, 31, 0.3)',
-                  boxShadow: '0 20px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05) inset',
+                  border: '1px solid rgba(124, 88, 17, 0.3)',
+                  boxShadow: '0 20px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(23, 20, 15, 0.05) inset',
                   overflow: 'hidden',
                   display: 'flex',
                   flexDirection: 'column'
                 }}
               >
-                <div style={{ padding: '1.5rem 1.5rem 1rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.01)' }}>
+                <div style={{ padding: '1.5rem 1.5rem 1rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(23, 20, 15, 0.01)' }}>
                   <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '1.1rem', fontWeight: 600 }}>
-                    <div style={{ background: 'rgba(169, 135, 31, 0.2)', padding: '0.4rem', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Wand2 size={16} style={{ color: '#D9B84A' }}/>
+                    <div style={{ background: 'rgba(124, 88, 17, 0.2)', padding: '0.4rem', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Wand2 size={16} style={{ color: 'var(--accent-primary)' }}/>
                     </div>
                     AI Background Research
                   </h3>
-                  <button onClick={() => !isAutoResearching && setShowAutoResearchModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '0.4rem', display: 'flex', borderRadius: '50%' }} onMouseOver={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'} onMouseOut={e => e.currentTarget.style.background = 'none'}>
+                  <button onClick={() => !isAutoResearching && setShowAutoResearchModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '0.4rem', display: 'flex', borderRadius: '50%' }} onMouseOver={e => e.currentTarget.style.background = 'rgba(23, 20, 15, 0.1)'} onMouseOut={e => e.currentTarget.style.background = 'none'}>
                     <X size={18} />
                   </button>
                 </div>
@@ -5074,8 +5074,8 @@ function App() {
                     {researchableEntities.map((entity, idx) => (
                       <label key={idx} style={{ 
                         display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer', 
-                        padding: '1rem', borderRadius: '8px', background: entity.checked ? 'rgba(169, 135, 31, 0.08)' : 'rgba(255,255,255,0.03)',
-                        border: `1px solid ${entity.checked ? 'rgba(169, 135, 31, 0.4)' : 'transparent'}`,
+                        padding: '1rem', borderRadius: '8px', background: entity.checked ? 'rgba(124, 88, 17, 0.08)' : 'rgba(23, 20, 15, 0.03)',
+                        border: `1px solid ${entity.checked ? 'rgba(124, 88, 17, 0.4)' : 'transparent'}`,
                         transition: 'all 0.2s ease'
                       }}>
                         <input 
@@ -5086,7 +5086,7 @@ function App() {
                             newEntities[idx].checked = e.target.checked;
                             setResearchableEntities(newEntities);
                           }}
-                          style={{ accentColor: '#D9B84A', width: '18px', height: '18px', marginTop: '2px', cursor: 'pointer' }}
+                          style={{ accentColor: 'var(--accent-primary)', width: '18px', height: '18px', marginTop: '2px', cursor: 'pointer' }}
                         />
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', flex: 1 }}>
                           <span style={{ fontWeight: 600, color: entity.checked ? 'var(--text-primary)' : 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: '1.4' }}>{entity.name}</span>
@@ -5099,7 +5099,7 @@ function App() {
                   </div>
                 </div>
 
-                <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', background: 'rgba(0,0,0,0.1)' }}>
+                <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', background: 'var(--bg-card-2)' }}>
                   <button 
                     onClick={() => setShowAutoResearchModal(false)}
                     disabled={isAutoResearching}
@@ -5116,9 +5116,9 @@ function App() {
                     disabled={isAutoResearching || researchableEntities.filter(e => e.checked).length === 0}
                     style={{ 
                       minWidth: '140px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem',
-                      background: 'linear-gradient(135deg, #A9871F, #A9871F)', border: 'none', color: 'white',
+                      background: 'linear-gradient(135deg, var(--accent-secondary), var(--accent-secondary))', border: 'none', color: 'white',
                       padding: '0.5rem 1rem', borderRadius: '8px', cursor: isAutoResearching ? 'not-allowed' : 'pointer', 
-                      fontSize: '0.9rem', fontWeight: 600, boxShadow: '0 4px 12px rgba(169, 135, 31, 0.3)',
+                      fontSize: '0.9rem', fontWeight: 600, boxShadow: '0 4px 12px rgba(124, 88, 17, 0.3)',
                       opacity: (isAutoResearching || researchableEntities.filter(e => e.checked).length === 0) ? 0.6 : 1
                     }}
                   >
@@ -5162,10 +5162,10 @@ function App() {
                 style={{
                   width: '100%',
                   maxWidth: '480px',
-                  background: '#12151C',
-                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  background: 'var(--bg-card-2)',
+                  border: '1px solid rgba(23, 20, 15, 0.12)',
                   borderRadius: '16px',
-                  boxShadow: '0 20px 50px rgba(0, 0, 0, 0.6), 0 0 30px rgba(201, 162, 39, 0.15)',
+                  boxShadow: '0 20px 50px rgba(0, 0, 0, 0.6), 0 0 30px rgba(156, 111, 23, 0.15)',
                   padding: '1.5rem',
                   display: 'flex',
                   flexDirection: 'column',
@@ -5178,16 +5178,16 @@ function App() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                     <div style={{
                       width: '36px', height: '36px', borderRadius: '10px',
-                      background: 'rgba(201, 162, 39, 0.15)', border: '1px solid rgba(201, 162, 39, 0.3)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#D9B84A'
+                      background: 'rgba(156, 111, 23, 0.15)', border: '1px solid rgba(156, 111, 23, 0.3)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-primary)'
                     }}>
                       <Pencil size={18} />
                     </div>
                     <div>
-                      <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600, color: '#f8fafc' }}>
+                      <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                         Rename File
                       </h3>
-                      <p style={{ margin: 0, fontSize: '0.75rem', color: '#94a3b8' }}>
+                      <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                         Updates metadata and physical file on disk
                       </p>
                     </div>
@@ -5207,25 +5207,25 @@ function App() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
                   {/* Original Name */}
                   <div style={{
-                    background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)',
+                    background: 'rgba(23, 20, 15, 0.03)', border: '1px solid rgba(23, 20, 15, 0.06)',
                     borderRadius: '8px', padding: '0.75rem'
                   }}>
                     <div style={{ fontSize: '0.7rem', color: '#64748b', marginBottom: '0.25rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                       Original Filename
                     </div>
-                    <div style={{ fontSize: '0.85rem', color: '#cbd5e1', fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontFamily: 'monospace', wordBreak: 'break-all' }}>
                       {renameModal.oldName}
                     </div>
                   </div>
 
                   {/* Arrow Icon */}
-                  <div style={{ textAlign: 'center', color: '#D9B84A', fontSize: '0.85rem', margin: '-0.3rem 0' }}>
+                  <div style={{ textAlign: 'center', color: 'var(--accent-primary)', fontSize: '0.85rem', margin: '-0.3rem 0' }}>
                     ↓
                   </div>
 
                   {/* New Name Input */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                    <label style={{ fontSize: '0.7rem', color: '#D9B84A', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    <label style={{ fontSize: '0.7rem', color: 'var(--accent-primary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                       New Filename (Standardized)
                     </label>
                     <input
@@ -5242,13 +5242,13 @@ function App() {
                         width: '100%',
                         padding: '0.65rem 0.85rem',
                         borderRadius: '8px',
-                        background: '#1A1E27',
-                        border: '1px solid #C9A227',
-                        color: '#f8fafc',
+                        background: 'var(--bg-card)',
+                        border: '1px solid var(--accent-primary)',
+                        color: 'var(--text-primary)',
                         fontFamily: 'monospace',
                         fontSize: '0.9rem',
                         outline: 'none',
-                        boxShadow: '0 0 12px rgba(201, 162, 39, 0.2)'
+                        boxShadow: '0 0 12px rgba(156, 111, 23, 0.2)'
                       }}
                       autoFocus
                     />
@@ -5262,9 +5262,9 @@ function App() {
                     style={{
                       padding: '0.55rem 1rem',
                       borderRadius: '8px',
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      border: '1px solid rgba(255, 255, 255, 0.1)',
-                      color: '#94a3b8',
+                      background: 'rgba(23, 20, 15, 0.05)',
+                      border: '1px solid rgba(23, 20, 15, 0.1)',
+                      color: 'var(--text-secondary)',
                       fontSize: '0.85rem',
                       fontWeight: 500,
                       cursor: 'pointer',
@@ -5281,13 +5281,13 @@ function App() {
                     style={{
                       padding: '0.55rem 1.25rem',
                       borderRadius: '8px',
-                      background: 'linear-gradient(135deg, #A9871F, #C9A227)',
+                      background: 'linear-gradient(135deg, var(--accent-secondary), var(--accent-primary))',
                       border: 'none',
                       color: 'white',
                       fontSize: '0.85rem',
                       fontWeight: 600,
                       cursor: 'pointer',
-                      boxShadow: '0 4px 12px rgba(37, 99, 235, 0.35)',
+                      boxShadow: '0 4px 12px rgba(124, 88, 17, 0.35)',
                       transition: 'all 0.15s'
                     }}
                   >

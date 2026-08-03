@@ -1,15 +1,17 @@
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500;1,9..144,600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
 :root {
-  --bg-dark: #12151C;
-  --bg-card: #1A1E27;
-  --border-color: rgba(201, 162, 39, 0.16);
-  --text-primary: #F4F1E8;
-  --text-secondary: #9B9686;
-  --accent-primary: #C9A227;
-  --accent-secondary: #A9871F;
-  --success: #7E9A6D;
+  --bg-dark: #F7F4EC;
+  --bg-card: #FFFFFF;
+  --bg-card-2: #EFEAE0;
+  --border-color: rgba(23, 20, 15, 0.12);
+  --text-primary: #17140F;
+  --text-secondary: #6E6A5E;
+  --accent-primary: #9C6F17;
+  --accent-secondary: #7C5811;
+  --success: #5B7A49;
   --danger: #A23C3C;
+  --warn: #9C6323;
   --font-family: 'IBM Plex Sans', sans-serif;
   --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
   --font-mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
@@ -27,7 +29,7 @@ body {
   color: var(--text-primary);
   line-height: 1.5;
   min-height: 100vh;
-  background-image: radial-gradient(circle at top right, rgba(201, 162, 39, 0.05), transparent 40%);
+  background-image: radial-gradient(circle at top right, rgba(156, 111, 23, 0.08), transparent 40%);
   background-attachment: fixed;
 }
 

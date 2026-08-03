@@ -91,7 +91,7 @@ const Questionnaire: React.FC<QuestionnaireProps> = ({ initialRecord, onSaveComp
               key={pb.id}
               onClick={() => setSelectedPlaybookId(pb.id)}
               style={{
-                background: 'rgba(255, 255, 255, 0.05)',
+                background: 'rgba(23, 20, 15, 0.05)',
                 border: '1px solid var(--border-color)',
                 borderRadius: '12px',
                 padding: '1.5rem',
@@ -185,7 +185,7 @@ const Questionnaire: React.FC<QuestionnaireProps> = ({ initialRecord, onSaveComp
       boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
     }}>
       {/* Header */}
-      <div style={{ padding: '2rem', borderBottom: '1px solid var(--border-color)', background: 'rgba(0,0,0,0.2)' }}>
+      <div style={{ padding: '2rem', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-card-2)' }}>
         <h2 style={{ fontSize: '1.8rem', fontWeight: 'bold', margin: '0 0 0.5rem 0', background: 'linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
           {playbook.name}
         </h2>
@@ -198,7 +198,7 @@ const Questionnaire: React.FC<QuestionnaireProps> = ({ initialRecord, onSaveComp
           width: '280px', 
           borderRight: '1px solid var(--border-color)', 
           overflowY: 'auto',
-          background: 'rgba(0,0,0,0.1)' 
+          background: 'var(--bg-card-2)' 
         }}>
           <ul style={{ listStyle: 'none', padding: '1rem 0', margin: 0 }}>
             {playbook.categories.map((cat, index) => {
@@ -212,8 +212,8 @@ const Questionnaire: React.FC<QuestionnaireProps> = ({ initialRecord, onSaveComp
                       textAlign: 'left',
                       padding: '1rem',
                       borderRadius: '12px',
-                      background: isActive ? 'rgba(201, 162, 39, 0.15)' : 'transparent',
-                      border: `1px solid ${isActive ? 'rgba(201, 162, 39, 0.3)' : 'transparent'}`,
+                      background: isActive ? 'rgba(156, 111, 23, 0.15)' : 'transparent',
+                      border: `1px solid ${isActive ? 'rgba(156, 111, 23, 0.3)' : 'transparent'}`,
                       color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
                       fontWeight: isActive ? 600 : 400,
                       transition: 'all 0.2s ease',
@@ -246,7 +246,7 @@ const Questionnaire: React.FC<QuestionnaireProps> = ({ initialRecord, onSaveComp
                   width: '100%',
                   padding: '1rem',
                   borderRadius: '12px',
-                  background: 'rgba(255, 255, 255, 0.03)',
+                  background: 'rgba(23, 20, 15, 0.03)',
                   border: '1px solid var(--border-color)',
                   color: 'var(--text-primary)',
                   fontSize: '1rem',
@@ -299,7 +299,7 @@ const Questionnaire: React.FC<QuestionnaireProps> = ({ initialRecord, onSaveComp
                               style={{
                                 display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer',
                                 padding: '0.75rem 1.5rem', borderRadius: '8px',
-                                background: isSelected ? 'rgba(201, 162, 39, 0.15)' : 'rgba(255,255,255,0.03)',
+                                background: isSelected ? 'rgba(156, 111, 23, 0.15)' : 'rgba(23, 20, 15, 0.03)',
                                 border: `1px solid ${isSelected ? 'var(--accent-primary)' : 'var(--border-color)'}`,
                                 transition: 'all 0.2s ease'
                               }}
@@ -340,7 +340,7 @@ const Questionnaire: React.FC<QuestionnaireProps> = ({ initialRecord, onSaveComp
           <div style={{ 
             padding: '1.5rem 2rem', 
             borderTop: '1px solid var(--border-color)', 
-            background: 'rgba(0,0,0,0.2)',
+            background: 'var(--bg-card-2)',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center'
@@ -351,8 +351,8 @@ const Questionnaire: React.FC<QuestionnaireProps> = ({ initialRecord, onSaveComp
               style={{
                 display: 'flex', alignItems: 'center', gap: '0.5rem',
                 padding: '0.75rem 1.25rem', borderRadius: '8px',
-                background: 'rgba(255,255,255,0.05)',
-                color: activeCategoryIndex === 0 ? 'rgba(255,255,255,0.2)' : 'var(--text-primary)',
+                background: 'rgba(23, 20, 15, 0.05)',
+                color: activeCategoryIndex === 0 ? 'rgba(23, 20, 15, 0.2)' : 'var(--text-primary)',
                 cursor: activeCategoryIndex === 0 ? 'not-allowed' : 'pointer',
                 border: '1px solid var(--border-color)'
               }}
@@ -373,7 +373,7 @@ const Questionnaire: React.FC<QuestionnaireProps> = ({ initialRecord, onSaveComp
                 style={{
                   display: 'flex', alignItems: 'center', gap: '0.5rem',
                   padding: '0.75rem 1.5rem', borderRadius: '8px',
-                  background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-color)',
+                  background: 'rgba(23, 20, 15, 0.05)', border: '1px solid var(--border-color)',
                   color: 'var(--text-primary)', cursor: isSaving ? 'wait' : 'pointer',
                   transition: 'background 0.2s'
                 }}
@@ -389,7 +389,7 @@ const Questionnaire: React.FC<QuestionnaireProps> = ({ initialRecord, onSaveComp
                     padding: '0.75rem 1.5rem', borderRadius: '8px',
                     background: 'linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))',
                     color: 'white', border: 'none', cursor: 'pointer',
-                    fontWeight: 500, boxShadow: '0 4px 14px rgba(201, 162, 39, 0.4)'
+                    fontWeight: 500, boxShadow: '0 4px 14px rgba(156, 111, 23, 0.4)'
                   }}
                 >
                   Next <ChevronRight size={18} />
