@@ -2427,7 +2427,7 @@ function App() {
 
                     {summary && (
                       <>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border-color)' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border-color)' }}>
                           <div style={{ fontWeight: '600', color: 'var(--text-secondary)', fontSize: '0.85rem', flexShrink: 0, letterSpacing: '0.05em' }}>CASE TYPE</div>
                       <div 
                         style={{ position: 'relative', display: 'inline-block' }}
@@ -3910,7 +3910,7 @@ function App() {
                         </p>
                       </div>
 
-                      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center' }}>
                         <button
                           onClick={() => fetchAutofillData(undefined, formCustomOverrides)}
                           style={{
@@ -4591,9 +4591,9 @@ function App() {
 
       {
         view === 'questionnaire' && !isProcessing && (
-          <main className="main-content" style={{ padding: '2rem', display: 'flex', justifyContent: 'center' }}>
-            <div style={{ width: '100%', maxWidth: '1000px', height: 'calc(100vh - 120px)' }}>
-              <Questionnaire 
+          <main className="main-content" style={{ padding: 'clamp(0.75rem, 4vw, 2rem)', display: 'flex', justifyContent: 'center' }}>
+            <div className="questionnaire-wrapper" style={{ width: '100%', maxWidth: '1000px', height: 'calc(100vh - 120px)' }}>
+              <Questionnaire
                 initialRecord={selectedRecordId ? records.find(r => r.id === selectedRecordId) : null}
                 onSaveComplete={() => {
                   fetchRecords();

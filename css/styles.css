@@ -331,6 +331,12 @@ a {
     .partner-strip-inner {
         gap: 0.4rem 1rem;
     }
+
+    .partner-strip-label,
+    .partner-strip-name,
+    .partner-strip-credential {
+        white-space: normal;
+    }
 }
 
 .hero-subtitle {
@@ -964,6 +970,8 @@ section {
     cursor: pointer;
     flex-direction: column;
     gap: 6px;
+    padding: 12px;
+    margin: -12px;
 }
 
 .mobile-menu-btn span {
@@ -1019,12 +1027,19 @@ section {
         top: 70px;
         left: 0;
         width: 100%;
+        max-height: calc(100vh - 70px);
+        overflow-y: auto;
         background: var(--ink);
         flex-direction: column;
         padding: 2rem;
         transform: translateY(-150%);
         transition: transform 0.3s ease-in-out;
         border-bottom: 1px solid var(--rule-soft);
+    }
+
+    .nav a:not(.btn) {
+        padding: 0.6rem 0;
+        font-size: 1.05rem;
     }
 
     .nav.active {

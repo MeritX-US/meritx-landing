@@ -77,15 +77,15 @@ const Questionnaire: React.FC<QuestionnaireProps> = ({ initialRecord, onSaveComp
 
   if (!selectedPlaybookId) {
     return (
-      <div className="glass-card" style={{ 
-        display: 'flex', flexDirection: 'column', height: '100%', 
+      <div className="glass-card" style={{
+        display: 'flex', flexDirection: 'column', height: '100%',
         borderRadius: '16px', overflow: 'hidden', border: '1px solid var(--border-color)',
-        background: 'var(--bg-card)', padding: '3rem'
+        background: 'var(--bg-card)', padding: 'clamp(1rem, 5vw, 3rem)'
       }}>
         <h2 style={{ fontSize: '1.8rem', fontWeight: 'bold', marginBottom: '2rem', textAlign: 'center', background: 'linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
           Select Intake Type (选择案件类型)
         </h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem', overflowY: 'auto' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(250px, 100%), 1fr))', gap: '1.5rem', overflowY: 'auto' }}>
           {Object.values(playbooksMap).map((pb: any) => (
             <div 
               key={pb.id}
@@ -174,11 +174,11 @@ const Questionnaire: React.FC<QuestionnaireProps> = ({ initialRecord, onSaveComp
   const isLastCategory = activeCategoryIndex === playbook.categories.length - 1;
 
   return (
-    <div className="glass-card" style={{ 
-      display: 'flex', 
-      flexDirection: 'column', 
-      height: '100%', 
-      borderRadius: '16px', 
+    <div className="glass-card questionnaire-panel" style={{
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      borderRadius: '16px',
       overflow: 'hidden',
       border: '1px solid var(--border-color)',
       background: 'var(--bg-card)',
@@ -192,13 +192,14 @@ const Questionnaire: React.FC<QuestionnaireProps> = ({ initialRecord, onSaveComp
         <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', margin: 0 }}>{playbook.description}</p>
       </div>
 
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      <div className="questionnaire-body" style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* Sidebar */}
-        <div style={{ 
-          width: '280px', 
-          borderRight: '1px solid var(--border-color)', 
+        <div className="questionnaire-sidebar" style={{
+          width: '280px',
+          flexShrink: 0,
+          borderRight: '1px solid var(--border-color)',
           overflowY: 'auto',
-          background: 'var(--bg-card-2)' 
+          background: 'var(--bg-card-2)'
         }}>
           <ul style={{ listStyle: 'none', padding: '1rem 0', margin: 0 }}>
             {playbook.categories.map((cat, index) => {
@@ -232,8 +233,8 @@ const Questionnaire: React.FC<QuestionnaireProps> = ({ initialRecord, onSaveComp
         </div>
 
         {/* Content */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <div style={{ flex: 1, overflowY: 'auto', padding: '3rem' }}>
+        <div className="questionnaire-content" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div className="questionnaire-scroll" style={{ flex: 1, overflowY: 'auto', padding: 'clamp(1rem, 5vw, 3rem)' }}>
             <h3 style={{ fontSize: '1.5rem', marginBottom: '2rem', color: 'var(--text-primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
               {activeCategory.title}
             </h3>
