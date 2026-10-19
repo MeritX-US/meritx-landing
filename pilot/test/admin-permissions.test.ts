@@ -49,7 +49,7 @@ test('admin can only do account management, status and access log', async () => 
     const acc = await adm.get('/api/accounts');
     assert.equal(acc.status, 200);
     assert.equal(acc.body.accounts.length, 5);
-    assert.ok(acc.body.accounts.every((x: any) => x.passwordHash === undefined), 'never expose hashes');
+    assert.ok(acc.body.accounts.every((x: any) => x.passwordHash === undefined && x.email === undefined), 'never expose hashes or emails');
     assert.equal((await adm.get('/api/case/status')).status, 200);
     const log = await adm.get('/api/access-log');
     assert.equal(log.status, 200);

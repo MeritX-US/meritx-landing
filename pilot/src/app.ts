@@ -15,6 +15,12 @@ export const ALLOWED_MIME = new Set([
 ]);
 export const CONSENT_VERSION = 'draft-lawyer-review-required';
 
+/** The ONLY fields an account listing may expose. */
+export const ACCOUNT_SUMMARY_KEYS = ['enabled', 'id', 'name', 'role'] as const;
+export function accountSummary(a: { id: string; name: string; role: string; enabled: boolean }) {
+  return { id: a.id, name: a.name, role: a.role, enabled: a.enabled };
+}
+
 export interface AppDeps { store?: Store; log?: AccessLog }
 
 export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
@@ -262,10 +268,8 @@ export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
   // Accounts are changed only via PILOT_ACCOUNTS + redeploy; there is no write API by design.
   api.get('/accounts', allow('admin'), (req: AuthedRequest, res) => {
     audit(req, 'accounts.view');
-    res.json({
-      maxAccounts: cfg.maxAccounts,
-      accounts: cfg.accounts.map(a => ({ id: a.id, name: a.name, role: a.role, email: a.email })),
-    });
+    // Explicit allowlist of fields. Never emails, hashes, reset tokens/links, or any case data.
+    res.json({ accounts: cfg.accounts.map(accountSummary) });
   });
 
   // ---------- access log (stub) ----------

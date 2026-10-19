@@ -16,6 +16,7 @@ export interface Account {
   name: string;          // display name (lawyer's name is shown on approved assessments)
   role: Role;
   passwordHash: string;  // scrypt$N$r$p$salt$hash (see scripts/hash-password.ts)
+  enabled: boolean;      // optional "enabled": false in config disables login without removing the entry
 }
 
 export interface PilotConfig {
@@ -65,7 +66,8 @@ export function parseAccounts(raw: string, maxAccounts = DEFAULT_MAX_ACCOUNTS): 
     if (!/^scrypt\$\d+\$\d+\$\d+\$[A-Za-z0-9+/=]+\$[A-Za-z0-9+/=]+$/.test(a.passwordHash)) {
       throw new ConfigError(`PILOT_ACCOUNTS[${i}].passwordHash must be a scrypt hash (run npm run hash-password)`);
     }
-    return { id: a.id.trim(), email: a.email.trim().toLowerCase(), name: a.name.trim(), role: a.role, passwordHash: a.passwordHash };
+    if (a.enabled !== undefined && typeof a.enabled !== 'boolean') throw new ConfigError(`PILOT_ACCOUNTS[${i}].enabled must be a boolean`);
+    return { id: a.id.trim(), email: a.email.trim().toLowerCase(), name: a.name.trim(), role: a.role, passwordHash: a.passwordHash, enabled: a.enabled !== false };
   });
   const ids = new Set(accounts.map(a => a.id));
   const emails = new Set(accounts.map(a => a.email));
