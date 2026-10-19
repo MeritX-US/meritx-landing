@@ -1,0 +1,113 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { loadConfig, loadAiConfig } from '../src/config';
+import { AiClient, fillTemplate, type FetchLike } from '../src/ai/provider';
+import { makeApp, agents, testEnv } from './helpers';
+
+// Synthetic, generic prompt file written to a temp dir (real prompts live only in untracked files).
+function promptsFile() {
+  const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'mx-ai-')), 'prompts.json');
+  fs.writeFileSync(f, JSON.stringify({ assessment: { system: 'TEST SYSTEM', user: 'Visa={{visaType}}\n{{questionnaire}}\n{{materials}}' } }));
+  return f;
+}
+function aiEnv(provider: string, extra: Record<string, string> = {}) {
+  return { AI_PROVIDER: provider, AI_MODEL: 'test-model', AI_API_KEY: 'test-key-not-real', AI_PAID_TIER_VERIFIED: 'true', AI_PROMPTS_FILE: promptsFile(), ...extra };
+}
+function mockFetch(reply: any, status = 200) {
+  const calls: { url: string; init: any; body: any }[] = [];
+  const f: FetchLike = async (url, init) => {
+    calls.push({ url, init, body: JSON.parse(init.body) });
+    return { ok: status < 400, status, headers: { get: (n: string) => (n === 'x-request-id' || n === 'request-id' ? 'req_test' : null) }, json: async () => reply };
+  };
+  return { f, calls };
+}
+const PDF = { mimeType: 'application/pdf', data: Buffer.from('%PDF-1.4 synthetic'), filename: 'a.pdf' };
+const DOCX = { mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', data: Buffer.from('PK'), filename: 'b.docx' };
+
+test('AI is off by default and enabling it requires the human verification gate', () => {
+  assert.equal(loadConfig(testEnv()).ai.provider, 'none');
+  assert.throws(() => loadAiConfig(aiEnv('gemini', { AI_PAID_TIER_VERIFIED: '' })), /AI_PAID_TIER_VERIFIED/);
+  assert.throws(() => loadAiConfig(aiEnv('gemini', { AI_API_KEY: '' })), /AI_API_KEY/);
+  assert.throws(() => loadAiConfig(aiEnv('gemini', { AI_PROMPTS_FILE: '' })), /AI_PROMPTS_FILE/);
+  assert.throws(() => loadAiConfig(aiEnv('gemini', { AI_BASE_URL: 'http://insecure' })), /https/);
+  assert.throws(() => loadAiConfig(aiEnv('someother')), /AI_PROVIDER/);
+});
+
+test('gemini: inline_data only (no Files API), key in header not URL', async () => {
+  const { f, calls } = mockFetch({ candidates: [{ content: { parts: [{ text: 'draft' }] } }], responseId: 'r1' });
+  const c = new AiClient(loadAiConfig(aiEnv('gemini')), f);
+  const r = await c.generate({ system: 's', prompt: 'p', attachments: [PDF, DOCX] });
+  assert.equal(r.text, 'draft');
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].url, /generativelanguage\.googleapis\.com\/v1beta\/models\/test-model:generateContent$/);
+  assert.ok(!calls[0].url.includes('key='), 'API key must not be in the URL');
+  assert.equal(calls[0].init.headers['x-goog-api-key'], 'test-key-not-real');
+  const parts = calls[0].body.contents[0].parts;
+  assert.equal(parts.filter((p: any) => p.inline_data).length, 1, 'docx skipped, pdf inlined');
+  assert.ok(!JSON.stringify(calls[0].body).includes('file_uri'), 'never references uploaded files');
+});
+
+test('openai: store=false, inline file part, bearer auth', async () => {
+  const { f, calls } = mockFetch({ choices: [{ message: { content: 'draft' } }] });
+  const c = new AiClient(loadAiConfig(aiEnv('openai')), f);
+  const r = await c.generate({ system: 's', prompt: 'p', attachments: [PDF] });
+  assert.equal(r.text, 'draft'); assert.equal(r.requestId, 'req_test');
+  assert.equal(calls[0].url, 'https://api.openai.com/v1/chat/completions');
+  assert.equal(calls[0].body.store, false);
+  assert.equal(calls[0].init.headers.authorization, 'Bearer test-key-not-real');
+  assert.equal(calls[0].body.messages[1].content[0].type, 'file');
+  assert.match(calls[0].body.messages[1].content[0].file.file_data, /^data:application\/pdf;base64,/);
+});
+
+test('anthropic: base64 document block, no Files API', async () => {
+  const { f, calls } = mockFetch({ content: [{ type: 'text', text: 'draft' }] });
+  const c = new AiClient(loadAiConfig(aiEnv('anthropic', { AI_BASE_URL: 'https://proxy.example.test/' })), f);
+  await c.generate({ system: 's', prompt: 'p', attachments: [PDF] });
+  assert.equal(calls[0].url, 'https://proxy.example.test/v1/messages');
+  assert.equal(calls[0].init.headers['x-api-key'], 'test-key-not-real');
+  assert.equal(calls[0].body.messages[0].content[0].type, 'document');
+  assert.equal(calls[0].body.messages[0].content[0].source.type, 'base64');
+});
+
+test('provider errors never echo the response body', async () => {
+  const { f } = mockFetch({ error: { message: 'echo of SYNTHETIC-PII' } }, 400);
+  const c = new AiClient(loadAiConfig(aiEnv('openai')), f);
+  await assert.rejects(c.generate({ system: 's', prompt: 'p' }), (e: any) => !String(e.message).includes('SYNTHETIC-PII'));
+});
+
+test('fillTemplate', () => {
+  assert.equal(fillTemplate('a {{x}} b {{y}}', { x: '1' }), 'a 1 b ');
+});
+
+test('route: lawyer-only, requires visa type, result unapproved and hidden from employee', async () => {
+  const { f, calls } = mockFetch({ choices: [{ message: { content: 'AI DRAFT (synthetic)' } }] });
+  const { app } = makeApp({ ...aiEnv('openai'), LAWYER_APPROVED_PUBLISH: 'true', PILOT_QUESTIONNAIRE_FILE: '' }, { fetch: f });
+  const a = await agents(app);
+  await a.employee.post('/api/consent').send({ agree: true });
+  const mid = (await a.employee.post('/api/materials').attach('file', Buffer.from('%PDF-1.4 x'), { filename: 'cv.pdf', contentType: 'application/pdf' })).body.id;
+  for (const r of ['employee', 'enterprise', 'admin'] as const) assert.equal((await a[r].post('/api/assessment/generate')).status, 403);
+  assert.equal((await a.lawyer.post('/api/assessment/generate')).status, 409, 'visa type must be chosen first');
+  assert.equal(calls.length, 0);
+  await a.lawyer.put('/api/case/visa-type').send({ visaType: 'SYNTHETIC-VISA' });
+  const g = await a.lawyer.post('/api/assessment/generate').send({ materialIds: [mid] });
+  assert.equal(g.status, 200);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].body.messages[1].content.at(-1).text, /Visa=SYNTHETIC-VISA/);
+  const la = (await a.lawyer.get('/api/assessment')).body;
+  assert.equal(la.source, 'ai'); assert.equal(la.approval, null);
+  assert.equal((await a.employee.get('/api/assessment')).status, 404, 'AI output is never shown before lawyer approval');
+  await a.lawyer.post('/api/assessment/approve');
+  assert.equal((await a.employee.get('/api/assessment')).body.text, 'AI DRAFT (synthetic)');
+  const log = JSON.stringify((await a.lawyer.get('/api/access-log')).body);
+  assert.match(log, /ai\.assessment\.generate/);
+  assert.ok(!log.includes('AI DRAFT'), 'AI output not in access log');
+});
+
+test('route: 503 when AI disabled', async () => {
+  const { app } = makeApp();
+  const a = await agents(app);
+  assert.equal((await a.lawyer.post('/api/assessment/generate')).status, 503);
+});

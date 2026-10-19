@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import type { Cipher } from './crypto';
 
 /**
  * Basic access-log STUB (pilot item #5). Append-only JSON lines in the private
@@ -21,17 +22,21 @@ export interface AccessEntry {
 
 export class AccessLog {
   private file: string;
-  constructor(dataDir: string) {
+  /** With a cipher, each line is individually AES-GCM encrypted (base64), so the log is encrypted at rest too. */
+  constructor(dataDir: string, private cipher?: Cipher) {
     fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
-    this.file = path.join(dataDir, 'access.log.jsonl');
+    this.file = path.join(dataDir, cipher ? 'access.log.enc' : 'access.log.jsonl');
   }
   append(e: Omit<AccessEntry, 'ts'>) {
-    const line = JSON.stringify({ ts: new Date().toISOString(), ...e }) + '\n';
-    fs.appendFileSync(this.file, line, { mode: 0o600 });
+    const json = JSON.stringify({ ts: new Date().toISOString(), ...e });
+    const line = this.cipher ? this.cipher.encrypt(Buffer.from(json, 'utf8'), 'accesslog').toString('base64') : json;
+    fs.appendFileSync(this.file, line + '\n', { mode: 0o600 });
   }
   list(limit = 500): AccessEntry[] {
     if (!fs.existsSync(this.file)) return [];
     const lines = fs.readFileSync(this.file, 'utf8').trim().split('\n').filter(Boolean);
-    return lines.slice(-limit).map(l => JSON.parse(l));
+    return lines.slice(-limit).map(l => JSON.parse(this.cipher
+      ? this.cipher.decrypt(Buffer.from(l, 'base64'), 'accesslog').toString('utf8')
+      : l));
   }
 }

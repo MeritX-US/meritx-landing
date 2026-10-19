@@ -8,9 +8,9 @@ action, resource id, outcome, timestamp; never filenames, answers, emails or AI 
 Viewable by lawyer + admin only (`GET /api/access-log`).
 
 Remaining:
-- [ ] Encrypt the log at rest with the PR2 store (or keep content-free and document why).
+- [x] Encrypt the log at rest (PR2: each line AES-GCM).
 - [ ] Tamper evidence: hash-chain each line (prev hash) or ship to write-once storage.
-- [ ] Log every AI vendor call (provider, model, request id, byte count – no content) – PR2.
+- [x] Log every AI vendor call (provider, model, request id, file count; no content) (PR2).
 - [ ] Decide whether both admins or only the MeritX owner (<admin-1>) may read the access log (PRD: owner + lawyer).
 - [ ] Export (CSV) for the lawyer's file; retention = case lifetime, destroyed with the case.
 - [ ] Record IP (hashed) / user-agent for login events.

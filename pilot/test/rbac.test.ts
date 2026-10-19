@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { makeApp, agents } from './helpers';
+import { makeApp, agents, download } from './helpers';
 
 const PDF = Buffer.from('%PDF-1.4\n% synthetic test fixture\n');
 
@@ -37,8 +37,8 @@ test('employee: sees only own materials, own questionnaire, status, published to
   assert.match(c.body.disclaimer, /is legal advice/);
   assert.match(c.body.disclaimer, /not a law firm/);
 
-  assert.equal((await a.employee.get(`/api/materials/${empMaterial}/download`)).status, 200);
-  assert.equal((await a.employee.get(`/api/materials/${lawyerMaterial}/download`)).status, 404);
+  assert.equal((await download(a.employee, empMaterial)).status, 200);
+  assert.equal((await download(a.employee, lawyerMaterial)).status, 404);
   assert.equal((await a.employee.delete(`/api/materials/${lawyerMaterial}`)).status, 404);
 });
 
@@ -75,12 +75,12 @@ test('lawyer: sees all materials and full case, can manage case', async () => {
   assert.equal(c.body.role, 'lawyer');
   assert.deepEqual(new Set(c.body.materials.map((m: any) => m.id)), new Set([empMaterial, lawyerMaterial]));
   assert.ok('questionnaire' in c.body && 'assessment' in c.body && 'consent' in c.body);
-  assert.equal((await a.lawyer.get(`/api/materials/${empMaterial}/download`)).status, 200);
+  assert.equal((await download(a.lawyer, empMaterial)).status, 200);
   assert.equal((await a.lawyer.put(`/api/materials/${empMaterial}/category`).send({ category: 'CV' })).status, 200);
   assert.equal((await a.lawyer.put('/api/case/status').send({ status: 'in_review' })).status, 200);
   assert.equal((await a.lawyer.put('/api/case/status').send({ status: 'bogus' })).status, 400);
   assert.equal((await a.lawyer.get('/api/access-log')).status, 200);
-  const dl = await a.lawyer.get(`/api/materials/${empMaterial}/download`);
+  const dl = await download(a.lawyer, empMaterial);
   assert.match(String(dl.headers['content-disposition']), /^attachment/);
   assert.equal(dl.headers['cache-control'], 'no-store');
 });
@@ -97,7 +97,7 @@ test('enterprise: sees only progress/status, nothing else', async () => {
   assert.equal(c.body.status, 'documents_needed');
   assert.deepEqual(Object.keys((await a.enterprise.get('/api/case/status')).body).sort(), ['status', 'updatedAt']);
   const denied: [string, string, any?][] = [
-    ['get', '/api/materials'], ['get', `/api/materials/${empMaterial}/download`], ['post', '/api/materials'],
+    ['get', '/api/materials'], ['post', `/api/materials/${empMaterial}/download-url`], ['post', '/api/materials'],
     ['get', '/api/questionnaire'], ['put', '/api/questionnaire', { answers: {} }], ['post', '/api/consent', { agree: true }],
     ['get', '/api/assessment'], ['put', '/api/case/status', { status: 'filed' }], ['get', '/api/access-log'],
     ['delete', `/api/materials/${empMaterial}`], ['post', '/api/todos', { text: 'x' }],
@@ -114,7 +114,7 @@ test('admin: status + access log only, no case materials', async () => {
   const c = await a.admin.get('/api/case');
   assert.deepEqual(Object.keys(c.body).sort(), ['role', 'status', 'updatedAt']);
   assert.equal((await a.admin.get('/api/access-log')).status, 200);
-  for (const [m, p] of [['get', '/api/materials'], ['get', `/api/materials/${empMaterial}/download`], ['get', '/api/questionnaire'], ['get', '/api/assessment'], ['put', '/api/case/status']]) {
+  for (const [m, p] of [['get', '/api/materials'], ['post', `/api/materials/${empMaterial}/download-url`], ['get', '/api/questionnaire'], ['get', '/api/assessment'], ['put', '/api/case/status']]) {
     const r = await (a.admin as any)[m](p).send({ status: 'filed' });
     assert.equal(r.status, 403, `${m} ${p} => ${r.status}`);
   }
@@ -122,7 +122,7 @@ test('admin: status + access log only, no case materials', async () => {
 
 test('access log records actions without content or filenames', async () => {
   const { a, empMaterial } = await seeded();
-  await a.lawyer.get(`/api/materials/${empMaterial}/download`);
+  await download(a.lawyer, empMaterial);
   await a.enterprise.get('/api/materials');
   const rows = (await a.lawyer.get('/api/access-log')).body as any[];
   const text = JSON.stringify(rows);

@@ -5,7 +5,9 @@ import multer from 'multer';
 import { publicDir, type PilotConfig } from './config';
 import { Auth, allow, ConcurrencyLimiter, type AuthedRequest } from './auth';
 import { detectFileType } from './fileType';
-import { FileStore, CASE_STATUSES, type Store, type CaseStatus } from './store';
+import { EncryptedFileStore, CASE_STATUSES, type Store, type CaseStatus } from './store';
+import { Cipher } from './crypto';
+import { AiClient, AiProviderError, fillTemplate, type FetchLike } from './ai/provider';
 import { AccessLog } from './accessLog';
 import { securityHeaders, strictCors, requireHttps, ROBOTS_TXT } from './security';
 import { caseViewFor, statusView, visibleMaterials, materialMeta, employeeAssessment } from './views';
@@ -22,18 +24,20 @@ export function accountSummary(a: { id: string; name: string; role: string; enab
   return { id: a.id, name: a.name, role: a.role, enabled: a.enabled };
 }
 
-export interface AppDeps { store?: Store; log?: AccessLog; auth?: (auth: Auth) => void }
+export interface AppDeps { store?: Store; log?: AccessLog; fetch?: FetchLike; auth?: (auth: Auth) => void }
 
 export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
   const app = express();
-  const store: Store = deps.store || new FileStore(cfg.dataDir);
-  // Revoked sessions are persisted in the case data store (disk), so logout survives restarts.
+  const cipher = new Cipher(cfg.encryptionKey);
+  const store: Store = deps.store || new EncryptedFileStore(cfg.dataDir, cipher);
+  // Revoked sessions are persisted in the (encrypted) case data store, so logout survives restarts.
   const auth = new Auth(cfg, {
     load: () => store.read().revokedSessions || {},
     save: r => { store.update(st => { st.revokedSessions = r; }); },
   });
   deps.auth?.(auth);
-  const log = deps.log || new AccessLog(cfg.dataDir);
+  const log = deps.log || new AccessLog(cfg.dataDir, cipher);
+  const ai = new AiClient(cfg.ai, deps.fetch);
   const now = () => new Date().toISOString();
 
   app.disable('x-powered-by');
@@ -42,6 +46,13 @@ export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
   app.use(requireHttps(cfg));
   app.use(strictCors(cfg));
   app.use(express.json({ limit: '256kb' }));
+
+  const signDownload = (id: string, sub: string, exp: number) =>
+    crypto.createHmac('sha256', cfg.downloadUrlSecret).update(`dl|${id}|${sub}|${exp}`).digest('base64url');
+  const verifyDownload = (id: string, sub: string, exp: number, sig: string) => {
+    const a = Buffer.from(signDownload(id, sub, exp)), b = Buffer.from(sig);
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  };
 
   const audit = (req: AuthedRequest, action: string, outcome: 'ok' | 'denied' | 'error' = 'ok', resource?: string) =>
     log.append({ actor: req.account?.id || 'anonymous', role: req.account?.role || 'none', action, resource, outcome });
@@ -205,18 +216,14 @@ export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
     return visibleMaterials(req.account!, s).find(m => m.id === req.params.id) || null;
   }
 
-  // PR1: authenticated streaming download (no static /uploads route exists).
-  // PR2 replaces this with short-lived signed URLs over encrypted blobs.
-  api.get('/materials/:id/download', allow('employee', 'lawyer'), (req: AuthedRequest, res) => {
+  // Short-lived signed download URL (bound to the requesting account). No static /uploads.
+  api.post('/materials/:id/download-url', allow('employee', 'lawyer'), (req: AuthedRequest, res) => {
     const m = findVisibleMaterial(req);
-    if (!m) { audit(req, 'material.download', 'denied', req.params.id); return res.status(404).json({ error: 'not found' }); }
-    const data = store.getBlob(m.id);
-    if (!data) return res.status(404).json({ error: 'not found' });
-    audit(req, 'material.download', 'ok', m.id);
-    res.setHeader('Content-Type', m.mimeType);
-    res.setHeader('Content-Disposition', `attachment; filename="${m.filename.replace(/"/g, '')}"`);
-    res.setHeader('Cache-Control', 'no-store');
-    res.send(data);
+    if (!m) { audit(req, 'material.downloadUrl', 'denied', req.params.id); return res.status(404).json({ error: 'not found' }); }
+    const exp = Math.floor(Date.now() / 1000) + cfg.downloadUrlTtlSeconds;
+    const sig = signDownload(m.id, req.account!.id, exp);
+    audit(req, 'material.downloadUrl', 'ok', m.id);
+    res.json({ url: `/files/${m.id}?exp=${exp}&sig=${sig}`, expiresAt: new Date(exp * 1000).toISOString() });
   });
 
   api.put('/materials/:id/category', allow('lawyer'), (req: AuthedRequest, res) => {
@@ -312,8 +319,56 @@ export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
     res.json(log.list());
   });
 
+  // ---------- AI: lawyer-triggered eligibility assessment draft ----------
+  api.post('/assessment/generate', allow('lawyer'), async (req: AuthedRequest, res) => {
+    if (!ai.enabled || !cfg.ai.prompts) return res.status(503).json({ error: 'AI provider not configured' });
+    const s = store.read();
+    // Guardrail: no visa-specific AI output before the lawyer has chosen the visa type.
+    if (!s.case.visaType) return res.status(409).json({ error: 'set visa type first' });
+    const ids: string[] = Array.isArray(req.body?.materialIds) ? req.body.materialIds.map(String) : [];
+    const mats = s.materials.filter(m => ids.includes(m.id));
+    const attachments = mats.map(m => ({ mimeType: m.mimeType, filename: m.filename, data: store.getBlob(m.id) || Buffer.alloc(0) }));
+    const { skipped } = ai.partition(attachments);
+    const vars = {
+      visaType: s.case.visaType,
+      questionnaire: cfg.questions.map(q => `${q.text}\n${s.questionnaire.answers[q.id] || '(no answer)'}`).join('\n\n'),
+      materials: mats.map(m => `- ${m.filename}${m.category ? ` [${m.category}]` : ''}`).join('\n'),
+    };
+    try {
+      const r = await ai.generate({ system: cfg.ai.prompts.assessment.system, prompt: fillTemplate(cfg.ai.prompts.assessment.user, vars), attachments });
+      store.update(st => { st.assessment = { text: r.text, source: 'ai', updatedAt: now(), approval: null }; });
+      audit(req, 'ai.assessment.generate', 'ok', `${r.provider}:${r.model}:${r.requestId || '-'}:files=${attachments.length - skipped.length}`);
+      res.json({ ok: true, chars: r.text.length, skippedMaterialIds: mats.filter((_m, i) => skipped.includes(attachments[i])).map(m => m.id) });
+    } catch (e: any) {
+      audit(req, 'ai.assessment.generate', 'error', ai.label);
+      res.status(502).json({ error: e instanceof AiProviderError ? `AI provider error (${e.status})` : 'AI request failed' });
+    }
+  });
+
   api.use((_req, res) => res.status(404).json({ error: 'not found' }));
   app.use('/api', api);
+
+  // ---------- signed file downloads ----------
+  // Requires BOTH a valid, unexpired signature AND the same signed-in account it was issued to,
+  // and re-checks visibility at download time.
+  app.get('/files/:id', (req: AuthedRequest, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const acct = auth.resolve(req);
+    if (!acct) return res.status(401).json({ error: 'unauthenticated' });
+    req.account = acct;
+    const exp = Number(req.query.exp), sig = String(req.query.sig || '');
+    if (!Number.isFinite(exp) || exp < Math.floor(Date.now() / 1000) || !verifyDownload(req.params.id, acct.id, exp, sig)) {
+      audit(req, 'material.download', 'denied', req.params.id);
+      return res.status(403).json({ error: 'link invalid or expired' });
+    }
+    const m = findVisibleMaterial(req);
+    const data = m ? store.getBlob(m.id) : null;
+    if (!m || !data) { audit(req, 'material.download', 'denied', req.params.id); return res.status(404).json({ error: 'not found' }); }
+    audit(req, 'material.download', 'ok', m.id);
+    res.setHeader('Content-Type', m.mimeType);
+    res.setHeader('Content-Disposition', `attachment; filename="${m.filename.replace(/"/g, '')}"`);
+    res.send(data);
+  });
 
   // ---------- static UI (login page + shell; contains no data) ----------
   app.use(express.static(publicDir(), { index: 'index.html', dotfiles: 'deny', redirect: false }));
