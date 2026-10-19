@@ -40,15 +40,24 @@ export function testEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
     PRIVATE_MODE: 'true',
     PILOT_ACCOUNTS: accountsJson(),
     SESSION_SECRET: 'test-only-session-secret-0123456789abcdef',
+    PILOT_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64'), // test-only constant key
+    DOWNLOAD_URL_SECRET: 'test-only-download-url-secret-0123456789',
     PILOT_DATA_DIR: dataDir,
     NODE_ENV: 'test',
     ...extra,
   };
 }
 
-export function makeApp(extra: Record<string, string> = {}) {
+export function makeApp(extra: Record<string, string> = {}, deps: Parameters<typeof createApp>[1] = {}) {
   const cfg: PilotConfig = loadConfig(testEnv(extra));
-  return { cfg, app: createApp(cfg) };
+  return { cfg, app: createApp(cfg, deps) };
+}
+
+/** Signed-URL download flow: ask for a URL, then fetch it with the same session. */
+export async function download(agent: any, id: string) {
+  const u = await agent.post(`/api/materials/${id}/download-url`);
+  if (u.status !== 200) return u;
+  return agent.get(u.body.url).buffer(true);
 }
 
 export type RoleName = keyof typeof PW;

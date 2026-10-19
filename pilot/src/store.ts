@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import type { Cipher } from './crypto';
 
 /**
  * Single-case data model for the private pilot. One case, one employee,
@@ -62,9 +63,9 @@ export function emptyState(now = new Date().toISOString()): PilotState {
 }
 
 /**
- * Storage boundary. PR1 ships a plaintext file implementation that keeps
- * everything in a private data dir (never served statically). PR2 swaps in
- * an app-level-encrypted implementation behind the same interface.
+ * Storage boundary. Only an app-level-encrypted implementation ships
+ * (PR2 removed PR1's plaintext FileStore). Data lives in a private data dir
+ * that is never served statically.
  */
 export interface Store {
   read(): PilotState;
@@ -82,37 +83,47 @@ function writeAtomic(file: string, data: string | Buffer) {
 
 const SAFE_ID = /^[a-f0-9-]{8,64}$/;
 
-export class FileStore implements Store {
+/**
+ * PR2: app-level encrypted store. Same layout as FileStore, but state.json and
+ * every blob are AES-256-GCM ciphertext on disk. Plaintext never touches disk
+ * (uploads are held in memory by multer and encrypted before write).
+ */
+export class EncryptedFileStore implements Store {
   private stateFile: string;
   private blobDir: string;
 
-  constructor(private dataDir: string) {
+  constructor(dataDir: string, private cipher: Cipher) {
     fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
     this.blobDir = path.join(dataDir, 'blobs');
     fs.mkdirSync(this.blobDir, { recursive: true, mode: 0o700 });
-    this.stateFile = path.join(dataDir, 'state.json');
-    if (!fs.existsSync(this.stateFile)) writeAtomic(this.stateFile, JSON.stringify(emptyState()));
+    this.stateFile = path.join(dataDir, 'state.enc');
+    if (fs.existsSync(path.join(dataDir, 'state.json'))) {
+      throw new Error('plaintext state.json found in PILOT_DATA_DIR; refuse to mix plaintext and encrypted data');
+    }
+    if (!fs.existsSync(this.stateFile)) this.writeState(emptyState());
+    else this.read(); // fail fast on wrong key
   }
 
+  private writeState(s: PilotState) {
+    writeAtomic(this.stateFile, this.cipher.encrypt(Buffer.from(JSON.stringify(s), 'utf8'), 'state'));
+  }
   read(): PilotState {
-    return JSON.parse(fs.readFileSync(this.stateFile, 'utf8')) as PilotState;
+    return JSON.parse(this.cipher.decrypt(fs.readFileSync(this.stateFile), 'state').toString('utf8')) as PilotState;
   }
-
   update(mutator: (s: PilotState) => void): PilotState {
     const s = this.read();
     mutator(s);
-    writeAtomic(this.stateFile, JSON.stringify(s));
+    this.writeState(s);
     return s;
   }
-
   private blobPath(id: string): string {
     if (!SAFE_ID.test(id)) throw new Error('invalid blob id');
     return path.join(this.blobDir, id);
   }
-  putBlob(id: string, data: Buffer) { writeAtomic(this.blobPath(id), data); }
+  putBlob(id: string, data: Buffer) { writeAtomic(this.blobPath(id), this.cipher.encrypt(data, `blob:${id}`)); }
   getBlob(id: string): Buffer | null {
     const p = this.blobPath(id);
-    return fs.existsSync(p) ? fs.readFileSync(p) : null;
+    return fs.existsSync(p) ? this.cipher.decrypt(fs.readFileSync(p), `blob:${id}`) : null;
   }
   deleteBlob(id: string) {
     const p = this.blobPath(id);

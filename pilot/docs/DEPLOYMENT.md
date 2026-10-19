@@ -11,7 +11,8 @@ API keys, env vars, disk or domain. Nothing in this PR changes `app/`, `netlify.
    `autoDeploy: false`. Or any Docker host using `pilot/Dockerfile`.
 3. Set secrets in the host's secret store (never in git / chat):
    `SESSION_SECRET`, `PILOT_ACCOUNTS` (or a secret file + `PILOT_ACCOUNTS_FILE`), optional
-   `PILOT_QUESTIONNAIRE_FILE`. PR2 adds `PILOT_ENCRYPTION_KEY`, `DOWNLOAD_URL_SECRET`, AI keys.
+   `PILOT_QUESTIONNAIRE_FILE`, `PILOT_ENCRYPTION_KEY` (back it up offline in a password manager:
+   losing it means the data is unrecoverable), `DOWNLOAD_URL_SECRET`, and later `AI_*`.
 4. Use the default `*.onrender.com` name or an unlisted subdomain; never link it from the
    landing site/sitemap. Only one person holds production access.
 5. Smoke test with synthetic accounts: `/robots.txt`, `X-Robots-Tag`, 401 on `/api/case`,
@@ -29,6 +30,13 @@ API keys, env vars, disk or domain. Nothing in this PR changes `app/`, `netlify.
 | `PILOT_QUESTIONNAIRE_FILE` | optional questionnaire prompts JSON | untracked file |
 | `LAWYER_APPROVED_PUBLISH` | `false` until lawyer + Jiantao decide | host env |
 | `PILOT_ALLOWED_ORIGINS` | leave empty (same-origin) | host env |
+| `PILOT_ENCRYPTION_KEY` | `openssl rand -base64 32`; keep an offline backup | host secret store |
+| `DOWNLOAD_URL_SECRET` | `openssl rand -base64 48`, ≠ SESSION_SECRET | host secret store |
+| `DOWNLOAD_URL_TTL_SECONDS` | default 60 (max 300) | host env |
+| `AI_PROVIDER`, `AI_MODEL` | choose after vendor verification; keep `none` until then | host env |
+| `AI_API_KEY` | new key from a **paid** project dedicated to the pilot | host secret store |
+| `AI_PAID_TIER_VERIFIED` | `true` only after `docs/AI_VENDOR_VERIFICATION.md` is done | host env |
+| `AI_PROMPTS_FILE` | untracked prompt templates (Render Secret File) | host secret file |
 | Who is the 4th account | admin = Jiantao; Garrick would be a 5th → needs a decision | — |
 
 ## Paid services (none created) – estimates, Oct 2026 list prices
@@ -36,6 +44,7 @@ API keys, env vars, disk or domain. Nothing in this PR changes `app/`, `netlify.
 |---|---|---|---|
 | Render web service "starter" (0.5 CPU / 512 MB) | always-on private instance (free tier sleeps and has no disk) | **$7** | render.com/pricing |
 | Render persistent disk 1 GB | private data dir | **$0.25** | render.com/pricing |
-| (PR2) paid AI API usage | AI processing on a paid tier | see PR2 (usage-based, est. < $20 for one case) | — |
+| Paid AI API (one of Gemini paid tier / OpenAI / Anthropic) | AI drafts on a no-training paid tier | **≈ $7–15 per case, budget ≤ $20/mo** (usage-based; may need $5+ prepaid credit) | vendor pricing pages, see AI_VENDOR_VERIFICATION.md |
+| Optional ZDR / enterprise agreement | zero data retention | unknown; via vendor sales, may have minimums | — |
 | Optional custom domain | unlisted subdomain on existing DNS | $0 (2 included on Hobby) | render.com/pricing |
-| **Total PR1** | | **≈ $7.25 / month** | |
+| **Total** | | **≈ $7.25 / month hosting + ≤ $20 / month AI** | |
