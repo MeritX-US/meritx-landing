@@ -7,3 +7,17 @@
   [headers.values]
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
+
+# The private pilot app (pilot/) is deployed separately and must never be served
+# from the public site. publish = "." would otherwise expose pilot/ static files.
+[[redirects]]
+  from = "/pilot"
+  to = "/404.html"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/pilot/*"
+  to = "/404.html"
+  status = 404
+  force = true

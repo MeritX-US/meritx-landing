@@ -1,0 +1,32 @@
+{
+  "name": "meritx-private-pilot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MeritX private pilot instance (single case, invite-only). Separate from the public demo in app/.",
+  "main": "dist/src/server.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/src/server.js",
+    "dev": "tsx watch src/server.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test test/*.test.ts",
+    "hash-password": "tsx src/scripts/hash-password.ts"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "multer": "^1.4.5-lts.1"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^20.14.0",
+    "@types/supertest": "^6.0.2",
+    "smol-toml": "^1.9.1",
+    "supertest": "^7.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
