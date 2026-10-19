@@ -20,7 +20,7 @@ async function seeded() {
   return { app, a, admins: [a.admin, admin2], emp, law };
 }
 
-test('admin (every admin account) cannot see any employee materials, questionnaire or assessment', async () => {
+test('5-account pilot (PILOT_MAX_ACCOUNTS=5, 2 admins): BOTH admins are blocked from all materials, questionnaire and assessment', async () => {
   const { admins, emp, law } = await seeded();
   for (const adm of admins) {
     const denied: [string, string][] = [

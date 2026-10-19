@@ -11,7 +11,7 @@ Remaining:
 - [x] Encrypt the log at rest (PR2: each line AES-GCM).
 - [ ] Tamper evidence: hash-chain each line (prev hash) or ship to write-once storage.
 - [x] Log every AI vendor call (provider, model, request id, file count; no content) (PR2).
-- [ ] Restrict admin visibility per PRD (only Jiantao + lawyer).
+- [ ] Decide whether both admins or only the MeritX owner (<admin-1>) may read the access log (PRD: owner + lawyer).
 - [ ] Export (CSV) for the lawyer's file; retention = case lifetime, destroyed with the case.
 - [ ] Record IP (hashed) / user-agent for login events.
 

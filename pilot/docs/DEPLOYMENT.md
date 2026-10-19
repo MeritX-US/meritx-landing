@@ -5,7 +5,7 @@ A new, separate service. Do **not** reuse the public demo's Render service, Netl
 API keys, env vars, disk or domain. Nothing changes `app/`, `robots.txt` or `sitemap.xml` of the public site. The only public-site change is a
 `netlify.toml` rule that returns 404 for `/pilot` and `/pilot/*` so pilot files are never served there.
 
-## Steps (for Jiantao, after approval)
+## Steps (for the MeritX owner, after approval)
 1. Approve the paid services below.
 2. Create a **new** Render service from `pilot/render.pilot.yaml` (Blueprint path setting),
    `autoDeploy: false`. Or any Docker host using `pilot/Dockerfile`.
@@ -20,7 +20,7 @@ API keys, env vars, disk or domain. Nothing changes `app/`, `robots.txt` or `sit
 6. **No real files until PR2 is merged and deployed, AI vendor terms are verified,
    and the lawyer has approved the consent text.**
 
-## Config Jiantao must fill himself
+## Config the MeritX owner must fill in
 | Variable | What | Where |
 |---|---|---|
 | `PRIVATE_MODE` | must be `true` | host env |
@@ -28,7 +28,7 @@ API keys, env vars, disk or domain. Nothing changes `app/`, `robots.txt` or `sit
 | `PILOT_ACCOUNTS` / `PILOT_ACCOUNTS_FILE` | 4 accounts (employee, lawyer, enterprise, admin): id, email, display name, scrypt hash from `npm run hash-password` | host secret store / `/workspace/secrets/` |
 | Lawyer display `name` | shown on approved assessments | inside `PILOT_ACCOUNTS` |
 | `PILOT_QUESTIONNAIRE_FILE` | optional questionnaire prompts JSON | untracked file |
-| `LAWYER_APPROVED_PUBLISH` | `false` until lawyer + Jiantao decide | host env |
+| `LAWYER_APPROVED_PUBLISH` | `false` until the lawyer and the MeritX owner decide | host env |
 | `PILOT_ALLOWED_ORIGINS` | leave empty (same-origin) | host env |
 | `PILOT_ENCRYPTION_KEY` | `openssl rand -base64 32`; keep an offline backup | host secret store |
 | `DOWNLOAD_URL_SECRET` | `openssl rand -base64 48`, ≠ SESSION_SECRET | host secret store |
@@ -37,7 +37,7 @@ API keys, env vars, disk or domain. Nothing changes `app/`, `robots.txt` or `sit
 | `AI_API_KEY` | new key from a **paid** project dedicated to the pilot | host secret store |
 | `AI_PAID_TIER_VERIFIED` | `true` only after `docs/AI_VENDOR_VERIFICATION.md` is done | host env |
 | `AI_PROMPTS_FILE` | untracked prompt templates (Render Secret File) | host secret file |
-| `PILOT_MAX_ACCOUNTS` | default 4; set 5 if both Jiantao and Garrick get admin accounts | host env |
+| `PILOT_MAX_ACCOUNTS` | **5** for this pilot (employee, lawyer, enterprise, `<admin-1>`, `<admin-2>`). Code default if unset is 4, so the 5-account allowlist fails fast unless this is set | host env |
 
 ## Paid services (none created) – estimates, Oct 2026 list prices
 | Service | Needed for | Est. monthly | Source |

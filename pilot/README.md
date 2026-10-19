@@ -1,7 +1,9 @@
 # MeritX private pilot (`pilot/`)
 
 A **separate, invite-only** app for exactly one real case (1 employee, 1 partner lawyer,
-1 enterprise contact, 1+ MeritX admins; total capped by `PILOT_MAX_ACCOUNTS`, default 4). It shares **no code, config, keys, storage or
+1 enterprise contact, 1+ MeritX admins; total capped by `PILOT_MAX_ACCOUNTS`. This pilot uses **5**:
+employee, lawyer, enterprise and 2 admins. The code default when unset is 4, so a 5-account allowlist refuses to start
+unless `PILOT_MAX_ACCOUNTS=5` is set explicitly). It shares **no code, config, keys, storage or
 deployment** with the public demo in `app/` and the landing site. The public demo is unchanged.
 
 > This repository is public. Nothing private lives here: account emails, names, password
