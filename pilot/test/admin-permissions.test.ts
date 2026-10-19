@@ -73,3 +73,12 @@ test('only the lawyer sees all materials', async () => {
     assert.ok(n <= 1);
   }
 });
+
+test('admin cannot use a signed download URL issued to the lawyer or employee', async () => {
+  const { a, admins, emp } = await seeded();
+  for (const owner of [a.lawyer, a.employee]) {
+    const url = (await owner.post(`/api/materials/${emp}/download-url`)).body.url;
+    assert.ok(url);
+    for (const adm of admins) assert.equal((await adm.get(url)).status, 403);
+  }
+});
