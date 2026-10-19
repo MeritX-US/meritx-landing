@@ -1,0 +1,35 @@
+# Render Blueprint for the PRIVATE PILOT ONLY. Not applied automatically:
+# it is not at the repo root, and it does not touch the public demo service.
+# To use: Render dashboard -> New -> Blueprint -> this repo -> Blueprint path: pilot/render.pilot.yaml
+# Requires a paid instance (persistent disk). Estimated: starter $7/mo + 1 GB disk $0.25/mo.
+# DO NOT apply without Jiantao's approval.
+services:
+  - type: web
+    name: meritx-private-pilot        # rename to something non-descriptive if desired
+    runtime: docker
+    rootDir: pilot
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    region: oregon
+    autoDeploy: false                 # deploy manually only after review
+    healthCheckPath: /healthz
+    disk:
+      name: pilot-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: PRIVATE_MODE
+        value: "true"
+      - key: NODE_ENV
+        value: production
+      - key: PILOT_DATA_DIR
+        value: /data
+      - key: LAWYER_APPROVED_PUBLISH
+        value: "false"
+      # Secrets: set in the Render dashboard (sync: false = never stored in this file)
+      - key: SESSION_SECRET
+        sync: false
+      - key: PILOT_ACCOUNTS
+        sync: false
+      - key: PILOT_ALLOWED_ORIGINS
+        sync: false
