@@ -13,16 +13,22 @@
     "dev": "tsx watch src/server.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsx --test test/*.test.ts",
-    "hash-password": "tsx src/scripts/hash-password.ts"
+    "hash-password": "tsx src/scripts/hash-password.ts",
+    "destroy-case": "tsx src/scripts/destroy-case.ts",
+    "destroy-case:prod": "node dist/src/scripts/destroy-case.js",
+    "verify-access-log": "tsx src/scripts/verify-access-log.ts",
+    "verify-access-log:prod": "node dist/src/scripts/verify-access-log.js"
   },
   "dependencies": {
     "express": "^4.21.2",
-    "multer": "^1.4.5-lts.1"
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^10.1.7"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/multer": "^1.4.12",
     "@types/node": "^20.14.0",
+    "@types/nodemailer": "^8.0.2",
     "@types/supertest": "^6.0.2",
     "smol-toml": "^1.9.1",
     "supertest": "^7.0.0",

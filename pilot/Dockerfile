@@ -6,7 +6,8 @@ RUN npm ci
 COPY tsconfig.json ./
 COPY src ./src
 COPY test ./test
-RUN npm run build && npm prune --omit=dev
+RUN npm run build && npm prune --omit=dev \
+ && test -f dist/src/scripts/destroy-case.js && test -f dist/src/scripts/verify-access-log.js
 
 FROM node:20-alpine
 ENV NODE_ENV=production PRIVATE_MODE=true PORT=3101 PILOT_DATA_DIR=/data

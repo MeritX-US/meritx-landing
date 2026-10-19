@@ -51,3 +51,21 @@ services:
         value: "false"
       - key: AI_PROMPTS_FILE
         value: /etc/secrets/ai_prompts.json   # Render "Secret File"; content never in git
+      # PR3: access-log anchor. stdout line per append (Render logs). Daily email is OFF until
+      # the MeritX owner picks an SMTP provider (docs/AUDIT_ANCHORING.md).
+      - key: PILOT_ACCESS_LOG_ANCHOR_STDOUT
+        value: "true"
+      - key: PILOT_ANCHOR_EMAIL_ENABLED
+        value: "false"
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: SMTP_TO
+        sync: false
