@@ -81,4 +81,4 @@ Assume about 30 lawyer-triggered calls × about 100k input tokens (questionnaire
 That is about 3M input and 0.12M output tokens. At frontier list prices of about $2–4 per 1M input and $10–20 per 1M output
 (Gemini/Anthropic pages, Oct 2026), this comes to **about $7–15 total for the case**. Budget **≤ $20/month**. Vendors may require
 a prepaid credit (e.g. $5 minimum) or a Cloud Billing account. ZDR/enterprise agreements may carry
-minimums: ask sales and don't commit without Jiantao's approval.
+minimums: ask sales and don't commit without the MeritX owner's approval.
