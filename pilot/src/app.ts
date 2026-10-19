@@ -3,7 +3,8 @@ import path from 'path';
 import express, { type Response, type NextFunction } from 'express';
 import multer from 'multer';
 import { publicDir, type PilotConfig } from './config';
-import { Auth, allow, type AuthedRequest } from './auth';
+import { Auth, allow, ConcurrencyLimiter, type AuthedRequest } from './auth';
+import { detectFileType } from './fileType';
 import { EncryptedFileStore, CASE_STATUSES, type Store, type CaseStatus } from './store';
 import { Cipher } from './crypto';
 import { AiClient, AiProviderError, fillTemplate, type FetchLike } from './ai/provider';
@@ -23,13 +24,18 @@ export function accountSummary(a: { id: string; name: string; role: string; enab
   return { id: a.id, name: a.name, role: a.role, enabled: a.enabled };
 }
 
-export interface AppDeps { store?: Store; log?: AccessLog; fetch?: FetchLike }
+export interface AppDeps { store?: Store; log?: AccessLog; fetch?: FetchLike; auth?: (auth: Auth) => void }
 
 export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
   const app = express();
-  const auth = new Auth(cfg);
   const cipher = new Cipher(cfg.encryptionKey);
   const store: Store = deps.store || new EncryptedFileStore(cfg.dataDir, cipher);
+  // Revoked sessions are persisted in the (encrypted) case data store, so logout survives restarts.
+  const auth = new Auth(cfg, {
+    load: () => store.read().revokedSessions || {},
+    save: r => { store.update(st => { st.revokedSessions = r; }); },
+  });
+  deps.auth?.(auth);
   const log = deps.log || new AccessLog(cfg.dataDir, cipher);
   const ai = new AiClient(cfg.ai, deps.fetch);
   const now = () => new Date().toISOString();
@@ -56,23 +62,39 @@ export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
   app.get('/healthz', (_req, res) => res.json({ ok: true }));
 
   // ---------- auth ----------
-  app.post('/auth/login', (req: AuthedRequest, res) => {
-    const email = String(req.body?.email || '').trim().toLowerCase();
+  app.post('/auth/login', async (req: AuthedRequest, res, next) => {
+   try {
+    const email = String(req.body?.email || '').trim().toLowerCase().slice(0, 320);
     const key = `${req.ip}|${email}`;
     if (auth.isLockedOut(key)) {
       log.append({ actor: 'anonymous', role: 'none', action: 'login.locked', outcome: 'denied' });
       return res.status(429).json({ error: 'too many attempts, try again later' });
     }
-    const acct = auth.login(email, String(req.body?.password || ''));
+    // Per-email exponential backoff (1s, 2s, 4s ... max 15 min). Not a hard lock; admins can reset it.
+    const wait = auth.emailBackoffRemainingMs(email);
+    if (wait > 0) {
+      log.append({ actor: 'anonymous', role: 'none', action: 'login.backoff', outcome: 'denied' });
+      res.setHeader('Retry-After', String(Math.ceil(wait / 1000)));
+      return res.status(429).json({ error: 'too many attempts, try again later' });
+    }
+    const result = await auth.limiter.run(() => auth.login(email, String(req.body?.password || '')));
+    if (result === ConcurrencyLimiter.BUSY) {
+      res.setHeader('Retry-After', '1');
+      return res.status(429).json({ error: 'server busy, try again' });
+    }
+    const acct = result;
     if (!acct) {
       auth.recordFailure(key);
+      auth.recordEmailFailure(email);
       log.append({ actor: 'anonymous', role: 'none', action: 'login.failure', outcome: 'denied' });
       return res.status(401).json({ error: 'invalid credentials' });
     }
     auth.clearFailures(key);
+    auth.clearEmailBackoff(email);
     auth.issueSession(res, acct);
     log.append({ actor: acct.id, role: acct.role, action: 'login.success', outcome: 'ok' });
     res.json({ id: acct.id, name: acct.name, role: acct.role });
+   } catch (e) { next(e); }
   });
   // No self-registration route exists, by design.
 
@@ -175,12 +197,14 @@ export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
   api.post('/materials', allow('employee', 'lawyer'), requireConsent, upload.single('file'), (req: AuthedRequest, res) => {
     const f = req.file;
     if (!f) return res.status(400).json({ error: 'file required' });
-    if (!ALLOWED_MIME.has(f.mimetype)) return res.status(415).json({ error: 'unsupported file type' });
+    // Type is decided by the file's content (magic bytes), never by the client-reported MIME.
+    const detected = detectFileType(f.buffer);
+    if (!detected || !ALLOWED_MIME.has(detected)) return res.status(415).json({ error: 'unsupported file type' });
     const id = crypto.randomUUID();
     const filename = path.basename(f.originalname).replace(/[^\w.\- ()]/g, '_').slice(0, 200) || 'file';
     store.putBlob(id, f.buffer);
     store.update(st => {
-      st.materials.push({ id, ownerId: req.account!.id, filename, mimeType: f.mimetype, size: f.size, uploadedAt: now(), category: null });
+      st.materials.push({ id, ownerId: req.account!.id, filename, mimeType: detected, size: f.size, uploadedAt: now(), category: null });
     });
     audit(req, 'material.upload', 'ok', id);
     res.status(201).json({ id });
@@ -277,6 +301,16 @@ export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
     audit(req, 'accounts.view');
     // Explicit allowlist of fields. Never emails, hashes, reset tokens/links, or any case data.
     res.json({ accounts: cfg.accounts.map(accountSummary) });
+  });
+
+  // Manual unlock: resets an email's login backoff and IP+email locks. Always audited.
+  api.post('/accounts/unlock', allow('admin'), (req: AuthedRequest, res) => {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    if (!email || email.length > 320) return res.status(400).json({ error: 'email required' });
+    auth.unlockEmail(email);
+    const target = auth.findByEmail(email);
+    audit(req, 'login.unlock', 'ok', target ? target.id : 'unknown-account'); // account id only, never the email
+    res.json({ ok: true });
   });
 
   // ---------- access log (stub) ----------
