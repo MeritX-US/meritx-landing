@@ -5,3 +5,4 @@ header{display:flex;justify-content:space-between;align-items:center;border-bott
 .muted{color:#666}.error{color:#b00020}.card{border:1px solid #ddd;border-radius:6px;padding:1rem;margin:1rem 0}
 .notice{background:#fff8e1;border:1px solid #f0d58a;padding:.6rem;border-radius:4px}
 table{width:100%;border-collapse:collapse}td,th{border-bottom:1px solid #eee;padding:.3rem;text-align:left;font-size:.9rem}
+tr.tampered td { color: #b00020; font-weight: 600; background: #fdecee; }

@@ -22,7 +22,8 @@ whether the pages exist; open them in a browser. A working link is **not** a che
 - [ ] TODO: Is the key from a **paid** account with billing active (not a free tier or trial)? Evidence: ______
 - [ ] TODO: Are uploaded images/files scanned or kept under separate rules (e.g. safety scanning) that override retention settings? Evidence: ______
 - [ ] TODO: Who at MeritX holds the key? Is it limited to this pilot? What is the rotation and revocation plan? Evidence: ______
-- [ ] TODO: At case close, confirm nothing remains at the vendor and record it in the deletion certificate (see `npm run destroy-case`). Evidence: ______
+- [ ] TODO: Retention period for request data on this account, per the vendor terms, in **days** or **zero retention**: ______ days / zero retention. Evidence: ______ (destroy-case records this number: `--ack-ai-vendor-data <vendor>=<days>` or `<vendor>=zero`.)
+- [ ] TODO: At case close, confirm the vendor's retained request data is deleted or the retention period above has passed, then record it in the deletion certificate (mandatory checklist item 2 of `npm run destroy-case:prod`). Evidence: ______
 - [ ] TODO: Copy the verified wording into the consent form's `[LIST VENDORS AND VERIFIED TERMS]`. Lawyer sign-off: ______ Date: ______
 
 ## Where to look (links only; read the live pages)

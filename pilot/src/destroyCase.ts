@@ -29,6 +29,57 @@ export interface DestroyOptions {
   dryRun?: boolean;
   confirm?: string;
   force?: boolean;
+  /** Mandatory manual confirmation 1: hosting (Render) disk snapshots/backups deleted. */
+  ackSnapshotsDeleted?: boolean;
+  /**
+   * Mandatory manual confirmation 2: retained request data at each AI vendor used is deleted or
+   * expired, with the retention period per that vendor's terms (days, or zero retention).
+   * Use vendor "none" with zero retention if no AI provider was ever enabled.
+   */
+  aiVendorRetention?: VendorRetention[];
+}
+
+export interface VendorRetention { vendor: string; retentionDays: number | null /* null = zero retention */ }
+
+export interface ChecklistItem {
+  id: 'render_snapshots_deleted' | 'ai_vendor_data_deleted';
+  mandatory: true;
+  text: string;
+  howToConfirm: string;
+  confirmed: boolean;
+  vendors?: { vendor: string; retention: string }[];
+}
+
+/** Parse `vendor=days` / `vendor=zero` (e.g. gemini=30, openai=zero, none=zero). */
+export function parseVendorRetention(s: string): VendorRetention {
+  const m = /^([a-z0-9][a-z0-9._-]{0,40})=(.+)$/i.exec(String(s || '').trim());
+  if (!m) throw new DestroyRefused(`invalid AI vendor retention "${s}": use vendor=<days> or vendor=zero`);
+  const vendor = m[1].toLowerCase(), v = m[2].trim().toLowerCase();
+  if (['zero', 'zero-retention', 'zero retention', '0'].includes(v)) return { vendor, retentionDays: null };
+  if (!/^\d{1,4}$/.test(v) || Number(v) > 3650) throw new DestroyRefused(`invalid retention "${m[2]}" for ${vendor}: days (1-3650) or zero`);
+  if (vendor === 'none') throw new DestroyRefused('vendor "none" (no AI provider used) must be none=zero');
+  return { vendor, retentionDays: Number(v) };
+}
+
+export const retentionLabel = (r: VendorRetention) => r.retentionDays === null ? 'zero retention' : `${r.retentionDays} days`;
+
+export function buildChecklist(o: Pick<DestroyOptions, 'ackSnapshotsDeleted' | 'aiVendorRetention'>): ChecklistItem[] {
+  const vendors = o.aiVendorRetention || [];
+  return [
+    {
+      id: 'render_snapshots_deleted', mandatory: true,
+      text: '[ ] Render (hosting) disk snapshots and backups for the pilot disk are deleted.',
+      howToConfirm: '--ack-render-snapshots-deleted',
+      confirmed: o.ackSnapshotsDeleted === true,
+    },
+    {
+      id: 'ai_vendor_data_deleted', mandatory: true,
+      text: '[ ] Request data retained by every AI vendor used is deleted or its retention period has expired. Record the retention period per the vendor terms (days, or zero retention).',
+      howToConfirm: '--ack-ai-vendor-data <vendor>=<days>|<vendor>=zero (repeat per vendor; none=zero if no AI provider was ever enabled)',
+      confirmed: vendors.length > 0,
+      vendors: vendors.map(v => ({ vendor: v.vendor, retention: retentionLabel(v) })),
+    },
+  ];
 }
 
 export interface DestroyReport {
@@ -38,10 +89,15 @@ export interface DestroyReport {
   deleted: number;
   keyFileDeleted: boolean;
   remindersForHuman: string[];
+  /** Mandatory manual confirmations; the case-close is complete only when all are confirmed. */
+  checklist: ChecklistItem[];
+  /** true only after a real (non-dry) run deleted the data AND every checklist item was confirmed. */
+  complete: boolean;
+  pendingConfirmations: string[];
   at: string;
 }
 
-const KNOWN_TOP = [/^state\.(enc|json)$/, /^access\.log\.(enc|jsonl)$/, /\.tmp$/];
+const KNOWN_TOP = [/^state\.(enc|json)$/, /^access\.log\.(enc|jsonl)$/, /^anchor-email\.state\.json$/, /\.tmp$/];
 const BLOB = /^[a-f0-9-]{8,64}(\..*\.tmp)?$/;
 
 function listTargets(dataDir: string): string[] {
@@ -88,12 +144,15 @@ export function destroyCase(o: DestroyOptions): DestroyReport {
     remindersForHuman: [
       'Export anything the lawyer must keep BEFORE running without --dry-run.',
       'If PILOT_ENCRYPTION_KEY is set as an env var (not a file), delete it from the host secret store.',
-      'Delete the hosting disk/service and any disk snapshots or backups.',
-      'Confirm no files remain at any AI vendor (the pilot sends inline only; verify per docs/AI_VENDOR_TERMS_CHECKLIST.md).',
+      'Delete the hosting disk/service, then its disk snapshots/backups (checklist item 1).',
+      'Confirm no files/request data remain at any AI vendor and record its retention period (checklist item 2; see docs/AI_VENDOR_TERMS_CHECKLIST.md).',
       'Record this report in the case-close deletion certificate.',
     ],
+    checklist: [], complete: false, pendingConfirmations: [],
     at: new Date().toISOString(),
   };
+  report.checklist = buildChecklist(o);
+  report.pendingConfirmations = report.checklist.filter(c => c.mandatory && !c.confirmed).map(c => c.id);
   if (dryRun) return report;
 
   if (o.confirm !== DESTROY_CONFIRM_PHRASE) throw new DestroyRefused(`refusing: pass --confirm ${DESTROY_CONFIRM_PHRASE}`);
@@ -111,5 +170,6 @@ export function destroyCase(o: DestroyOptions): DestroyReport {
     fs.unlinkSync(keyFile);
     report.keyFileDeleted = true;
   }
+  report.complete = report.pendingConfirmations.length === 0;
   return report;
 }

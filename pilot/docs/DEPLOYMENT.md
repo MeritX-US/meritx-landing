@@ -37,6 +37,8 @@ API keys, env vars, disk or domain. Nothing changes `app/`, `robots.txt` or `sit
 | `AI_API_KEY` | new key from a **paid** project dedicated to the pilot | host secret store |
 | `AI_PAID_TIER_VERIFIED` | `true` only after `docs/AI_VENDOR_VERIFICATION.md` is done | host env |
 | `AI_PROMPTS_FILE` | untracked prompt templates (Render Secret File) | host secret file |
+| `PILOT_ACCESS_LOG_ANCHOR_STDOUT` | keep `true`: anchor line per access-log append goes to Render logs (off-disk). Consider a Render log stream for retention beyond the plan's log window | host env |
+| `PILOT_ANCHOR_EMAIL_ENABLED`, `SMTP_*` | optional daily anchor email, `false` until the MeritX owner picks an SMTP provider; see `docs/AUDIT_ANCHORING.md` | host env / secret store |
 | `PILOT_MAX_ACCOUNTS` | **5** for this pilot (employee, lawyer, enterprise, `<admin-1>`, `<admin-2>`). Code default if unset is 4, so the 5-account allowlist fails fast unless this is set | host env |
 
 ## Paid services (none created) – estimates, Oct 2026 list prices

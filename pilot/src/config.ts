@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { ANCHOR_EMAIL_DISABLED, type AnchorEmailConfig } from './anchorEmail';
 
 /**
  * Pilot configuration. Everything sensitive comes from environment variables
@@ -35,6 +36,8 @@ export interface PilotConfig {
   downloadUrlSecret: Buffer;      // HMAC key for signed download URLs
   downloadUrlTtlSeconds: number;  // short-lived: default 60s, max 300s
   ai: AiConfig;
+  accessLogAnchorStdout: boolean; // PILOT_ACCESS_LOG_ANCHOR_STDOUT (default true)
+  anchorEmail: AnchorEmailConfig; // optional daily anchor email, disabled by default
 }
 
 export type AiProviderName = 'none' | 'gemini' | 'openai' | 'anthropic';
@@ -78,6 +81,26 @@ export function loadAiConfig(env: NodeJS.ProcessEnv): AiConfig {
 }
 
 export class ConfigError extends Error {}
+
+/** Optional daily access-log anchor email. Disabled unless PILOT_ANCHOR_EMAIL_ENABLED=true. */
+export function loadAnchorEmailConfig(env: NodeJS.ProcessEnv, accounts: Account[]): AnchorEmailConfig {
+  if (!parseBool(env.PILOT_ANCHOR_EMAIL_ENABLED, false)) return { ...ANCHOR_EMAIL_DISABLED };
+  const host = (env.SMTP_HOST || '').trim();
+  if (!host) throw new ConfigError('SMTP_HOST is required when PILOT_ANCHOR_EMAIL_ENABLED=true');
+  const port = Number(env.SMTP_PORT || 587);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new ConfigError('SMTP_PORT must be a valid port');
+  const secure = parseBool(env.SMTP_SECURE, port === 465);
+  const requireTls = parseBool(env.SMTP_REQUIRE_TLS, true);
+  if (!requireTls && env.NODE_ENV === 'production') throw new ConfigError('SMTP_REQUIRE_TLS=false is not allowed in production');
+  const user = (env.SMTP_USER || '').trim();
+  const password = readSecret(env, 'SMTP_PASSWORD');
+  if (Boolean(user) !== Boolean(password)) throw new ConfigError('SMTP_USER and SMTP_PASSWORD (or SMTP_PASSWORD_FILE) must be set together');
+  const from = (env.SMTP_FROM || '').trim();
+  if (!from) throw new ConfigError('SMTP_FROM is required when PILOT_ANCHOR_EMAIL_ENABLED=true');
+  const to = (env.SMTP_TO || accounts.find(a => a.role === 'lawyer')?.email || '').trim();
+  if (!to) throw new ConfigError('SMTP_TO is required (defaults to the lawyer account email)');
+  return { enabled: true, host, port, secure, requireTls, user, password, from, to };
+}
 
 /** Default cap on allowlisted accounts (PILOT_MAX_ACCOUNTS). 1 employee + 1 lawyer + 1 enterprise + >=1 admin. */
 export const DEFAULT_MAX_ACCOUNTS = 4;
@@ -186,6 +209,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PilotConfig {
     downloadUrlSecret: Buffer.from(dlSecret, 'utf8'),
     downloadUrlTtlSeconds: ttl,
     ai: loadAiConfig(env),
+    accessLogAnchorStdout: parseBool(env.PILOT_ACCESS_LOG_ANCHOR_STDOUT, true),
+    anchorEmail: loadAnchorEmailConfig(env, accounts),
   };
 }
 

@@ -53,6 +53,7 @@ export function testEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
     DOWNLOAD_URL_SECRET: 'test-only-download-url-secret-0123456789',
     PILOT_DATA_DIR: dataDir,
     NODE_ENV: 'test',
+    PILOT_ACCESS_LOG_ANCHOR_STDOUT: 'false', // tests assert on the anchor via an injected sink
     ...extra,
   };
 }

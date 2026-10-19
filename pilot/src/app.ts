@@ -8,7 +8,7 @@ import { detectFileType } from './fileType';
 import { EncryptedFileStore, CASE_STATUSES, type Store, type CaseStatus } from './store';
 import { Cipher } from './crypto';
 import { AiClient, AiProviderError, fillTemplate, type FetchLike } from './ai/provider';
-import { AccessLog } from './accessLog';
+import { AccessLog, parseAnchor, stdoutAnchorSink, type AnchorSink } from './accessLog';
 import { securityHeaders, strictCors, requireHttps, ROBOTS_TXT } from './security';
 import { caseViewFor, statusView, visibleMaterials, materialMeta, employeeAssessment } from './views';
 
@@ -24,7 +24,7 @@ export function accountSummary(a: { id: string; name: string; role: string; enab
   return { id: a.id, name: a.name, role: a.role, enabled: a.enabled };
 }
 
-export interface AppDeps { store?: Store; log?: AccessLog; fetch?: FetchLike; auth?: (auth: Auth) => void }
+export interface AppDeps { store?: Store; log?: AccessLog; fetch?: FetchLike; auth?: (auth: Auth) => void; anchorSink?: AnchorSink }
 
 export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
   const app = express();
@@ -36,7 +36,8 @@ export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
     save: r => { store.update(st => { st.revokedSessions = r; }); },
   });
   deps.auth?.(auth);
-  const log = deps.log || new AccessLog(cfg.dataDir, cipher);
+  // Every append also prints {event:'access_log_anchor', seq, entries, hash} to stdout (Render logs = off-disk anchor).
+  const log = deps.log || new AccessLog(cfg.dataDir, cipher, { anchorSink: deps.anchorSink || (cfg.accessLogAnchorStdout ? stdoutAnchorSink : null) });
   const ai = new AiClient(cfg.ai, deps.fetch);
   const now = () => new Date().toISOString();
 
@@ -313,7 +314,8 @@ export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
     res.json({ ok: true });
   });
 
-  // ---------- access log (stub) ----------
+  // ---------- access log ----------
+  // Never fails on a damaged line: bad lines come back as {line, corrupted_or_tampered: true, reason}.
   api.get('/access-log', allow('lawyer', 'admin'), (req: AuthedRequest, res) => {
     audit(req, 'accessLog.view');
     res.json(log.list());
@@ -346,8 +348,14 @@ export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
   });
 
   // Tamper-evidence check of the hash-chained log; returns the head hash for out-of-band anchoring.
+  // Optional ?seq=&hash= : also compare against an anchor recorded off-disk (Render log line / daily email).
   api.get('/access-log/verify', allow('lawyer', 'admin'), (req: AuthedRequest, res) => {
-    const v = log.verify();
+    let anchor;
+    if (req.query.seq !== undefined || req.query.hash !== undefined) {
+      anchor = parseAnchor({ seq: req.query.seq, hash: req.query.hash });
+      if (!anchor) return res.status(400).json({ error: 'seq must be a non-negative integer and hash 64 hex chars' });
+    }
+    const v = log.verify(anchor || undefined);
     audit(req, 'accessLog.verify', v.ok ? 'ok' : 'error');
     res.json(v);
   });
