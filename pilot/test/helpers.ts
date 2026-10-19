@@ -55,9 +55,9 @@ export function testEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
   };
 }
 
-export function makeApp(extra: Record<string, string> = {}) {
+export function makeApp(extra: Record<string, string> = {}, deps: Parameters<typeof createApp>[1] = {}) {
   const cfg: PilotConfig = loadConfig(testEnv(extra));
-  return { cfg, app: createApp(cfg) };
+  return { cfg, app: createApp(cfg, deps) };
 }
 
 export type RoleName = keyof typeof PW;

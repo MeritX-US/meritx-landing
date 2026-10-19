@@ -48,6 +48,8 @@ export interface PilotState {
   materials: Material[];
   todos: Todo[];
   assessment: Assessment | null;
+  /** Logged-out session nonces -> token exp (unix s). Persisted so revocation survives restarts. */
+  revokedSessions?: Record<string, number>;
 }
 
 export function emptyState(now = new Date().toISOString()): PilotState {
