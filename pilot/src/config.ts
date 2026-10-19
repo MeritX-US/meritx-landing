@@ -20,6 +20,7 @@ export interface Account {
 
 export interface PilotConfig {
   accounts: Account[];
+  maxAccounts: number;            // PILOT_MAX_ACCOUNTS (default 4)
   sessionSecret: Buffer;
   sessionTtlSeconds: number;
   dataDir: string;
@@ -33,14 +34,17 @@ export interface PilotConfig {
 
 export class ConfigError extends Error {}
 
-export const REQUIRED_ACCOUNT_COUNT = 4;
+/** Default cap on allowlisted accounts (PILOT_MAX_ACCOUNTS). 1 employee + 1 lawyer + 1 enterprise + >=1 admin. */
+export const DEFAULT_MAX_ACCOUNTS = 4;
+/** Roles that must have exactly one account in a single-case pilot. */
+export const SINGLETON_ROLES: readonly Role[] = ['employee', 'lawyer', 'enterprise'];
 
 function parseBool(v: string | undefined, dflt: boolean): boolean {
   if (v === undefined || v === '') return dflt;
   return ['1', 'true', 'yes', 'on'].includes(v.trim().toLowerCase());
 }
 
-export function parseAccounts(raw: string): Account[] {
+export function parseAccounts(raw: string, maxAccounts = DEFAULT_MAX_ACCOUNTS): Account[] {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -48,8 +52,8 @@ export function parseAccounts(raw: string): Account[] {
     throw new ConfigError('PILOT_ACCOUNTS is not valid JSON');
   }
   if (!Array.isArray(parsed)) throw new ConfigError('PILOT_ACCOUNTS must be a JSON array');
-  if (parsed.length !== REQUIRED_ACCOUNT_COUNT) {
-    throw new ConfigError(`PILOT_ACCOUNTS must contain exactly ${REQUIRED_ACCOUNT_COUNT} accounts (got ${parsed.length})`);
+  if (parsed.length > maxAccounts) {
+    throw new ConfigError(`PILOT_ACCOUNTS has ${parsed.length} accounts; at most PILOT_MAX_ACCOUNTS=${maxAccounts} allowed`);
   }
   const accounts: Account[] = parsed.map((a: any, i: number) => {
     for (const k of ['id', 'email', 'name', 'role', 'passwordHash']) {
@@ -67,11 +71,12 @@ export function parseAccounts(raw: string): Account[] {
   const emails = new Set(accounts.map(a => a.email));
   if (ids.size !== accounts.length) throw new ConfigError('PILOT_ACCOUNTS ids must be unique');
   if (emails.size !== accounts.length) throw new ConfigError('PILOT_ACCOUNTS emails must be unique');
-  // Exactly one of each role: 1 employee, 1 partner lawyer, 1 enterprise contact, 1 MeritX operator.
-  for (const r of ROLES) {
+  // Single case: exactly one employee, one partner lawyer, one enterprise contact; one or more MeritX admins.
+  for (const r of SINGLETON_ROLES) {
     const n = accounts.filter(a => a.role === r).length;
     if (n !== 1) throw new ConfigError(`PILOT_ACCOUNTS must contain exactly one "${r}" account (got ${n})`);
   }
+  if (!accounts.some(a => a.role === 'admin')) throw new ConfigError('PILOT_ACCOUNTS must contain at least one "admin" account');
   return accounts;
 }
 
@@ -86,7 +91,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PilotConfig {
     rawAccounts = fs.readFileSync(env.PILOT_ACCOUNTS_FILE, 'utf8');
   }
   if (!rawAccounts) throw new ConfigError('PILOT_ACCOUNTS (or PILOT_ACCOUNTS_FILE) is required');
-  const accounts = parseAccounts(rawAccounts);
+  const maxAccounts = Number(env.PILOT_MAX_ACCOUNTS || DEFAULT_MAX_ACCOUNTS);
+  if (!Number.isInteger(maxAccounts) || maxAccounts < 4 || maxAccounts > 10) {
+    throw new ConfigError('PILOT_MAX_ACCOUNTS must be an integer between 4 and 10');
+  }
+  const accounts = parseAccounts(rawAccounts, maxAccounts);
 
   const secret = env.SESSION_SECRET || '';
   if (Buffer.byteLength(secret, 'utf8') < 32) {
@@ -107,6 +116,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PilotConfig {
   const isProd = env.NODE_ENV === 'production';
   return {
     accounts,
+    maxAccounts,
     sessionSecret: Buffer.from(secret, 'utf8'),
     sessionTtlSeconds: Number(env.SESSION_TTL_SECONDS || 8 * 3600),
     dataDir,

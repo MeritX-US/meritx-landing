@@ -1,10 +1,10 @@
 name: pilot-ci
 on:
   pull_request:
-    paths: ['pilot/**', '.github/workflows/pilot-ci.yml']
+    paths: ['pilot/**', 'netlify.toml', '.github/workflows/pilot-ci.yml']
   push:
     branches: ['pilot/**']
-    paths: ['pilot/**', '.github/workflows/pilot-ci.yml']
+    paths: ['pilot/**', 'netlify.toml', '.github/workflows/pilot-ci.yml']
 permissions:
   contents: read
 jobs:

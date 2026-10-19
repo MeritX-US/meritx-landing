@@ -258,6 +258,16 @@ export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
     res.json({ ok: true });
   });
 
+  // ---------- account management (admin): read-only view of the env-configured allowlist ----------
+  // Accounts are changed only via PILOT_ACCOUNTS + redeploy; there is no write API by design.
+  api.get('/accounts', allow('admin'), (req: AuthedRequest, res) => {
+    audit(req, 'accounts.view');
+    res.json({
+      maxAccounts: cfg.maxAccounts,
+      accounts: cfg.accounts.map(a => ({ id: a.id, name: a.name, role: a.role, email: a.email })),
+    });
+  });
+
   // ---------- access log (stub) ----------
   api.get('/access-log', allow('lawyer', 'admin'), (req: AuthedRequest, res) => {
     audit(req, 'accessLog.view');

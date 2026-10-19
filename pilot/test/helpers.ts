@@ -21,6 +21,15 @@ export const EMAIL = {
 };
 export const LAWYER_NAME = 'Test Attorney';
 
+export const PW_ADMIN2 = 'admin2-test-password-1';
+export const EMAIL_ADMIN2 = 'ops2@pilot.example.test';
+let cachedAdmin2: any = null;
+/** A second synthetic admin account (for >1 admin tests). */
+export function admin2Account() {
+  if (!cachedAdmin2) cachedAdmin2 = { id: 'admin2', email: EMAIL_ADMIN2, name: 'Test Ops 2', role: 'admin', passwordHash: hashPassword(PW_ADMIN2) };
+  return cachedAdmin2;
+}
+
 let cachedAccounts: string | null = null;
 export function accountsJson(): string {
   if (!cachedAccounts) {

@@ -4,7 +4,9 @@
   "private": true,
   "description": "MeritX private pilot instance (single case, invite-only). Separate from the public demo in app/.",
   "main": "dist/src/server.js",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "node dist/src/server.js",
@@ -22,6 +24,7 @@
     "@types/multer": "^1.4.12",
     "@types/node": "^20.14.0",
     "@types/supertest": "^6.0.2",
+    "smol-toml": "^1.9.1",
     "supertest": "^7.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"

@@ -1,7 +1,7 @@
 # MeritX private pilot (`pilot/`)
 
 A **separate, invite-only** app for exactly one real case (1 employee, 1 partner lawyer,
-1 enterprise contact, 1 MeritX operator). It shares **no code, config, keys, storage or
+1 enterprise contact, 1+ MeritX admins; total capped by `PILOT_MAX_ACCOUNTS`, default 4). It shares **no code, config, keys, storage or
 deployment** with the public demo in `app/` and the landing site. The public demo is unchanged.
 
 > This repository is public. Nothing private lives here: account emails, names, password
@@ -26,8 +26,8 @@ printf '%s' 'a-long-test-password' | npm run --silent hash-password   # -> scryp
 npm run dev                    # http://localhost:3101
 ```
 
-The server **refuses to start** unless `PRIVATE_MODE=true`, exactly 4 accounts (one per role)
-are configured, and `SESSION_SECRET` is ≥ 32 bytes.
+The server **refuses to start** unless `PRIVATE_MODE=true`, the allowlist has exactly one
+employee/lawyer/enterprise and ≥1 admin within `PILOT_MAX_ACCOUNTS`, and `SESSION_SECRET` is ≥ 32 bytes.
 
 ## Roles (enforced server-side; see `src/views.ts`, `src/app.ts`)
 
@@ -39,6 +39,8 @@ are configured, and `SESSION_SECRET` is ≥ 32 bytes.
 | Eligibility assessment | only if `LAWYER_APPROVED_PUBLISH=true` **and** lawyer approved; shown under lawyer's name | ✅ edit/approve/revoke | ❌ | ❌ |
 | Lawyer to-dos | only published ones | ✅ create/publish | ❌ | ❌ |
 | Access log | ❌ | ✅ | ❌ | ✅ |
+| Account list (read-only; changes = env + redeploy) | ❌ | ❌ | ❌ | ✅ |
+| Any employee material / questionnaire / assessment | own only | ✅ | ❌ | ❌ **never** |
 
 Every `/api/*` route requires a session (deny by default, unknown routes 401/404), then a
 per-route role gate, then role-scoped projections so a handler can't leak fields.
@@ -51,5 +53,6 @@ There is no sign-up route. Login failures are generic, rate-limited per IP+email
 - No `/uploads` static route; downloads require a session (PR2: signed URLs).
 - Strict CORS: no wildcard; foreign-origin state-changing requests are rejected (CSRF).
 - Do not link the pilot host from the landing site or sitemap.
+- The public Netlify site returns a forced 404 for `/pilot` and `/pilot/*` (`netlify.toml`, tested in `test/netlify-public-site.test.ts`).
 
 See `docs/DEPLOYMENT.md` and `docs/TODO_audit_log_and_case_destruction.md`.
