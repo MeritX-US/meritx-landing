@@ -345,6 +345,13 @@ export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
     }
   });
 
+  // Tamper-evidence check of the hash-chained log; returns the head hash for out-of-band anchoring.
+  api.get('/access-log/verify', allow('lawyer', 'admin'), (req: AuthedRequest, res) => {
+    const v = log.verify();
+    audit(req, 'accessLog.verify', v.ok ? 'ok' : 'error');
+    res.json(v);
+  });
+
   api.use((_req, res) => res.status(404).json({ error: 'not found' }));
   app.use('/api', api);
 

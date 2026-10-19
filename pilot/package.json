@@ -13,7 +13,8 @@
     "dev": "tsx watch src/server.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsx --test test/*.test.ts",
-    "hash-password": "tsx src/scripts/hash-password.ts"
+    "hash-password": "tsx src/scripts/hash-password.ts",
+    "destroy-case": "tsx src/scripts/destroy-case.ts"
   },
   "dependencies": {
     "express": "^4.21.2",

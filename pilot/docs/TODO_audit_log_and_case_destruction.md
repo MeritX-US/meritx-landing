@@ -9,14 +9,15 @@ Viewable by lawyer + admin only (`GET /api/access-log`).
 
 Remaining:
 - [x] Encrypt the log at rest (PR2: each line AES-GCM).
-- [ ] Tamper evidence: hash-chain each line (prev hash) or ship to write-once storage.
+- [x] Tamper evidence: SHA-256 hash chain (`seq`/`prev`/`hash`) + `GET /api/access-log/verify` (PR3). Remaining: anchor the head hash off-box (e.g. lawyer records it weekly) to detect tail truncation.
 - [x] Log every AI vendor call (provider, model, request id, file count; no content) (PR2).
 - [ ] Decide whether both admins or only the MeritX owner (<admin-1>) may read the access log (PRD: owner + lawyer).
 - [ ] Export (CSV) for the lawyer's file; retention = case lifetime, destroyed with the case.
 - [ ] Record IP (hashed) / user-agent for login events.
 
 ## #6 Case-close destruction
-- [ ] `npm run destroy-case` script: lawyer export first → delete all blobs + state + access log
+- [x] (PR3, data-dir + key-file part) `npm run destroy-case` (dry run by default; `--execute --confirm destroy-closed-case`; refuses unless case status is `closed`). Remaining manual steps are printed by the script.
+- [ ] Full flow: lawyer export first → delete all blobs + state + access log
       from the data dir/disk → delete any remote AI vendor files (if any were created) →
       rotate/destroy `PILOT_ENCRYPTION_KEY` (crypto-shredding makes residual backups unreadable)
       → delete the Render disk/service.

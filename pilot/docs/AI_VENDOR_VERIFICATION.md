@@ -1,5 +1,7 @@
 # AI vendor verification – must be completed BEFORE `AI_PROVIDER` is switched on
 
+> The summaries below are **unverified leads**. The sign-off checklist is [`AI_VENDOR_TERMS_CHECKLIST.md`](AI_VENDOR_TERMS_CHECKLIST.md), where every item is a human TODO.
+
 Status: **not verified.** Nobody has signed up, paid, or requested anything. The app ships with
 `AI_PROVIDER=none` and refuses to enable a provider unless `AI_PAID_TIER_VERIFIED=true` is set
 by a human after this checklist is completed **for the exact account/project whose key is used**.
