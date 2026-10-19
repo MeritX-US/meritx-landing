@@ -41,7 +41,7 @@ employee/lawyer/enterprise and ≥1 admin within `PILOT_MAX_ACCOUNTS`, and `SESS
 | Eligibility assessment | only if `LAWYER_APPROVED_PUBLISH=true` **and** lawyer approved; shown under lawyer's name | ✅ edit/approve/revoke | ❌ | ❌ |
 | Lawyer to-dos | only published ones | ✅ create/publish | ❌ | ❌ |
 | Access log | ❌ | ✅ | ❌ | ✅ |
-| Account list (read-only; changes = env + redeploy) | ❌ | ❌ | ❌ | ✅ |
+| Account list (read-only: id, name, role, enabled only; changes = env + redeploy) | ❌ | ❌ | ❌ | ✅ |
 | Any employee material / questionnaire / assessment | own only | ✅ | ❌ | ❌ **never** |
 
 Every `/api/*` route requires a session (deny by default, unknown routes 401/404), then a

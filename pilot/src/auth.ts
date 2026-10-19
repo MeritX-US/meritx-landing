@@ -105,7 +105,7 @@ export class Auth {
   login(email: string, password: string): Account | null {
     const acct = this.findByEmail(email);
     const ok = verifyPassword(String(password || ''), acct ? acct.passwordHash : DUMMY_HASH);
-    return acct && ok ? acct : null;
+    return acct && ok && acct.enabled ? acct : null;
   }
 
   issueSession(res: Response, acct: Account) {
@@ -140,7 +140,8 @@ export class Auth {
     if (!p || typeof p.sub !== 'string' || typeof p.exp !== 'number') return null;
     if (p.exp < Math.floor(Date.now() / 1000)) return null;
     if (this.revoked.has(p.nonce)) return null;
-    return this.findById(p.sub) || null; // removed from allowlist => session dead
+    const acct = this.findById(p.sub);
+    return acct && acct.enabled ? acct : null; // removed or disabled => session dead
   }
 
   /** Middleware: every request under it must be authenticated. */
