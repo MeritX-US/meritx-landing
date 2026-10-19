@@ -2,8 +2,8 @@
 
 ## Principle
 A new, separate service. Do **not** reuse the public demo's Render service, Netlify site,
-API keys, env vars, disk or domain. Nothing in this PR changes `app/`, `netlify.toml`,
-`robots.txt` or `sitemap.xml` of the public site.
+API keys, env vars, disk or domain. Nothing changes `app/`, `robots.txt` or `sitemap.xml` of the public site. The only public-site change is a
+`netlify.toml` rule that returns 404 for `/pilot` and `/pilot/*` so pilot files are never served there.
 
 ## Steps (for Jiantao, after approval)
 1. Approve the paid services below.
@@ -37,7 +37,7 @@ API keys, env vars, disk or domain. Nothing in this PR changes `app/`, `netlify.
 | `AI_API_KEY` | new key from a **paid** project dedicated to the pilot | host secret store |
 | `AI_PAID_TIER_VERIFIED` | `true` only after `docs/AI_VENDOR_VERIFICATION.md` is done | host env |
 | `AI_PROMPTS_FILE` | untracked prompt templates (Render Secret File) | host secret file |
-| Who is the 4th account | admin = Jiantao; Garrick would be a 5th → needs a decision | — |
+| `PILOT_MAX_ACCOUNTS` | default 4; set 5 if both Jiantao and Garrick get admin accounts | host env |
 
 ## Paid services (none created) – estimates, Oct 2026 list prices
 | Service | Needed for | Est. monthly | Source |
