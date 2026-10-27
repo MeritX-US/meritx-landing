@@ -10,7 +10,11 @@ import { makeApp, agents, testEnv, EMAIL, runCliScript } from './helpers';
 
 const KEY = Buffer.alloc(32, 7).toString('base64'); // test-only constant key
 const dir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'mx-anchor-'));
-const fill = (l: AccessLog, n: number) => { for (let i = 0; i < n; i++) l.append({ actor: 'a', role: 'lawyer', action: `t.${i}`, outcome: 'ok' }); };
+// `tag` distinguishes one run of entries from another. An entry's hash covers only
+// [seq, ts, actor, role, action, resource, outcome], so two runs of identical entries that
+// land in the same millisecond produce the same chain -- correct for a hash chain, but it
+// makes a "rewritten chain" test depend on crossing a millisecond boundary.
+const fill = (l: AccessLog, n: number, tag = 't') => { for (let i = 0; i < n; i++) l.append({ actor: 'a', role: 'lawyer', action: `${tag}.${i}`, outcome: 'ok' }); };
 const quiet = (d: string) => new AccessLog(d, new Cipher(KEY), { anchorSink: null });
 
 test('anchor: every append emits {event, seq, entries, hash} matching the chain head', () => {
@@ -92,7 +96,7 @@ test('verify(anchor): a fully re-generated chain of the same length is caught', 
   const d = dir(); const l = quiet(d); fill(l, 3);
   const a = l.anchor();
   fs.rmSync(path.join(d, 'access.log.enc'));
-  const l2 = quiet(d); fill(l2, 3); // valid chain, different content/timestamps
+  const l2 = quiet(d); fill(l2, 3, 'rewritten'); // valid chain, genuinely different content
   assert.equal(l2.verify().ok, true);
   const v = l2.verify(a);
   assert.equal(v.ok, false); assert.match(v.anchor!.reason!, /rewritten/);
