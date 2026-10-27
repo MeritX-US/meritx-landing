@@ -29,8 +29,14 @@ const INLINE = {
   anthropic: new Set(['application/pdf', 'image/png', 'image/jpeg', 'text/plain']),
 };
 
+/**
+ * Substitute {{name}} from `vars`; an unknown placeholder becomes empty. Only the object's own
+ * keys count: `k in vars` would also match inherited names, so a template typo like
+ * {{constructor}} or {{toString}} injected "function Object() { [native code] }" into the prompt.
+ */
 export function fillTemplate(tpl: string, vars: Record<string, string>): string {
-  return tpl.replace(/\{\{(\w+)\}\}/g, (_m, k) => (k in vars ? vars[k] : ''));
+  return tpl.replace(/\{\{(\w+)\}\}/g, (_m, k) =>
+    Object.prototype.hasOwnProperty.call(vars, k) ? vars[k] : '');
 }
 
 export class AiClient {

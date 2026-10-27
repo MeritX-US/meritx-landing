@@ -6,6 +6,9 @@ import path from 'path';
 import { loadConfig, loadAiConfig } from '../src/config';
 import { AiClient, fillTemplate, type FetchLike } from '../src/ai/provider';
 import { makeApp, agents, testEnv } from './helpers';
+import { createApp } from '../src/app';
+import { EncryptedFileStore, type Store } from '../src/store';
+import { Cipher } from '../src/crypto';
 
 // Synthetic, generic prompt file written to a temp dir (real prompts live only in untracked files).
 function promptsFile() {
@@ -80,6 +83,11 @@ test('provider errors never echo the response body', async () => {
 
 test('fillTemplate', () => {
   assert.equal(fillTemplate('a {{x}} b {{y}}', { x: '1' }), 'a 1 b ');
+  // Only own keys: an inherited name used to resolve to a function and land in the prompt.
+  for (const k of ['constructor', 'toString', 'hasOwnProperty', '__proto__']) {
+    assert.equal(fillTemplate(`a {{${k}}} b`, { x: '1' }), 'a  b', `{{${k}}} must not resolve`);
+  }
+  assert.equal(fillTemplate('{{x}}', { x: '$& $1 $`' }), '$& $1 $`', 'replacement is literal');
 });
 
 test('route: lawyer-only, requires visa type, result unapproved and hidden from employee', async () => {
@@ -110,4 +118,56 @@ test('route: 503 when AI disabled', async () => {
   const { app } = makeApp();
   const a = await agents(app);
   assert.equal((await a.lawyer.post('/api/assessment/generate')).status, 503);
+});
+
+test('generate: a material whose blob cannot be read is reported, never a crash or a hang', async () => {
+  // Express 4 ignores a rejected promise from an async handler, so a throwing store used to
+  // hang the request and bring the process down with an unhandled rejection.
+  const { f, calls } = mockFetch({ choices: [{ message: { content: 'AI DRAFT (synthetic)' } }] });
+  const { cfg } = makeApp(aiEnv('openai'));
+  const good = Buffer.from('%PDF-1.4 readable');
+  const store = new EncryptedFileStore(cfg.dataDir, new Cipher(cfg.encryptionKey));
+  const app = createApp(cfg, { fetch: f, store });
+  const a = await agents(app);
+  await a.employee.post('/api/consent').send({ agree: true });
+  const ok = (await a.employee.post('/api/materials').attach('file', good, { filename: 'ok.pdf', contentType: 'application/pdf' })).body.id;
+  const bad = (await a.employee.post('/api/materials').attach('file', good, { filename: 'bad.pdf', contentType: 'application/pdf' })).body.id;
+  await a.lawyer.put('/api/case/visa-type').send({ visaType: 'SYNTHETIC-VISA' });
+
+  // Corrupt one blob on disk, exactly as a rotated key or a damaged disk would: decrypt throws.
+  const blob = path.join(cfg.dataDir, 'blobs', bad);
+  const ct = fs.readFileSync(blob); ct[ct.length - 1] ^= 0xff; fs.writeFileSync(blob, ct);
+  assert.throws(() => store.getBlob(bad), /authenticate|decrypt/i, 'fixture really is undecryptable');
+
+  const g = await a.lawyer.post('/api/assessment/generate').send({ materialIds: [ok, bad] });
+  assert.equal(g.status, 200, 'the readable material is still assessed');
+  assert.deepEqual(g.body.unreadableMaterialIds, [bad], 'the lawyer is told which file to review by hand');
+  assert.equal(calls.length, 1);
+  const parts = calls[0].body.messages[1].content;
+  assert.equal(parts.filter((x: any) => x.type === 'file').length, 1, 'only the readable file is sent on');
+
+  // A store that fails mid-request answers 500 from the error handler instead of hanging.
+  let armed = false;
+  const flaky: Store = {
+    read: () => { if (armed) throw new Error('state unreadable'); return store.read(); },
+    update: m => store.update(m),
+    putBlob: (i, d) => store.putBlob(i, d),
+    getBlob: i => store.getBlob(i),
+    deleteBlob: i => store.deleteBlob(i),
+  };
+  const b = await agents(createApp(cfg, { fetch: f, store: flaky }));
+  armed = true;
+  assert.equal((await b.lawyer.post('/api/assessment/generate').send({})).status, 500);
+});
+
+test('AI numeric env vars are validated, never silently NaN', () => {
+  // setTimeout(abort, NaN) fires immediately, which aborted every request as it was sent.
+  assert.throws(() => loadAiConfig(aiEnv('openai', { AI_TIMEOUT_MS: '30s' }) as any), /AI_TIMEOUT_MS/);
+  assert.throws(() => loadAiConfig(aiEnv('openai', { AI_TIMEOUT_MS: '0' }) as any), /AI_TIMEOUT_MS/);
+  assert.throws(() => loadAiConfig(aiEnv('openai', { AI_MAX_OUTPUT_TOKENS: 'lots' }) as any), /AI_MAX_OUTPUT_TOKENS/);
+  assert.throws(() => loadAiConfig(aiEnv('openai', { AI_MAX_OUTPUT_TOKENS: '-1' }) as any), /AI_MAX_OUTPUT_TOKENS/);
+  const ok = loadAiConfig(aiEnv('openai', { AI_TIMEOUT_MS: '5000', AI_MAX_OUTPUT_TOKENS: '2048' }) as any);
+  assert.equal(ok.timeoutMs, 5000); assert.equal(ok.maxOutputTokens, 2048);
+  const dflt = loadAiConfig(aiEnv('openai') as any);
+  assert.equal(dflt.timeoutMs, 120000); assert.equal(dflt.maxOutputTokens, 4096);
 });
