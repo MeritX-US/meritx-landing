@@ -116,6 +116,18 @@ export class Auth {
   static readonly WINDOW_MS = 15 * 60 * 1000;
   static readonly BACKOFF_BASE_MS = 1000;
   static readonly BACKOFF_CAP_MS = 15 * 60 * 1000;
+  /**
+   * Hard cap on tracked login-failure keys. Both maps are keyed by attacker-supplied input
+   * (the submitted email, and ip|email), so without a cap a sustained login flood with
+   * distinct emails grows them until the instance runs out of memory, and nothing is ever
+   * reclaimed without a restart.
+   */
+  static readonly MAX_TRACKED = 4096;
+  /** Evicting down to this (rather than to the cap) keeps eviction off the common path. */
+  static readonly EVICT_TO = 3072;
+  /** Stale entries are reclaimed by a full scan every Nth recorded failure, and by eviction. */
+  static readonly SWEEP_EVERY = 64;
+  private sweepTick = 0;
   readonly limiter = new ConcurrencyLimiter(4, 32);
   now: () => number = () => Date.now();
 
@@ -141,8 +153,51 @@ export class Auth {
     const f = this.failures.get(key);
     if (!f || this.now() - f.first > Auth.WINDOW_MS) this.failures.set(key, { count: 1, first: this.now() });
     else f.count++;
+    this.sweep();
   }
   clearFailures(key: string) { this.failures.delete(key); }
+
+  /** Number of tracked failure/backoff entries, for tests and diagnostics. */
+  get trackedCounts(): { failures: number; backoff: number } {
+    return { failures: this.failures.size, backoff: this.backoff.size };
+  }
+
+  private isAllowlisted(email: string): boolean {
+    return this.cfg.accounts.some(a => a.email === email);
+  }
+
+  /**
+   * Reclaim failure state. Two mechanisms, both needed:
+   *  - every SWEEP_EVERY recorded failures, a full scan drops entries whose window has fully
+   *    elapsed (a lockout older than WINDOW_MS, a backoff older than its 15-minute cap: neither
+   *    can affect a decision any more), so quiet instances don't hold state until restart;
+   *  - whenever a map passes MAX_TRACKED it is evicted down to EVICT_TO, which bounds memory
+   *    hard even under a flood that never pauses long enough for anything to go stale.
+   */
+  private sweep() {
+    const now = this.now();
+    if (++this.sweepTick % Auth.SWEEP_EVERY === 0) {
+      for (const [k, f] of this.failures) if (now - f.first > Auth.WINDOW_MS) this.failures.delete(k);
+      for (const [e, b] of this.backoff) if (now - b.last > Auth.BACKOFF_CAP_MS) this.backoff.delete(e);
+    }
+    // The email is everything after the first "|" (an IP never contains one).
+    this.evict(this.failures, k => this.isAllowlisted(k.slice(k.indexOf('|') + 1)), f => f.first);
+    this.evict(this.backoff, e => this.isAllowlisted(e), b => b.last);
+  }
+
+  /**
+   * Bring a map that has passed MAX_TRACKED back down to EVICT_TO, oldest first. Entries for
+   * allowlisted accounts go last, so a flood of unknown emails cannot push a real account's
+   * lockout out of the map.
+   */
+  private evict<V>(m: Map<string, V>, isProtected: (k: string) => boolean, age: (v: V) => number) {
+    if (m.size <= Auth.MAX_TRACKED) return;
+    const byAge = [...m].sort((a, b) => age(a[1]) - age(b[1]));
+    for (const [k] of [...byAge.filter(([k]) => !isProtected(k)), ...byAge.filter(([k]) => isProtected(k))]) {
+      if (m.size <= Auth.EVICT_TO) break;
+      m.delete(k);
+    }
+  }
 
   // ---- per-email exponential backoff: 1s, 2s, 4s ... capped at 15 min ----
   static backoffDelayMs(failures: number): number {
@@ -158,6 +213,7 @@ export class Auth {
   recordEmailFailure(email: string) {
     const b = this.backoff.get(email);
     this.backoff.set(email, { count: (b?.count || 0) + 1, last: this.now() });
+    this.sweep();
   }
   emailFailureCount(email: string): number { return this.backoff.get(email)?.count || 0; }
   clearEmailBackoff(email: string) { this.backoff.delete(email); }

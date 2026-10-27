@@ -45,6 +45,20 @@ function parseBool(v: string | undefined, dflt: boolean): boolean {
   return ['1', 'true', 'yes', 'on'].includes(v.trim().toLowerCase());
 }
 
+/**
+ * Integer env var with an inclusive range. A malformed value is a startup error, never a
+ * silent NaN: NaN propagates into cookie Max-Age, multer's fileSize limit and setTimeout,
+ * where it breaks login sessions and uploads without any error anyone can see.
+ */
+export function parseIntEnv(v: string | undefined, name: string, dflt: number, min: number, max: number): number {
+  if (v === undefined || v.trim() === '') return dflt;
+  const n = Number(v.trim());
+  if (!Number.isInteger(n) || n < min || n > max) {
+    throw new ConfigError(`${name} must be an integer between ${min} and ${max} (got "${v}")`);
+  }
+  return n;
+}
+
 export function parseAccounts(raw: string, maxAccounts = DEFAULT_MAX_ACCOUNTS): Account[] {
   let parsed: unknown;
   try {
@@ -93,10 +107,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PilotConfig {
     rawAccounts = fs.readFileSync(env.PILOT_ACCOUNTS_FILE, 'utf8');
   }
   if (!rawAccounts) throw new ConfigError('PILOT_ACCOUNTS (or PILOT_ACCOUNTS_FILE) is required');
-  const maxAccounts = Number(env.PILOT_MAX_ACCOUNTS || DEFAULT_MAX_ACCOUNTS);
-  if (!Number.isInteger(maxAccounts) || maxAccounts < 4 || maxAccounts > 10) {
-    throw new ConfigError('PILOT_MAX_ACCOUNTS must be an integer between 4 and 10');
-  }
+  const maxAccounts = parseIntEnv(env.PILOT_MAX_ACCOUNTS, 'PILOT_MAX_ACCOUNTS', DEFAULT_MAX_ACCOUNTS, 4, 10);
   const accounts = parseAccounts(rawAccounts, maxAccounts);
 
   const secret = env.SESSION_SECRET || '';
@@ -120,13 +131,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PilotConfig {
     accounts,
     maxAccounts,
     sessionSecret: Buffer.from(secret, 'utf8'),
-    sessionTtlSeconds: Number(env.SESSION_TTL_SECONDS || 8 * 3600),
+    sessionTtlSeconds: parseIntEnv(env.SESSION_TTL_SECONDS, 'SESSION_TTL_SECONDS', 8 * 3600, 60, 7 * 24 * 3600),
     dataDir,
     allowedOrigins,
     lawyerApprovedPublish: parseBool(env.LAWYER_APPROVED_PUBLISH, false),
     secureCookies: parseBool(env.SECURE_COOKIES, isProd),
     trustProxy: parseBool(env.TRUST_PROXY, isProd),
-    maxUploadBytes: Number(env.MAX_UPLOAD_BYTES || 25 * 1024 * 1024),
+    maxUploadBytes: parseIntEnv(env.MAX_UPLOAD_BYTES, 'MAX_UPLOAD_BYTES', 25 * 1024 * 1024, 1, 200 * 1024 * 1024),
     questions: loadQuestions(env),
   };
 }

@@ -151,3 +151,33 @@ test('upload ignores client MIME: spoofed type is rejected, real type is stored'
   const list = (await emp.get('/api/materials')).body;
   assert.equal(list.find((m: any) => m.id === ok.body.id).mimeType, 'image/png');
 });
+
+test('login failure tracking is bounded and reclaimed (flood of unknown emails cannot grow it forever)', () => {
+  const { cfg } = makeApp();
+  const a = new Auth(cfg);
+  let t = 1_000_000; a.now = () => t;
+
+  // A real account gets locked out first; it must survive everything that follows.
+  const realKey = `198.51.100.7|${EMAIL.employee}`;
+  for (let i = 0; i < Auth.MAX_FAILURES; i++) { a.recordFailure(realKey); a.recordEmailFailure(EMAIL.employee); }
+  assert.equal(a.isLockedOut(realKey), true);
+
+  // Sustained flood with distinct, non-allowlisted emails (exactly what POST /auth/login records).
+  for (let i = 0; i < 20_000; i++) {
+    t += 10; // ~100 attempts/s, inside the 15-minute window
+    a.recordFailure(`203.0.113.9|a${i}@attacker.test`);
+    a.recordEmailFailure(`a${i}@attacker.test`);
+  }
+  const { failures, backoff } = a.trackedCounts;
+  assert.ok(failures <= Auth.MAX_TRACKED, `failures bounded, got ${failures}`);
+  assert.ok(backoff <= Auth.MAX_TRACKED, `backoff bounded, got ${backoff}`);
+  assert.equal(a.isLockedOut(realKey), true, 'the allowlisted account is never evicted by a flood');
+  assert.equal(a.emailFailureCount(EMAIL.employee), Auth.MAX_FAILURES, 'its backoff escalation is not reset by a flood');
+
+  // Once every window has elapsed, the state is reclaimed rather than kept until restart
+  // (the scan is amortised over SWEEP_EVERY attempts, so give it that many).
+  t += Auth.WINDOW_MS + Auth.BACKOFF_CAP_MS + 1;
+  for (let i = 0; i < Auth.SWEEP_EVERY; i++) a.recordFailure(`203.0.113.9|late${i}@attacker.test`);
+  assert.ok(a.trackedCounts.failures <= Auth.SWEEP_EVERY, `stale lockouts dropped, got ${a.trackedCounts.failures}`);
+  assert.equal(a.trackedCounts.backoff, 0, 'stale backoffs dropped');
+});

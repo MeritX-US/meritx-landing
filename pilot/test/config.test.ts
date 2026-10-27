@@ -54,3 +54,27 @@ test('LAWYER_APPROVED_PUBLISH defaults to off', () => {
   assert.equal(loadConfig(testEnv()).lawyerApprovedPublish, false);
   assert.equal(loadConfig(testEnv({ LAWYER_APPROVED_PUBLISH: 'true' })).lawyerApprovedPublish, true);
 });
+
+test('numeric env vars are validated, never silently NaN', () => {
+  // A malformed value used to sail through as NaN: cookie Max-Age=NaN (login succeeds, every
+  // later request 401s) and multer limits.fileSize=NaN (every upload arrives as 0 bytes).
+  for (const [key, bad] of [
+    ['SESSION_TTL_SECONDS', 'eight-hours'],
+    ['MAX_UPLOAD_BYTES', '25MB'],
+  ] as const) {
+    assert.throws(() => loadConfig(testEnv({ [key]: bad })), new RegExp(key), `${key}=${bad} must be refused`);
+    assert.throws(() => loadConfig(testEnv({ [key]: '1.5' })), new RegExp(key));
+    assert.throws(() => loadConfig(testEnv({ [key]: '-1' })), new RegExp(key));
+    assert.throws(() => loadConfig(testEnv({ [key]: '0' })), new RegExp(key));
+  }
+  // Out of range in either direction.
+  assert.throws(() => loadConfig(testEnv({ SESSION_TTL_SECONDS: '30' })), /SESSION_TTL_SECONDS/);
+  assert.throws(() => loadConfig(testEnv({ SESSION_TTL_SECONDS: String(8 * 24 * 3600) })), /SESSION_TTL_SECONDS/);
+  assert.throws(() => loadConfig(testEnv({ MAX_UPLOAD_BYTES: String(500 * 1024 * 1024) })), /MAX_UPLOAD_BYTES/);
+  // Defaults, and valid values, still work. An empty string means "unset".
+  assert.equal(loadConfig(testEnv()).sessionTtlSeconds, 8 * 3600);
+  assert.equal(loadConfig(testEnv({ SESSION_TTL_SECONDS: '' })).sessionTtlSeconds, 8 * 3600);
+  assert.equal(loadConfig(testEnv({ SESSION_TTL_SECONDS: ' 3600 ' })).sessionTtlSeconds, 3600);
+  assert.equal(loadConfig(testEnv()).maxUploadBytes, 25 * 1024 * 1024);
+  assert.equal(loadConfig(testEnv({ MAX_UPLOAD_BYTES: '1048576' })).maxUploadBytes, 1048576);
+});
