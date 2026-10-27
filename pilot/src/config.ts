@@ -57,7 +57,13 @@ function readSecret(env: NodeJS.ProcessEnv, name: string): string {
 export function loadAiConfig(env: NodeJS.ProcessEnv): AiConfig {
   const provider = (env.AI_PROVIDER || 'none').trim().toLowerCase() as AiProviderName;
   if (!['none', 'gemini', 'openai', 'anthropic'].includes(provider)) throw new ConfigError('AI_PROVIDER must be none|gemini|openai|anthropic');
-  const base: AiConfig = { provider, model: '', apiKey: '', baseUrl: null, timeoutMs: Number(env.AI_TIMEOUT_MS || 120000), maxOutputTokens: Number(env.AI_MAX_OUTPUT_TOKENS || 4096), prompts: null };
+  // Validated, not NaN-coerced: setTimeout(abort, NaN) fires immediately, which aborted
+  // every AI request the moment it was sent.
+  const base: AiConfig = {
+    provider, model: '', apiKey: '', baseUrl: null, prompts: null,
+    timeoutMs: parseIntEnv(env.AI_TIMEOUT_MS, 'AI_TIMEOUT_MS', 120000, 1000, 10 * 60 * 1000),
+    maxOutputTokens: parseIntEnv(env.AI_MAX_OUTPUT_TOKENS, 'AI_MAX_OUTPUT_TOKENS', 4096, 1, 200000),
+  };
   if (provider === 'none') return base;
   // Human gate: someone must have completed docs/AI_VENDOR_VERIFICATION.md for this account.
   if (env.AI_PAID_TIER_VERIFIED !== 'true') {

@@ -5,7 +5,7 @@ import multer from 'multer';
 import { publicDir, type PilotConfig } from './config';
 import { Auth, allow, ConcurrencyLimiter, type AuthedRequest } from './auth';
 import { detectFileType } from './fileType';
-import { EncryptedFileStore, CASE_STATUSES, type Store, type CaseStatus } from './store';
+import { EncryptedFileStore, CASE_STATUSES, type Store, type CaseStatus, type Material } from './store';
 import { Cipher } from './crypto';
 import { AiClient, AiProviderError, fillTemplate, type FetchLike } from './ai/provider';
 import { AccessLog } from './accessLog';
@@ -320,29 +320,50 @@ export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
   });
 
   // ---------- AI: lawyer-triggered eligibility assessment draft ----------
-  api.post('/assessment/generate', allow('lawyer'), async (req: AuthedRequest, res) => {
+  // The whole body is wrapped: Express 4 does not catch a rejected promise from an async
+  // handler, so anything thrown outside a try here would hang the request and take the
+  // process down with an unhandled rejection instead of answering the lawyer.
+  api.post('/assessment/generate', allow('lawyer'), async (req: AuthedRequest, res, next) => {
+   try {
     if (!ai.enabled || !cfg.ai.prompts) return res.status(503).json({ error: 'AI provider not configured' });
     const s = store.read();
     // Guardrail: no visa-specific AI output before the lawyer has chosen the visa type.
     if (!s.case.visaType) return res.status(409).json({ error: 'set visa type first' });
     const ids: string[] = Array.isArray(req.body?.materialIds) ? req.body.materialIds.map(String) : [];
     const mats = s.materials.filter(m => ids.includes(m.id));
-    const attachments = mats.map(m => ({ mimeType: m.mimeType, filename: m.filename, data: store.getBlob(m.id) || Buffer.alloc(0) }));
+    // A blob that is missing, empty, or undecryptable (corrupt, or encrypted under a rotated
+    // key) is reported back so the lawyer knows to review that document by hand. It is never
+    // sent on as an empty attachment and never fails the whole request.
+    const readable: { m: Material; data: Buffer }[] = [];
+    const unreadableMaterialIds: string[] = [];
+    for (const m of mats) {
+      let data: Buffer | null = null;
+      try { data = store.getBlob(m.id); } catch { data = null; }
+      if (data?.length) readable.push({ m, data }); else unreadableMaterialIds.push(m.id);
+    }
+    const attachments = readable.map(({ m, data }) => ({ mimeType: m.mimeType, filename: m.filename, data }));
     const { skipped } = ai.partition(attachments);
     const vars = {
       visaType: s.case.visaType,
       questionnaire: cfg.questions.map(q => `${q.text}\n${s.questionnaire.answers[q.id] || '(no answer)'}`).join('\n\n'),
       materials: mats.map(m => `- ${m.filename}${m.category ? ` [${m.category}]` : ''}`).join('\n'),
     };
+    let r;
     try {
-      const r = await ai.generate({ system: cfg.ai.prompts.assessment.system, prompt: fillTemplate(cfg.ai.prompts.assessment.user, vars), attachments });
-      store.update(st => { st.assessment = { text: r.text, source: 'ai', updatedAt: now(), approval: null }; });
-      audit(req, 'ai.assessment.generate', 'ok', `${r.provider}:${r.model}:${r.requestId || '-'}:files=${attachments.length - skipped.length}`);
-      res.json({ ok: true, chars: r.text.length, skippedMaterialIds: mats.filter((_m, i) => skipped.includes(attachments[i])).map(m => m.id) });
+      r = await ai.generate({ system: cfg.ai.prompts.assessment.system, prompt: fillTemplate(cfg.ai.prompts.assessment.user, vars), attachments });
     } catch (e: any) {
       audit(req, 'ai.assessment.generate', 'error', ai.label);
-      res.status(502).json({ error: e instanceof AiProviderError ? `AI provider error (${e.status})` : 'AI request failed' });
+      return res.status(502).json({ error: e instanceof AiProviderError ? `AI provider error (${e.status})` : 'AI request failed' });
     }
+    store.update(st => { st.assessment = { text: r.text, source: 'ai', updatedAt: now(), approval: null }; });
+    audit(req, 'ai.assessment.generate', 'ok', `${r.provider}:${r.model}:${r.requestId || '-'}:files=${attachments.length - skipped.length}`);
+    res.json({
+      ok: true,
+      chars: r.text.length,
+      skippedMaterialIds: readable.filter((_x, i) => skipped.includes(attachments[i])).map(x => x.m.id),
+      unreadableMaterialIds,
+    });
+   } catch (e) { next(e); }
   });
 
   api.use((_req, res) => res.status(404).json({ error: 'not found' }));
