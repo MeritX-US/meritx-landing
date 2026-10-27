@@ -102,7 +102,10 @@ function parseBool(v: string | undefined, dflt: boolean): boolean {
  */
 export function parseIntEnv(v: string | undefined, name: string, dflt: number, min: number, max: number): number {
   if (v === undefined || v.trim() === '') return dflt;
-  const n = Number(v.trim());
+  const raw = v.trim();
+  // Plain decimal digits only. Number() would also accept 0x10, 1e3, 0b11 and 0o17 as
+  // integers, so a value meant literally would quietly become a different number.
+  const n = /^\d+$/.test(raw) ? Number(raw) : NaN;
   if (!Number.isInteger(n) || n < min || n > max) {
     throw new ConfigError(`${name} must be an integer between ${min} and ${max} (got "${v}")`);
   }
