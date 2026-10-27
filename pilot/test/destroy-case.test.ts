@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { execFileSync } from 'child_process';
 import { destroyCase, DestroyRefused, DESTROY_CONFIRM_PHRASE, parseVendorRetention } from '../src/destroyCase';
 import { makeDestroyFixture } from './fixtures/make-destroy-fixture';
+import { runCliScript, canSymlink } from './helpers';
 
 const KEY = Buffer.alloc(32, 7).toString('base64'); // test-only constant key
 
@@ -17,6 +17,8 @@ function seed(status: 'closed' | 'in_review' = 'closed') {
   fs.writeFileSync(keyFile, KEY);
   return { root, dataDir, keyFile };
 }
+/** Relative artefact paths use the platform separator; the expectations below use "/". */
+const posix = (f: string) => f.split(path.sep).join('/');
 const ARTEFACTS = ['access.log.enc', 'anchor-email.state.json', 'blobs/11111111-1111-1111-1111-111111111111', 'blobs/22222222-2222-2222-2222-222222222222', 'state.enc'];
 const ACKS = { ackSnapshotsDeleted: true, aiVendorRetention: [parseVendorRetention('gemini=30')] };
 
@@ -25,7 +27,7 @@ test('dry run (default) lists every artefact and deletes nothing', () => {
   const before = fs.readdirSync(dataDir).length;
   const r = destroyCase({ dataDir, encryptionKey: KEY, keyFile });
   assert.equal(r.dryRun, true); assert.equal(r.deleted, 0); assert.equal(r.caseStatus, 'closed');
-  assert.deepEqual(r.files.filter(f => !f.startsWith('/')), ARTEFACTS);
+  assert.deepEqual(r.files.filter(f => !path.isAbsolute(f)).map(posix), ARTEFACTS);
   assert.ok(r.files.includes(keyFile));
   assert.equal(fs.readdirSync(dataDir).length, before);
   assert.ok(fs.existsSync(keyFile));
@@ -60,7 +62,7 @@ test('unknown status (no/wrong key) needs --force', () => {
   assert.equal(r.caseStatus, 'unknown'); assert.equal(r.deleted, 5);
 });
 
-test('never follows symlinks out of the data dir', () => {
+test('never follows symlinks out of the data dir', { skip: canSymlink() ? false : 'platform cannot create symlinks' }, () => {
   const { root, dataDir } = seed();
   const outside = path.join(root, 'outside.txt'); fs.writeFileSync(outside, 'keep');
   fs.symlinkSync(outside, path.join(dataDir, 'blobs', '33333333-3333-3333-3333-333333333333'));
@@ -71,12 +73,11 @@ test('never follows symlinks out of the data dir', () => {
 
 test('CLI: dry run by default, exits 1 when refused', () => {
   const { dataDir } = seed();
-  const tsx = path.join(__dirname, '..', 'node_modules', '.bin', 'tsx');
-  const script = path.join(__dirname, '..', 'src', 'scripts', 'destroy-case.ts');
   const env = { ...process.env, PILOT_ENCRYPTION_KEY: KEY };
-  const out = JSON.parse(execFileSync(tsx, [script, '--data-dir', dataDir], { env, encoding: 'utf8' }));
+  const cli = (args: string[]) => runCliScript('src/scripts/destroy-case.ts', args, env);
+  const out = JSON.parse(cli(['--data-dir', dataDir]));
   assert.equal(out.dryRun, true); assert.ok(fs.existsSync(path.join(dataDir, 'state.enc')));
-  assert.throws(() => execFileSync(tsx, [script, '--data-dir', dataDir, '--execute'], { env, stdio: 'pipe' }), (e: any) => e.status === 1);
+  assert.throws(() => cli(['--data-dir', dataDir, '--execute']), (e: any) => e.status === 1);
   assert.ok(fs.existsSync(path.join(dataDir, 'state.enc')));
 });
 
@@ -125,18 +126,17 @@ test('checklist: vendor retention must be days or zero', () => {
 
 test('CLI: execute without acks exits 3; ack run on the emptied dir exits 0 and writes the report file', () => {
   const { root, dataDir } = seed();
-  const tsx = path.join(__dirname, '..', 'node_modules', '.bin', 'tsx');
-  const script = path.join(__dirname, '..', 'src', 'scripts', 'destroy-case.ts');
   const env = { ...process.env, PILOT_ENCRYPTION_KEY: KEY };
-  assert.throws(() => execFileSync(tsx, [script, '--data-dir', dataDir, '--execute', '--confirm', DESTROY_CONFIRM_PHRASE], { env, stdio: 'pipe' }),
+  const cli = (args: string[]) => runCliScript('src/scripts/destroy-case.ts', args, env);
+  assert.throws(() => cli(['--data-dir', dataDir, '--execute', '--confirm', DESTROY_CONFIRM_PHRASE]),
     (e: any) => e.status === 3 && /NOT complete/.test(String(e.stderr)));
   assert.deepEqual(fs.readdirSync(dataDir), ['unrelated-notes.md']);
   const report = path.join(root, 'report.json');
-  const out = execFileSync(tsx, [script, '--data-dir', dataDir, '--execute', '--confirm', DESTROY_CONFIRM_PHRASE, '--force',
-    '--ack-render-snapshots-deleted', '--ack-ai-vendor-data', 'gemini=30', '--ack-ai-vendor-data', 'openai=zero', '--report-file', report], { env, encoding: 'utf8' });
+  const out = cli(['--data-dir', dataDir, '--execute', '--confirm', DESTROY_CONFIRM_PHRASE, '--force',
+    '--ack-render-snapshots-deleted', '--ack-ai-vendor-data', 'gemini=30', '--ack-ai-vendor-data', 'openai=zero', '--report-file', report]);
   assert.equal(JSON.parse(out).complete, true);
   const rec = JSON.parse(fs.readFileSync(report, 'utf8'));
   assert.equal(rec.complete, true);
   assert.deepEqual(rec.checklist[1].vendors.map((v: any) => v.retention), ['30 days', 'zero retention']);
-  assert.throws(() => execFileSync(tsx, [script, '--data-dir', dataDir, '--ack-ai-vendor-data', 'gemini=later'], { env, stdio: 'pipe' }), (e: any) => e.status === 1);
+  assert.throws(() => cli(['--data-dir', dataDir, '--ack-ai-vendor-data', 'gemini=later']), (e: any) => e.status === 1);
 });

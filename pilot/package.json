@@ -17,7 +17,8 @@
     "destroy-case": "tsx src/scripts/destroy-case.ts",
     "destroy-case:prod": "node dist/src/scripts/destroy-case.js",
     "verify-access-log": "tsx src/scripts/verify-access-log.ts",
-    "verify-access-log:prod": "node dist/src/scripts/verify-access-log.js"
+    "verify-access-log:prod": "node dist/src/scripts/verify-access-log.js",
+    "build:tests": "tsc -p tsconfig.json --outDir dist-test"
   },
   "dependencies": {
     "express": "^4.21.2",

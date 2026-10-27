@@ -38,6 +38,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      # Both come from the same Dockerfile and build cache: the `build` stage carries the
+      # compiled test fixtures, the default (last) stage is the production image and has none.
+      - run: docker build --target build -t meritx-private-pilot:build pilot
       - run: docker build -t meritx-private-pilot:ci pilot
       - name: destroy-case (compiled JS) in the production image against a fixture data dir
-        run: bash pilot/ci/docker-destroy-case.sh meritx-private-pilot:ci
+        run: bash pilot/ci/docker-destroy-case.sh meritx-private-pilot:ci meritx-private-pilot:build

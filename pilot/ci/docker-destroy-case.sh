@@ -2,9 +2,10 @@
 # Runs the COMPILED destroy-case script inside the PRODUCTION image against a synthetic fixture
 # data dir: dry run, refusal, execute (incomplete without the checklist acks), then the
 # acknowledgement run that completes the case-close. Used by .github/workflows/pilot-ci.yml.
-#   bash pilot/ci/docker-destroy-case.sh [image]
+#   bash pilot/ci/docker-destroy-case.sh [prod-image] [build-stage-image]
 set -euo pipefail
 IMAGE="${1:-meritx-private-pilot:ci}"
+BUILD_IMAGE="${2:-meritx-private-pilot:build}"   # the Dockerfile's `build` stage
 DOCKER="${DOCKER:-docker}"   # e.g. DOCKER="sudo docker" locally
 WORK="$(mktemp -d)"
 mkdir -p "$WORK/data"
@@ -16,16 +17,27 @@ run() {
     -e PILOT_ENCRYPTION_KEY_FILE=/work/pilot.key \
     -v "$WORK/data:/data" -v "$WORK:/work" "$IMAGE" "$@"
 }
+# The fixture builder is compiled test code, so it is NOT in the image. It is mounted under
+# /pilot so that Node still resolves the image's own node_modules from it.
+run_with_tests() {
+  $DOCKER run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
+    -e PILOT_ENCRYPTION_KEY_FILE=/work/pilot.key \
+    -v "$WORK/data:/data" -v "$WORK:/work" -v "$WORK/dist-test:/pilot/dist-test" "$IMAGE" "$@"
+}
 fail() { echo "FAIL: $*" >&2; exit 1; }
 j() { node -e "const r=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(JSON.stringify(eval(process.argv[2])))" "$1" "$2"; }
 
-echo "--- image contains the compiled scripts"
+echo "--- image contains the compiled scripts and no test code"
 run test -f dist/src/scripts/destroy-case.js || fail "dist/src/scripts/destroy-case.js missing from image"
 run test -f dist/src/scripts/verify-access-log.js || fail "dist/src/scripts/verify-access-log.js missing from image"
 run sh -c '! test -e node_modules/tsx' || fail "dev dependency tsx present in production image"
+run sh -c '! test -e dist/test' || fail "compiled test code present in production image"
 
-echo "--- synthetic fixture (random CI-only key)"
-run node dist/test/fixtures/make-destroy-fixture.js /data
+echo "--- synthetic fixture (random CI-only key), from test code kept out of the image"
+BUILDER="$($DOCKER create "$BUILD_IMAGE")"
+$DOCKER cp "$BUILDER:/pilot/dist-test" "$WORK/dist-test" >/dev/null
+$DOCKER rm -v "$BUILDER" >/dev/null
+run_with_tests node dist-test/test/fixtures/make-destroy-fixture.js /data
 test -f "$WORK/pilot.key" || fail "fixture key not created"
 ls -la "$WORK/data" "$WORK/data/blobs"
 

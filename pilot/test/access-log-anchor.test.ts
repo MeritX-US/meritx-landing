@@ -3,11 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { execFileSync } from 'child_process';
 import { AccessLog, stdoutAnchorSink, type AnchorEvent, type AccessEntry } from '../src/accessLog';
 import { Cipher } from '../src/crypto';
 import { loadConfig } from '../src/config';
-import { makeApp, agents, testEnv, EMAIL } from './helpers';
+import { makeApp, agents, testEnv, EMAIL, runCliScript } from './helpers';
 
 const KEY = Buffer.alloc(32, 7).toString('base64'); // test-only constant key
 const dir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'mx-anchor-'));
@@ -118,16 +117,15 @@ test('GET /api/access-log/verify?seq=&hash=: compares against the anchor; 400 on
 test('CLI verify-access-log: exit 0 on match (--seq/--hash and --anchor line), 1 on truncation, 2 on bad input', () => {
   const d = dir(); const l = quiet(d); fill(l, 4);
   const a = l.anchor();
-  const tsx = path.join(__dirname, '..', 'node_modules', '.bin', 'tsx');
-  const script = path.join(__dirname, '..', 'src', 'scripts', 'verify-access-log.ts');
   const env = { ...process.env, PILOT_ENCRYPTION_KEY: KEY };
-  let out = JSON.parse(execFileSync(tsx, [script, '--data-dir', d, '--seq', String(a.seq), '--hash', a.hash], { env, encoding: 'utf8' }));
+  const cli = (args: string[]) => runCliScript('src/scripts/verify-access-log.ts', args, env);
+  let out = JSON.parse(cli(['--data-dir', d, '--seq', String(a.seq), '--hash', a.hash]));
   assert.equal(out.ok, true); assert.equal(out.anchor.match, true);
-  out = JSON.parse(execFileSync(tsx, [script, '--data-dir', d, '--anchor', JSON.stringify(a)], { env, encoding: 'utf8' }));
+  out = JSON.parse(cli(['--data-dir', d, '--anchor', JSON.stringify(a)]));
   assert.equal(out.anchor.match, true);
   const p = path.join(d, 'access.log.enc');
   const lines = fs.readFileSync(p, 'utf8').split('\n').filter(Boolean);
   fs.writeFileSync(p, lines.slice(0, 2).join('\n') + '\n');
-  assert.throws(() => execFileSync(tsx, [script, '--data-dir', d, '--seq', String(a.seq), '--hash', a.hash], { env, stdio: 'pipe' }), (e: any) => e.status === 1);
-  assert.throws(() => execFileSync(tsx, [script, '--data-dir', d, '--seq', '1', '--hash', 'nothex'], { env, stdio: 'pipe' }), (e: any) => e.status === 2);
+  assert.throws(() => cli(['--data-dir', d, '--seq', String(a.seq), '--hash', a.hash]), (e: any) => e.status === 1);
+  assert.throws(() => cli(['--data-dir', d, '--seq', '1', '--hash', 'nothex']), (e: any) => e.status === 2);
 });

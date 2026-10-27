@@ -2,6 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import request from 'supertest';
+import { execFileSync } from 'child_process';
 import { hashPassword } from '../src/auth';
 import { loadConfig, type PilotConfig } from '../src/config';
 import { createApp } from '../src/app';
@@ -86,4 +87,30 @@ export async function agents(app: any) {
     enterprise: await loginAs(app, 'enterprise'),
     admin: await loginAs(app, 'admin'),
   };
+}
+
+/**
+ * Run one of the src/scripts CLIs the way a developer would, portably. node_modules/.bin/tsx
+ * is a shell shim with no extension on Windows and so cannot be spawned directly; resolving
+ * tsx's own entrypoint and running it under this node works on every platform.
+ */
+export function runCliScript(scriptRelPath: string, args: string[], env?: NodeJS.ProcessEnv): string {
+  const script = path.join(__dirname, '..', scriptRelPath);
+  return execFileSync(process.execPath, [require.resolve('tsx/cli'), script, ...args], {
+    env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+  });
+}
+
+/** True when this platform/account can create symlinks (Windows needs Developer Mode or admin). */
+export function canSymlink(): boolean {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'mx-symlink-'));
+  try {
+    fs.writeFileSync(path.join(d, 'target'), 'x');
+    fs.symlinkSync(path.join(d, 'target'), path.join(d, 'link'));
+    return true;
+  } catch {
+    return false;
+  } finally {
+    fs.rmSync(d, { recursive: true, force: true });
+  }
 }
