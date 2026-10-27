@@ -3,9 +3,8 @@ FROM node:20-alpine AS build
 WORKDIR /pilot
 COPY package.json package-lock.json ./
 RUN npm ci
-COPY tsconfig.json ./
+COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src
-COPY test ./test
 RUN npm run build && npm prune --omit=dev
 
 FROM node:20-alpine
