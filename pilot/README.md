@@ -22,7 +22,7 @@ deployment** with the public demo in `app/` and the landing site. The public dem
 ```bash
 cd pilot
 npm ci
-npm test                       # 54 tests: config, auth, per-role RBAC, flag, noindex/CORS, encryption, signed URLs, AI
+npm test                       # 81 tests: config, auth, per-role RBAC, flag, noindex/CORS, encryption, signed URLs, AI
 cp .env.example .env           # fill with SYNTHETIC values
 printf '%s' 'a-long-test-password' | npm run --silent hash-password   # -> scrypt$...
 npm run dev                    # http://localhost:3101
