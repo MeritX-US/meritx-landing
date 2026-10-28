@@ -35,3 +35,37 @@ services:
         sync: false
       - key: PILOT_ALLOWED_ORIGINS
         sync: false
+      - key: PILOT_ENCRYPTION_KEY
+        sync: false
+      - key: DOWNLOAD_URL_SECRET
+        sync: false
+      - key: DOWNLOAD_URL_TTL_SECONDS
+        value: "60"
+      - key: AI_PROVIDER
+        value: none                   # switch only after AI vendor verification
+      - key: AI_MODEL
+        sync: false
+      - key: AI_API_KEY
+        sync: false
+      - key: AI_PAID_TIER_VERIFIED
+        value: "false"
+      - key: AI_PROMPTS_FILE
+        value: /etc/secrets/ai_prompts.json   # Render "Secret File"; content never in git
+      # PR3: access-log anchor. stdout line per append (Render logs). Daily email is OFF until
+      # the MeritX owner picks an SMTP provider (docs/AUDIT_ANCHORING.md).
+      - key: PILOT_ACCESS_LOG_ANCHOR_STDOUT
+        value: "true"
+      - key: PILOT_ANCHOR_EMAIL_ENABLED
+        value: "false"
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: SMTP_TO
+        sync: false

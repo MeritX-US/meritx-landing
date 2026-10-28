@@ -8,14 +8,15 @@ import { signToken } from '../src/auth';
 export const API_ROUTES: [string, string][] = [
   ['get', '/api/me'], ['get', '/api/case'], ['get', '/api/case/status'], ['put', '/api/case/status'],
   ['put', '/api/case/visa-type'], ['post', '/api/consent'], ['get', '/api/questionnaire'], ['put', '/api/questionnaire'],
-  ['get', '/api/materials'], ['post', '/api/materials'], ['get', '/api/materials/00000000-0000-0000-0000-000000000000/download'],
+  ['get', '/api/materials'], ['post', '/api/materials'], ['post', '/api/materials/00000000-0000-0000-0000-000000000000/download-url'], ['post', '/api/assessment/generate'],
+  ['get', '/files/00000000-0000-0000-0000-000000000000?exp=9999999999&sig=x'],
   ['put', '/api/materials/00000000-0000-0000-0000-000000000000/category'], ['delete', '/api/materials/00000000-0000-0000-0000-000000000000'],
   ['post', '/api/todos'], ['put', '/api/todos/x/publish'], ['get', '/api/assessment'], ['put', '/api/assessment'],
   ['post', '/api/assessment/approve'], ['post', '/api/assessment/revoke'], ['get', '/api/access-log'],
   ['get', '/api/records'], ['get', '/api/anything-unknown'],
 ];
 
-test('every /api route rejects unauthenticated requests with 401', async () => {
+test('every /api route and /files rejects unauthenticated requests with 401', async () => {
   const { app } = makeApp();
   for (const [m, p] of API_ROUTES) {
     const r = await (request(app) as any)[m](p);

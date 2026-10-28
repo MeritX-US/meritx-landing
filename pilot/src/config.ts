@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { ANCHOR_EMAIL_DISABLED, type AnchorEmailConfig } from './anchorEmail';
 
 /**
  * Pilot configuration. Everything sensitive comes from environment variables
@@ -31,9 +32,81 @@ export interface PilotConfig {
   trustProxy: boolean;
   maxUploadBytes: number;
   questions: { id: string; text: string }[]; // questionnaire prompts, from untracked config
+  encryptionKey: string;          // base64 32 bytes (PILOT_ENCRYPTION_KEY)
+  downloadUrlSecret: Buffer;      // HMAC key for signed download URLs
+  downloadUrlTtlSeconds: number;  // short-lived: default 60s, max 300s
+  ai: AiConfig;
+  accessLogAnchorStdout: boolean; // PILOT_ACCESS_LOG_ANCHOR_STDOUT (default true)
+  anchorEmail: AnchorEmailConfig; // optional daily anchor email, disabled by default
+}
+
+export type AiProviderName = 'none' | 'gemini' | 'openai' | 'anthropic';
+export interface AiConfig {
+  provider: AiProviderName;
+  model: string;
+  apiKey: string;          // never logged
+  baseUrl: string | null;  // optional override (e.g. a regional endpoint)
+  timeoutMs: number;
+  maxOutputTokens: number;
+  prompts: { assessment: { system: string; user: string } } | null; // from untracked AI_PROMPTS_FILE
+}
+
+function readSecret(env: NodeJS.ProcessEnv, name: string): string {
+  if (env[name]) return env[name]!.trim();
+  const f = env[`${name}_FILE`];
+  return f ? fs.readFileSync(f, 'utf8').trim() : '';
+}
+
+export function loadAiConfig(env: NodeJS.ProcessEnv): AiConfig {
+  const provider = (env.AI_PROVIDER || 'none').trim().toLowerCase() as AiProviderName;
+  if (!['none', 'gemini', 'openai', 'anthropic'].includes(provider)) throw new ConfigError('AI_PROVIDER must be none|gemini|openai|anthropic');
+  // Validated, not NaN-coerced: setTimeout(abort, NaN) fires immediately, which aborted
+  // every AI request the moment it was sent.
+  const base: AiConfig = {
+    provider, model: '', apiKey: '', baseUrl: null, prompts: null,
+    timeoutMs: parseIntEnv(env.AI_TIMEOUT_MS, 'AI_TIMEOUT_MS', 120000, 1000, 10 * 60 * 1000),
+    maxOutputTokens: parseIntEnv(env.AI_MAX_OUTPUT_TOKENS, 'AI_MAX_OUTPUT_TOKENS', 4096, 1, 200000),
+  };
+  if (provider === 'none') return base;
+  // Human gate: someone must have completed docs/AI_VENDOR_VERIFICATION.md for this account.
+  if (env.AI_PAID_TIER_VERIFIED !== 'true') {
+    throw new ConfigError('AI_PAID_TIER_VERIFIED=true is required to enable an AI provider (complete docs/AI_VENDOR_VERIFICATION.md first)');
+  }
+  const model = (env.AI_MODEL || '').trim();
+  if (!model) throw new ConfigError('AI_MODEL is required when AI_PROVIDER is set');
+  const apiKey = readSecret(env, 'AI_API_KEY');
+  if (!apiKey) throw new ConfigError('AI_API_KEY or AI_API_KEY_FILE is required when AI_PROVIDER is set');
+  if (!env.AI_PROMPTS_FILE) throw new ConfigError('AI_PROMPTS_FILE (untracked) is required when AI_PROVIDER is set');
+  const prompts = JSON.parse(fs.readFileSync(env.AI_PROMPTS_FILE, 'utf8'));
+  if (typeof prompts?.assessment?.system !== 'string' || typeof prompts?.assessment?.user !== 'string') {
+    throw new ConfigError('AI_PROMPTS_FILE must contain {"assessment":{"system":"...","user":"..."}}');
+  }
+  const baseUrl = env.AI_BASE_URL ? env.AI_BASE_URL.trim().replace(/\/+$/, '') : null;
+  if (baseUrl && !baseUrl.startsWith('https://')) throw new ConfigError('AI_BASE_URL must be https');
+  return { ...base, model, apiKey, baseUrl, prompts };
 }
 
 export class ConfigError extends Error {}
+
+/** Optional daily access-log anchor email. Disabled unless PILOT_ANCHOR_EMAIL_ENABLED=true. */
+export function loadAnchorEmailConfig(env: NodeJS.ProcessEnv, accounts: Account[]): AnchorEmailConfig {
+  if (!parseBool(env.PILOT_ANCHOR_EMAIL_ENABLED, false)) return { ...ANCHOR_EMAIL_DISABLED };
+  const host = (env.SMTP_HOST || '').trim();
+  if (!host) throw new ConfigError('SMTP_HOST is required when PILOT_ANCHOR_EMAIL_ENABLED=true');
+  const port = Number(env.SMTP_PORT || 587);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new ConfigError('SMTP_PORT must be a valid port');
+  const secure = parseBool(env.SMTP_SECURE, port === 465);
+  const requireTls = parseBool(env.SMTP_REQUIRE_TLS, true);
+  if (!requireTls && env.NODE_ENV === 'production') throw new ConfigError('SMTP_REQUIRE_TLS=false is not allowed in production');
+  const user = (env.SMTP_USER || '').trim();
+  const password = readSecret(env, 'SMTP_PASSWORD');
+  if (Boolean(user) !== Boolean(password)) throw new ConfigError('SMTP_USER and SMTP_PASSWORD (or SMTP_PASSWORD_FILE) must be set together');
+  const from = (env.SMTP_FROM || '').trim();
+  if (!from) throw new ConfigError('SMTP_FROM is required when PILOT_ANCHOR_EMAIL_ENABLED=true');
+  const to = (env.SMTP_TO || accounts.find(a => a.role === 'lawyer')?.email || '').trim();
+  if (!to) throw new ConfigError('SMTP_TO is required (defaults to the lawyer account email)');
+  return { enabled: true, host, port, secure, requireTls, user, password, from, to };
+}
 
 /** Default cap on allowlisted accounts (PILOT_MAX_ACCOUNTS). 1 employee + 1 lawyer + 1 enterprise + >=1 admin. */
 export const DEFAULT_MAX_ACCOUNTS = 4;
@@ -118,6 +191,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PilotConfig {
     throw new ConfigError('SESSION_SECRET must be set and at least 32 bytes (e.g. openssl rand -base64 48)');
   }
 
+  const encryptionKey = readSecret(env, 'PILOT_ENCRYPTION_KEY');
+  if (Buffer.from(encryptionKey, 'base64').length !== 32) {
+    throw new ConfigError('PILOT_ENCRYPTION_KEY must be 32 random bytes, base64 (openssl rand -base64 32)');
+  }
+  const dlSecret = readSecret(env, 'DOWNLOAD_URL_SECRET');
+  if (Buffer.byteLength(dlSecret, 'utf8') < 32) throw new ConfigError('DOWNLOAD_URL_SECRET must be at least 32 bytes');
+  if (dlSecret === secret) throw new ConfigError('DOWNLOAD_URL_SECRET must differ from SESSION_SECRET');
+  const ttl = Number(env.DOWNLOAD_URL_TTL_SECONDS || 60);
+  if (!(ttl > 0 && ttl <= 300)) throw new ConfigError('DOWNLOAD_URL_TTL_SECONDS must be between 1 and 300');
+
   const dataDir = path.resolve(env.PILOT_DATA_DIR || path.join(process.cwd(), 'data'));
   for (const p of [path.resolve(__dirname, '..', 'public'), path.resolve(__dirname, '..', '..', 'public')]) {
     if (dataDir === p || dataDir.startsWith(p + path.sep)) {
@@ -142,6 +225,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PilotConfig {
     trustProxy: parseBool(env.TRUST_PROXY, isProd),
     maxUploadBytes: parseIntEnv(env.MAX_UPLOAD_BYTES, 'MAX_UPLOAD_BYTES', 25 * 1024 * 1024, 1, 200 * 1024 * 1024),
     questions: loadQuestions(env),
+    encryptionKey,
+    downloadUrlSecret: Buffer.from(dlSecret, 'utf8'),
+    downloadUrlTtlSeconds: ttl,
+    ai: loadAiConfig(env),
+    accessLogAnchorStdout: parseBool(env.PILOT_ACCESS_LOG_ANCHOR_STDOUT, true),
+    anchorEmail: loadAnchorEmailConfig(env, accounts),
   };
 }
 
