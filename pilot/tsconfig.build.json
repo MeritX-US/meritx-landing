@@ -1,0 +1,6 @@
+{
+  // Production build: src only. Compiled tests must never reach the image that
+  // holds the case data (tsconfig.json still covers test/ for typecheck + npm test).
+  "extends": "./tsconfig.json",
+  "include": ["src/**/*.ts"]
+}
