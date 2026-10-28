@@ -30,3 +30,15 @@ Remaining:
 - [ ] Generate a deletion certificate (what, when, by whom, vendor confirmations) for the lawyer.
 - [ ] Employee-requested early deletion path.
 - [ ] Deadline: within [30] days of case close (placeholder in consent draft; lawyer to confirm).
+
+## Pre-launch review (2026-10-27)
+
+The three stacked PRs were reviewed before any real data; findings and fixes are in
+`docs/SECURITY_REVIEW.md`. Nothing from it is outstanding — the items below are the ones that
+review deliberately left to a human decision rather than code.
+
+- [ ] Do not deploy from PR1 alone: its storage is plaintext (encryption lands in PR2). Either
+      merge the series together, or merge PR1 and PR2 back to back before deploying anything.
+- [ ] Decide `SESSION_TTL_SECONDS` / `MAX_UPLOAD_BYTES` for the pilot, or leave them unset to take
+      the defaults (8 h / 25 MB). They are now validated at startup, so a typo refuses to boot
+      instead of silently breaking logins or uploads.

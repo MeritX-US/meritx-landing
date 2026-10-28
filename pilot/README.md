@@ -59,6 +59,8 @@ There is no sign-up route. Login failures are generic, rate-limited per IP+email
 - The public Netlify site returns a forced 404 for `/pilot` and `/pilot/*` (`netlify.toml`, tested in `test/netlify-public-site.test.ts`).
 
 See `docs/DEPLOYMENT.md`, `docs/AUDIT_ANCHORING.md` and `docs/TODO_audit_log_and_case_destruction.md`.
+`docs/SECURITY_REVIEW.md` records the pre-launch review of these three PRs: what was found and
+fixed, and what was looked at and deliberately left as it is.
 
 ## Encryption at rest (PR2)
 `src/crypto.ts`: AES-256-GCM, a fresh IV per write, and AAD bound to each record id. The key comes from
