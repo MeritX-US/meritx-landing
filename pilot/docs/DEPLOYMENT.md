@@ -15,7 +15,7 @@ API keys, env vars, disk or domain. Nothing changes `app/`, `robots.txt` or `sit
 4. Use the default `*.onrender.com` name or an unlisted subdomain; never link it from the
    landing site/sitemap. Only one person holds production access.
 5. Smoke test with synthetic accounts: `/robots.txt`, `X-Robots-Tag`, 401 on `/api/case`,
-   each role's view. Then rotate to the 4 real accounts.
+   each role's view. Then rotate to the 5 real accounts.
 6. **No real files until PR2 is merged and deployed, AI vendor terms are verified,
    and the lawyer has approved the consent text.**
 
@@ -24,7 +24,7 @@ API keys, env vars, disk or domain. Nothing changes `app/`, `robots.txt` or `sit
 |---|---|---|
 | `PRIVATE_MODE` | must be `true` | host env |
 | `SESSION_SECRET` | `openssl rand -base64 48` | host secret store |
-| `PILOT_ACCOUNTS` / `PILOT_ACCOUNTS_FILE` | 4 accounts (employee, lawyer, enterprise, admin): id, email, display name, scrypt hash from `npm run hash-password` | host secret store / `/workspace/secrets/` |
+| `PILOT_ACCOUNTS` / `PILOT_ACCOUNTS_FILE` | the 5 accounts for this pilot (employee, lawyer, enterprise, `<admin-1>`, `<admin-2>`): id, email, display name, scrypt hash from `npm run hash-password`. Must stay within `PILOT_MAX_ACCOUNTS` (see below) or the server refuses to start | host secret store / `/workspace/secrets/` |
 | Lawyer display `name` | shown on approved assessments | inside `PILOT_ACCOUNTS` |
 | `PILOT_QUESTIONNAIRE_FILE` | optional questionnaire prompts JSON | untracked file |
 | `LAWYER_APPROVED_PUBLISH` | `false` until the lawyer and the MeritX owner decide | host env |

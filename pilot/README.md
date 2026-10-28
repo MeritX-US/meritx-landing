@@ -14,7 +14,7 @@ deployment** with the public demo in `app/` and the landing site. The public dem
 
 | PR | Scope | Real data allowed? |
 |---|---|---|
-| **PR1 (this)** | 4-account allowlist login, server-side RBAC on every route, noindex, `LAWYER_APPROVED_PUBLISH` flag, separate deploy config, consent gate, access-log stub | **No.** Files/state are stored *unencrypted* in a private data dir. |
+| **PR1 (this)** | allowlist login (account cap configurable via `PILOT_MAX_ACCOUNTS`; **5** for this pilot), server-side RBAC on every route, noindex, `LAWYER_APPROVED_PUBLISH` flag, separate deploy config, consent gate, access-log stub | **No.** Files/state are stored *unencrypted* in a private data dir. |
 | PR2 | App-level encryption at rest (AES-256-GCM, key from env), short-lived signed download URLs, paid AI provider path (configurable), vendor-terms verification doc | Only after PR2 + vendor terms verified + lawyer-approved consent |
 
 ## Run locally (synthetic data only)
