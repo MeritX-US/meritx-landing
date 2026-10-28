@@ -343,6 +343,13 @@ export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
       try { data = store.getBlob(m.id); } catch { data = null; }
       if (data?.length) readable.push({ m, data }); else unreadableMaterialIds.push(m.id);
     }
+    // Materials were asked for and not one of them could be read: nothing is sent to the
+    // vendor, because an assessment drafted without any of the chosen evidence would look
+    // like one that had seen it.
+    if (mats.length > 0 && readable.length === 0) {
+      audit(req, 'ai.assessment.generate', 'denied', `unreadable-materials=${unreadableMaterialIds.length}`);
+      return res.status(409).json({ error: 'none of the selected materials could be read', unreadableMaterialIds });
+    }
     const attachments = readable.map(({ m, data }) => ({ mimeType: m.mimeType, filename: m.filename, data }));
     const { skipped } = ai.partition(attachments);
     const vars = {
@@ -357,8 +364,10 @@ export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
       audit(req, 'ai.assessment.generate', 'error', ai.label);
       return res.status(502).json({ error: e instanceof AiProviderError ? `AI provider error (${e.status})` : 'AI request failed' });
     }
-    store.update(st => { st.assessment = { text: r.text, source: 'ai', updatedAt: now(), approval: null }; });
+    // Audited BEFORE the save: at this point the case files have already reached the vendor,
+    // so the disclosure must be on record even if persisting the draft then fails.
     audit(req, 'ai.assessment.generate', 'ok', `${r.provider}:${r.model}:${r.requestId || '-'}:files=${attachments.length - skipped.length}`);
+    store.update(st => { st.assessment = { text: r.text, source: 'ai', updatedAt: now(), approval: null }; });
     res.json({
       ok: true,
       chars: r.text.length,

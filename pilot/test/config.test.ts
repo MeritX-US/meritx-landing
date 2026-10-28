@@ -66,6 +66,10 @@ test('numeric env vars are validated, never silently NaN', () => {
     assert.throws(() => loadConfig(testEnv({ [key]: '1.5' })), new RegExp(key));
     assert.throws(() => loadConfig(testEnv({ [key]: '-1' })), new RegExp(key));
     assert.throws(() => loadConfig(testEnv({ [key]: '0' })), new RegExp(key));
+    // Number() reads these as integers; a value meant literally must not become another number.
+    for (const alt of ['0x10', '1e3', '0b11', '0o17', '+8', '1 2']) {
+      assert.throws(() => loadConfig(testEnv({ [key]: alt })), new RegExp(key), `${key}=${alt} must be refused`);
+    }
   }
   // Out of range in either direction.
   assert.throws(() => loadConfig(testEnv({ SESSION_TTL_SECONDS: '30' })), /SESSION_TTL_SECONDS/);

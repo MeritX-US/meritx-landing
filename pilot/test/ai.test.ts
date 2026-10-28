@@ -171,3 +171,57 @@ test('AI numeric env vars are validated, never silently NaN', () => {
   const dflt = loadAiConfig(aiEnv('openai') as any);
   assert.equal(dflt.timeoutMs, 120000); assert.equal(dflt.maxOutputTokens, 4096);
 });
+
+test('generate: when every selected material is unreadable, nothing is sent to the vendor (409)', async () => {
+  const { f, calls } = mockFetch({ choices: [{ message: { content: 'AI DRAFT (synthetic)' } }] });
+  const { cfg } = makeApp(aiEnv('openai'));
+  const store = new EncryptedFileStore(cfg.dataDir, new Cipher(cfg.encryptionKey));
+  const a = await agents(createApp(cfg, { fetch: f, store }));
+  await a.employee.post('/api/consent').send({ agree: true });
+  const bad = (await a.employee.post('/api/materials').attach('file', Buffer.from('%PDF-1.4 x'), { filename: 'bad.pdf', contentType: 'application/pdf' })).body.id;
+  await a.lawyer.put('/api/case/visa-type').send({ visaType: 'SYNTHETIC-VISA' });
+  const blob = path.join(cfg.dataDir, 'blobs', bad);
+  const ct = fs.readFileSync(blob); ct[ct.length - 1] ^= 0xff; fs.writeFileSync(blob, ct);
+
+  const g = await a.lawyer.post('/api/assessment/generate').send({ materialIds: [bad] });
+  assert.equal(g.status, 409);
+  assert.deepEqual(g.body.unreadableMaterialIds, [bad]);
+  assert.equal(calls.length, 0, 'the vendor is never called with none of the chosen evidence');
+  assert.equal((await a.lawyer.get('/api/assessment')).body, null, 'no draft was written');
+  assert.match(JSON.stringify((await a.lawyer.get('/api/access-log')).body), /"action":"ai\.assessment\.generate","resource":"unreadable-materials=1","outcome":"denied"/);
+
+  // Choosing no materials at all is a different thing and still allowed (questionnaire only).
+  const none = await a.lawyer.post('/api/assessment/generate').send({ materialIds: [] });
+  assert.equal(none.status, 200);
+  assert.equal(calls.length, 1);
+});
+
+test('generate: the disclosure is logged before the draft is saved', async () => {
+  // Once ai.generate returns, the case files have already reached the vendor. If persisting
+  // the draft then fails, the access log must still record that they went out.
+  const { f, calls } = mockFetch({ choices: [{ message: { content: 'AI DRAFT (synthetic)' } }] });
+  const { cfg } = makeApp(aiEnv('openai'));
+  const inner = new EncryptedFileStore(cfg.dataDir, new Cipher(cfg.encryptionKey));
+  let failWrites = false;
+  const store: Store = {
+    read: () => inner.read(),
+    update: m => { if (failWrites) throw new Error('disk full'); return inner.update(m); },
+    putBlob: (i, d) => inner.putBlob(i, d),
+    getBlob: i => inner.getBlob(i),
+    deleteBlob: i => inner.deleteBlob(i),
+  };
+  const a = await agents(createApp(cfg, { fetch: f, store }));
+  await a.lawyer.put('/api/case/visa-type').send({ visaType: 'SYNTHETIC-VISA' });
+
+  failWrites = true;
+  const g = await a.lawyer.post('/api/assessment/generate').send({});
+  assert.equal(g.status, 500, 'the lawyer is told the save failed');
+  assert.equal(calls.length, 1, 'the request did reach the vendor');
+
+  failWrites = false;
+  const log = (await a.lawyer.get('/api/access-log')).body;
+  const sent = log.filter((e: any) => e.action === 'ai.assessment.generate');
+  assert.equal(sent.length, 1, 'the disclosure is on record despite the failed save');
+  assert.equal(sent[0].outcome, 'ok');
+  assert.equal((await a.lawyer.get('/api/assessment')).body, null, 'and no draft was persisted');
+});
