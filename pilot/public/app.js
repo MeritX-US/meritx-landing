@@ -111,7 +111,10 @@
     if (me.role === 'lawyer' || me.role === 'admin') {
       const btn = el('button', { type: 'button', onclick: async () => {
         const rows = await api('GET', '/api/access-log');
-        box.replaceChildren(el('table', {}, rows.slice(-100).reverse().map((r) => el('tr', {}, el('td', {}, r.ts), el('td', {}, r.actor), el('td', {}, r.action), el('td', {}, r.resource || ''), el('td', {}, r.outcome)))));
+        // A line that failed decryption or the hash-chain check is shown as such (never hidden).
+        box.replaceChildren(el('table', {}, rows.slice(-100).reverse().map((r) => r.corrupted_or_tampered
+          ? el('tr', { class: 'tampered' }, el('td', { colspan: '5' }, `line ${r.line}: CORRUPTED OR TAMPERED (${r.reason || 'integrity check failed'})`))
+          : el('tr', {}, el('td', {}, r.ts), el('td', {}, r.actor), el('td', {}, r.action), el('td', {}, r.resource || ''), el('td', {}, r.outcome)))));
       } }, 'Show access log');
       const box = el('div');
       view.append(el('div', { class: 'card' }, el('h3', {}, 'Access log'), btn, box));

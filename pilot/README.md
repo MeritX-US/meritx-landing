@@ -16,13 +16,14 @@ deployment** with the public demo in `app/` and the landing site. The public dem
 |---|---|---|
 | PR1 | allowlist login (account cap configurable via `PILOT_MAX_ACCOUNTS`; **5** for this pilot), server-side RBAC on every route, noindex, `LAWYER_APPROVED_PUBLISH` flag, separate deploy config, consent gate, access-log stub | No (plaintext storage) |
 | **PR2 (stacked on PR1)** | App-level encryption at rest (AES-256-GCM, key from env) for state, files and access log; short-lived signed download URLs bound to the session; paid AI provider path (`gemini`/`openai`/`anthropic`, default `none`, inline-only, gated by `AI_PAID_TIER_VERIFIED`); `docs/AI_VENDOR_VERIFICATION.md` | Only after vendor terms verified (checklist) + lawyer-approved consent + deployment approved |
+| **PR3 (stacked on PR2)** | Hash-chained access log with an off-disk anchor (stdout line per append -> Render logs; optional daily anchor email, off by default), verify against an anchor, damaged lines marked `corrupted_or_tampered`; `destroy-case` script (dry run by default, runs from compiled JS in the production image, mandatory snapshot + AI-vendor-retention confirmations); `docs/AI_VENDOR_TERMS_CHECKLIST.md` | Same as PR2 |
 
 ## Run locally (synthetic data only)
 
 ```bash
 cd pilot
 npm ci
-npm test                       # 81 tests: config, auth, per-role RBAC, flag, noindex/CORS, encryption, signed URLs, AI
+npm test                       # 126 tests: config, auth, per-role RBAC, flag, noindex/CORS, encryption, signed URLs, AI, access-log chain/anchor, destroy-case, anchor email
 cp .env.example .env           # fill with SYNTHETIC values
 printf '%s' 'a-long-test-password' | npm run --silent hash-password   # -> scrypt$...
 npm run dev                    # http://localhost:3101
@@ -57,7 +58,9 @@ There is no sign-up route. Login failures are generic, rate-limited per IP+email
 - Do not link the pilot host from the landing site or sitemap.
 - The public Netlify site returns a forced 404 for `/pilot` and `/pilot/*` (`netlify.toml`, tested in `test/netlify-public-site.test.ts`).
 
-See `docs/DEPLOYMENT.md` and `docs/TODO_audit_log_and_case_destruction.md`.
+See `docs/DEPLOYMENT.md`, `docs/AUDIT_ANCHORING.md` and `docs/TODO_audit_log_and_case_destruction.md`.
+`docs/SECURITY_REVIEW.md` records the pre-launch review of these three PRs: what was found and
+fixed, and what was looked at and deliberately left as it is.
 
 ## Encryption at rest (PR2)
 `src/crypto.ts`: AES-256-GCM, a fresh IV per write, and AAD bound to each record id. The key comes from
@@ -69,3 +72,12 @@ with a wrong key or with leftover plaintext. Destroying the key crypto-shreds al
 `src/ai/provider.ts`. The lawyer triggers `POST /api/assessment/generate`. It needs a visa type chosen by the lawyer,
 and the lawyer picks which materials are sent. Files go inline. No vendor Files API is used, and OpenAI calls set `store:false`.
 Prompts come from the untracked `AI_PROMPTS_FILE`. The result is an **unapproved** draft. See `docs/AI_VENDOR_VERIFICATION.md`.
+
+## Audit log + case close (PR3)
+- Every access-log append prints `{"event":"access_log_anchor","seq":N,"entries":N+1,"hash":"..."}` to stdout.
+  Render keeps it in its log store, separate from the disk, so it is the external anchor for audits. Check
+  the log against it with `GET /api/access-log/verify?seq=&hash=` or `npm run verify-access-log:prod -- --seq N --hash H`.
+  There is also an optional daily anchor email (`PILOT_ANCHOR_EMAIL_ENABLED`, off by default; no SMTP provider chosen yet). See `docs/AUDIT_ANCHORING.md`.
+- `npm run destroy-case:prod` (production image, `node dist/src/scripts/destroy-case.js`) / `npm run destroy-case` (dev).
+  Dry run by default. It reports complete only with `--ack-render-snapshots-deleted` and `--ack-ai-vendor-data <vendor>=<days|zero>`.
+  See `docs/TODO_audit_log_and_case_destruction.md`.
