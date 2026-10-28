@@ -14,7 +14,7 @@ deployment** with the public demo in `app/` and the landing site. The public dem
 
 | PR | Scope | Real data allowed? |
 |---|---|---|
-| PR1 | 4-account allowlist login, server-side RBAC on every route, noindex, `LAWYER_APPROVED_PUBLISH` flag, separate deploy config, consent gate, access-log stub | No (plaintext storage) |
+| PR1 | allowlist login (account cap configurable via `PILOT_MAX_ACCOUNTS`; **5** for this pilot), server-side RBAC on every route, noindex, `LAWYER_APPROVED_PUBLISH` flag, separate deploy config, consent gate, access-log stub | No (plaintext storage) |
 | **PR2 (stacked on PR1)** | App-level encryption at rest (AES-256-GCM, key from env) for state, files and access log; short-lived signed download URLs bound to the session; paid AI provider path (`gemini`/`openai`/`anthropic`, default `none`, inline-only, gated by `AI_PAID_TIER_VERIFIED`); `docs/AI_VENDOR_VERIFICATION.md` | Only after vendor terms verified (checklist) + lawyer-approved consent + deployment approved |
 
 ## Run locally (synthetic data only)
