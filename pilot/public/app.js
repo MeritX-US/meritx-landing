@@ -46,7 +46,10 @@
       list.map((m) => el('tr', {},
         el('td', {}, m.filename), el('td', {}, new Date(m.uploadedAt).toLocaleString()),
         lawyer ? el('td', {}, el('input', { value: m.category || '', onchange: (e) => api('PUT', `/api/materials/${m.id}/category`, { category: e.target.value }) })) : '',
-        el('td', {}, el('a', { href: `/api/materials/${m.id}/download` }, 'Download')))));
+        el('td', {}, el('button', { type: 'button', onclick: async () => {
+          // short-lived signed URL, bound to this session
+          const { url } = await api('POST', `/api/materials/${m.id}/download-url`); window.location.assign(url);
+        } }, 'Download')))));
   }
   function uploadForm(after) {
     const input = el('input', { type: 'file' });
@@ -96,6 +99,10 @@
       const a = c.assessment; const ta = el('textarea', {}, a ? a.text : '');
       view.append(el('div', { class: 'card' }, el('h3', {}, 'Eligibility assessment (attorney only until approved)'), ta,
         el('button', { type: 'button', onclick: async () => { await api('PUT', '/api/assessment', { text: ta.value }); rerender(); } }, 'Save (revokes approval)'),
+        el('button', { type: 'button', onclick: async () => {
+          try { await api('POST', '/api/assessment/generate', { materialIds: c.materials.map((m) => m.id) }); rerender(); }
+          catch (e) { alert('AI draft failed: ' + e.message); }
+        } }, 'Generate AI draft (attorney review only)'),
         a ? (a.approval ? el('button', { type: 'button', onclick: async () => { await api('POST', '/api/assessment/revoke'); rerender(); } }, 'Revoke approval')
                         : el('button', { type: 'button', onclick: async () => { await api('POST', '/api/assessment/approve'); rerender(); } }, 'Approve')) : '',
         el('p', { class: 'muted' }, `Approved: ${a && a.approval ? 'yes' : 'no'}. Employee can see it only when approved AND LAWYER_APPROVED_PUBLISH is ${c.flags.lawyerApprovedPublish ? 'ON (currently on)' : 'on (currently OFF)'}.`)));

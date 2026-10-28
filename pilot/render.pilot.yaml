@@ -35,3 +35,19 @@ services:
         sync: false
       - key: PILOT_ALLOWED_ORIGINS
         sync: false
+      - key: PILOT_ENCRYPTION_KEY
+        sync: false
+      - key: DOWNLOAD_URL_SECRET
+        sync: false
+      - key: DOWNLOAD_URL_TTL_SECONDS
+        value: "60"
+      - key: AI_PROVIDER
+        value: none                   # switch only after AI vendor verification
+      - key: AI_MODEL
+        sync: false
+      - key: AI_API_KEY
+        sync: false
+      - key: AI_PAID_TIER_VERIFIED
+        value: "false"
+      - key: AI_PROMPTS_FILE
+        value: /etc/secrets/ai_prompts.json   # Render "Secret File"; content never in git
