@@ -49,6 +49,31 @@ Every `/api/*` route requires a session (deny by default, unknown routes 401/404
 per-route role gate, then role-scoped projections so a handler can't leak fields.
 There is no sign-up route. Login failures are generic, rate-limited per IP+email.
 
+## How a case flows
+
+1. **Invited, not signed up.** There is no sign-up route. The allowlist is read from env at
+   startup: exactly one employee, one lawyer, one enterprise contact, one or more MeritX admins.
+   Changing it means changing env and redeploying.
+2. **Employee signs consent, then fills the questionnaire and uploads.** Before consent, the
+   questionnaire and upload routes refuse (412). The consent document itself lives outside this
+   system — see `docs/LAUNCH_GATES.md`. File type is decided by magic bytes, never the client's
+   MIME; uploads are encrypted in memory before they touch disk.
+3. **Lawyer reviews.** Sees all materials, the questionnaire and each file's owner; sets the visa
+   type; writes the assessment. The assessment starts **lawyer-only**.
+4. **AI drafts for the lawyer only.** The lawyer picks which materials go to the vendor. The result
+   is an unapproved draft (`approval: null`) that the employee cannot see. The disclosure is logged
+   the moment the vendor returns, before the draft is saved.
+5. **Two gates make an assessment visible to the employee**: the lawyer approves it **and**
+   `LAWYER_APPROVED_PUBLISH` is on. It is then shown under the lawyer's name, labelled as the
+   attorney's assessment rather than an automated determination.
+6. **To-dos are published one at a time.** An unpublished to-do is absent from the employee's API
+   response, not hidden by the UI.
+7. **Case close.** `destroy-case` (dry run by default) plus the mandatory confirmations; destroying
+   `PILOT_ENCRYPTION_KEY` crypto-shreds anything left in backups.
+
+Throughout, the enterprise contact sees only `{role, status, updatedAt}`, and MeritX admins see
+status, the access log and a four-field account list — never case substance.
+
 ## Not indexed / not public
 - `GET /robots.txt` → `User-agent: * / Disallow: /`, no sitemap.
 - `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex` on **every** response.
@@ -59,6 +84,8 @@ There is no sign-up route. Login failures are generic, rate-limited per IP+email
 - The public Netlify site returns a forced 404 for `/pilot` and `/pilot/*` (`netlify.toml`, tested in `test/netlify-public-site.test.ts`).
 
 See `docs/DEPLOYMENT.md`, `docs/AUDIT_ANCHORING.md` and `docs/TODO_audit_log_and_case_destruction.md`.
+`docs/LAUNCH_GATES.md` collects the things a human must decide before any real case data — what
+each gate blocks, who opens it, and how.
 `docs/SECURITY_REVIEW.md` records the pre-launch review of these three PRs: what was found and
 fixed, and what was looked at and deliberately left as it is.
 

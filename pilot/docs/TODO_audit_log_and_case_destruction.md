@@ -42,3 +42,19 @@ review deliberately left to a human decision rather than code.
 - [ ] Decide `SESSION_TTL_SECONDS` / `MAX_UPLOAD_BYTES` for the pilot, or leave them unset to take
       the defaults (8 h / 25 MB). They are now validated at startup, so a typo refuses to boot
       instead of silently breaking logins or uploads.
+
+## Observations from the 2026-10-29 walkthrough
+
+Noticed while walking the access log and the consent gate with the owner. Neither is a defect —
+both are additions that would make an existing record prove more than it currently does. Not from
+the pre-launch review; recorded here so the judgement doesn't have to be re-derived.
+
+- [ ] **Record a hash of the consent document with each signature.** `consent.version` is a label
+      naming an external document (see `docs/LAUNCH_GATES.md`, gate 2). It proves which document
+      was *meant*, as long as the label was set honestly and the file was archived. Storing a hash
+      of the approved document alongside it would prove which document was actually agreed to,
+      without putting the text in this public repo.
+- [ ] **Record a hash of the assessment text on `assessment.approve`.** Today the log proves the
+      approval happened and, via `seq`, which `assessment.update` preceded it — but not which
+      wording was approved if the lawyer revised more than once. A content hash in `resource` would
+      pin it, still without logging any content.

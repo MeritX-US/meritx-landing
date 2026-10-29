@@ -18,7 +18,7 @@ API keys, env vars, disk or domain. Nothing changes `app/`, `robots.txt` or `sit
 5. Smoke test with synthetic accounts: `/robots.txt`, `X-Robots-Tag`, 401 on `/api/case`,
    each role's view. Then rotate to the 5 real accounts.
 6. **No real files until PR2 is merged and deployed, AI vendor terms are verified,
-   and the lawyer has approved the consent text.**
+   and the lawyer has approved the consent text.** See `docs/LAUNCH_GATES.md` for all of them.
 
 ## Config the MeritX owner must fill in
 | Variable | What | Where |

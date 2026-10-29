@@ -6,6 +6,49 @@ reordered lines. It **cannot** catch someone who cuts entries off the end, or wh
 whole file as a new valid chain. To catch those, compare the log against a head hash (an "anchor")
 stored somewhere the disk's owner can't edit.
 
+## Entry format
+
+Each line of the log is one encrypted JSON object (`src/accessLog.ts`):
+
+| Field | Meaning |
+|---|---|
+| `ts` | when, ISO 8601 UTC |
+| `actor` | **account id** (`u-law`), never an email or a name |
+| `role` | the acting role at the time |
+| `action` | what was done, e.g. `assessment.approve` |
+| `resource` | *optional* — which object (see below) |
+| `outcome` | `ok` \| `denied` \| `error` |
+| `seq` | 0-based position in the chain |
+| `prev` | the previous entry's `hash` |
+| `hash` | `sha256(prev + "\n" + [seq, ts, actor, role, action, resource ?? null, outcome])` |
+
+`line` (1-based line number) is added by the reader, not stored.
+
+Because `hash` covers `prev`, two adjacent entries always interlock — the earlier entry's `hash` is
+the later one's `prev` — so editing, deleting or reordering any entry breaks every hash after it.
+
+### When `resource` is filled
+
+It names **one object out of a collection**, and is left out when the target is the single one per
+case, where `seq` and `ts` already identify the event:
+
+| Filled | Not filled |
+|---|---|
+| `material.upload` / `download` / `downloadUrl` / `delete` / `category.update` | `case.status.update`, `case.visaType.update` |
+| `todo.create`, `todo.publish` | `consent.sign` |
+| `login.unlock` (account **id** only, never the email) | `questionnaire.save` / `submit` / `view` |
+| | `assessment.update` / `approve` / `revoke` / `view` |
+| | `accounts.view`, `accessLog.view` |
+
+`ai.assessment.generate` uses the field differently — as a disclosure receipt rather than an id:
+`provider:model:requestId:files=N`. That is the record of where case material was sent.
+
+### What is never logged
+
+No content. Not the assessment text, not questionnaire answers, not a to-do's wording — only its
+id. The log answers *who, when, which object, what action, what outcome*, never *what it said*.
+This matters because the log is readable by MeritX admins, who must never see case substance.
+
 ## Anchor copy 1: stdout -> Render logs (always on)
 After every append the server prints one structured line to stdout:
 
