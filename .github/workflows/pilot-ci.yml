@@ -3,7 +3,7 @@ on:
   pull_request:
     paths: ['pilot/**', 'netlify.toml', '.github/workflows/pilot-ci.yml']
   push:
-    branches: ['pilot/**']
+    branches: ['pilot/**', 'main']
     paths: ['pilot/**', 'netlify.toml', '.github/workflows/pilot-ci.yml']
 permissions:
   contents: read
