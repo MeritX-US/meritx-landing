@@ -26,7 +26,7 @@ npm ci
 npm test                       # 126 tests: config, auth, per-role RBAC, flag, noindex/CORS, encryption, signed URLs, AI, access-log chain/anchor, destroy-case, anchor email
 cp .env.example .env           # fill with SYNTHETIC values
 printf '%s' 'a-long-test-password' | npm run --silent hash-password   # -> scrypt$...
-npm run dev                    # http://localhost:3101
+npm run dev                    # reads ./.env (node --env-file); http://localhost:3101
 ```
 
 The server **refuses to start** unless `PRIVATE_MODE=true`, the allowlist has exactly one
