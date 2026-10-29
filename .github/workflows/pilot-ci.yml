@@ -8,14 +8,16 @@ on:
 permissions:
   contents: read
 jobs:
+  # Runner pinned, not ubuntu-latest: this workflow builds the production image that will hold
+  # real case data, so the base should move when someone decides to move it. Bump deliberately.
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: pilot
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm
@@ -32,10 +34,10 @@ jobs:
           if grep -rEn --exclude-dir=node_modules 'scrypt\$[0-9]+\$[0-9]+\$[0-9]+\$[A-Za-z0-9+/=]{16,}' . ; then
             echo "Found a password hash under pilot/"; exit 1; fi
   docker:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
       # Both come from the same Dockerfile and build cache: the `build` stage carries the
