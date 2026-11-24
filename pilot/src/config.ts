@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import { ANCHOR_EMAIL_DISABLED, type AnchorEmailConfig } from './anchorEmail';
+import { phoneNumber, type TwilioConfig } from './twilio';
+import { loadConsentDocument, type ConsentDocument } from './consent';
 
 /**
  * Pilot configuration. Everything sensitive comes from environment variables
@@ -21,6 +23,11 @@ export interface Account {
 }
 
 export interface PilotConfig {
+  primaryEmployeeId: string;
+  consentDocument?: ConsentDocument;
+  twilio?: TwilioConfig;
+  draftRegister?: { dir: string; key: string };
+  lawyerWorkspaces?: { lawyerId: string; label: string; origin: string }[];
   accounts: Account[];
   maxAccounts: number;            // PILOT_MAX_ACCOUNTS (default 4)
   sessionSecret: Buffer;
@@ -48,7 +55,7 @@ export interface AiConfig {
   baseUrl: string | null;  // optional override (e.g. a regional endpoint)
   timeoutMs: number;
   maxOutputTokens: number;
-  prompts: { assessment: { system: string; user: string } } | null; // from untracked AI_PROMPTS_FILE
+  prompts: { assessment: { system: string; user: string }; petition?: { system: string; user: string } } | null;
 }
 
 function readSecret(env: NodeJS.ProcessEnv, name: string): string {
@@ -80,6 +87,9 @@ export function loadAiConfig(env: NodeJS.ProcessEnv): AiConfig {
   const prompts = JSON.parse(fs.readFileSync(env.AI_PROMPTS_FILE, 'utf8'));
   if (typeof prompts?.assessment?.system !== 'string' || typeof prompts?.assessment?.user !== 'string') {
     throw new ConfigError('AI_PROMPTS_FILE must contain {"assessment":{"system":"...","user":"..."}}');
+  }
+  if (prompts.petition !== undefined && (typeof prompts.petition?.system !== 'string' || typeof prompts.petition?.user !== 'string')) {
+    throw new ConfigError('AI_PROMPTS_FILE petition must contain system and user strings');
   }
   const baseUrl = env.AI_BASE_URL ? env.AI_BASE_URL.trim().replace(/\/+$/, '') : null;
   if (baseUrl && !baseUrl.startsWith('https://')) throw new ConfigError('AI_BASE_URL must be https');
@@ -135,7 +145,7 @@ export function parseIntEnv(v: string | undefined, name: string, dflt: number, m
   return n;
 }
 
-export function parseAccounts(raw: string, maxAccounts = DEFAULT_MAX_ACCOUNTS): Account[] {
+export function parseAccounts(raw: string, maxAccounts = DEFAULT_MAX_ACCOUNTS, multipleEmployees = false): Account[] {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -166,6 +176,7 @@ export function parseAccounts(raw: string, maxAccounts = DEFAULT_MAX_ACCOUNTS): 
   // Single case: exactly one employee, one partner lawyer, one enterprise contact; one or more MeritX admins.
   for (const r of SINGLETON_ROLES) {
     const n = accounts.filter(a => a.role === r).length;
+    if (r === 'employee' && multipleEmployees && n > 0) continue;
     if (n !== 1) throw new ConfigError(`PILOT_ACCOUNTS must contain exactly one "${r}" account (got ${n})`);
   }
   if (!accounts.some(a => a.role === 'admin')) throw new ConfigError('PILOT_ACCOUNTS must contain at least one "admin" account');
@@ -184,7 +195,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PilotConfig {
   }
   if (!rawAccounts) throw new ConfigError('PILOT_ACCOUNTS (or PILOT_ACCOUNTS_FILE) is required');
   const maxAccounts = parseIntEnv(env.PILOT_MAX_ACCOUNTS, 'PILOT_MAX_ACCOUNTS', DEFAULT_MAX_ACCOUNTS, 4, 10);
-  const accounts = parseAccounts(rawAccounts, maxAccounts);
+  const accounts = parseAccounts(rawAccounts, maxAccounts, !!env.PILOT_DRAFT_REGISTER_DIR);
 
   const secret = env.SESSION_SECRET || '';
   if (Buffer.byteLength(secret, 'utf8') < 32) {
@@ -202,6 +213,24 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PilotConfig {
   if (!(ttl > 0 && ttl <= 300)) throw new ConfigError('DOWNLOAD_URL_TTL_SECONDS must be between 1 and 300');
 
   const dataDir = path.resolve(env.PILOT_DATA_DIR || path.join(process.cwd(), 'data'));
+  const draftKey = readSecret(env, 'PILOT_DRAFT_REGISTER_KEY');
+  const draftDir = env.PILOT_DRAFT_REGISTER_DIR && path.resolve(env.PILOT_DRAFT_REGISTER_DIR);
+  if (!!draftKey !== !!draftDir || (draftKey && (Buffer.from(draftKey, 'base64').length !== 32 ||
+      Buffer.from(draftKey, 'base64').equals(Buffer.from(encryptionKey, 'base64'))))) {
+    throw new ConfigError('Draft register requires a separate directory and independent 32-byte key');
+  }
+  const within = (dir: string, parent: string) => {
+    const rel = path.relative(parent, dir);
+    return !rel || (rel !== '..' && !rel.startsWith('..' + path.sep) && !path.isAbsolute(rel));
+  };
+  if (draftDir && (within(draftDir, dataDir) || within(dataDir, draftDir) || within(draftDir, publicDir()))) {
+    throw new ConfigError('Draft register directory must be separate from case data and public files');
+  }
+  const employees = accounts.filter(account => account.role === 'employee');
+  const primaryEmployeeId = env.PILOT_PRIMARY_EMPLOYEE_ID?.trim() || (employees.length === 1 ? employees[0].id : '');
+  if (!employees.some(account => account.id === primaryEmployeeId)) {
+    throw new ConfigError('PILOT_PRIMARY_EMPLOYEE_ID must identify the original case employee when multiple employees are configured');
+  }
   for (const p of [path.resolve(__dirname, '..', 'public'), path.resolve(__dirname, '..', '..', 'public')]) {
     if (dataDir === p || dataDir.startsWith(p + path.sep)) {
       throw new ConfigError('PILOT_DATA_DIR must not be inside the static public directory');
@@ -213,18 +242,36 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PilotConfig {
   if (allowedOrigins.includes('*')) throw new ConfigError('PILOT_ALLOWED_ORIGINS must not contain "*"');
 
   const isProd = env.NODE_ENV === 'production';
+  let twilio: TwilioConfig | undefined;
+  if (env.PILOT_TWILIO_ENABLED === 'true') {
+    const account = env.TWILIO_ACCOUNT_SID || '';
+    const key = env.TWILIO_API_KEY_SID || '';
+    const secret = readSecret(env, 'TWILIO_API_KEY_SECRET');
+    const from = env.TWILIO_PHONE_NUMBER || '';
+    const lawyerPhone = env.PILOT_LAWYER_PHONE || '';
+    if (!/^AC[a-f0-9]{32}$/i.test(account) || !/^SK[a-f0-9]{32}$/i.test(key) || !secret ||
+        !phoneNumber.test(from) || !phoneNumber.test(lawyerPhone)) {
+      throw new ConfigError('Pilot Twilio requires an account SID, an API key and secret, and two E.164 phone numbers');
+    }
+    twilio = { account, key, secret, from, lawyerPhone };
+  }
   return {
     accounts,
+    primaryEmployeeId,
+    consentDocument: loadConsentDocument(env),
+    twilio,
     maxAccounts,
     sessionSecret: Buffer.from(secret, 'utf8'),
     sessionTtlSeconds: parseIntEnv(env.SESSION_TTL_SECONDS, 'SESSION_TTL_SECONDS', 8 * 3600, 60, 7 * 24 * 3600),
     dataDir,
+    draftRegister: draftDir ? { dir: draftDir, key: draftKey } : undefined,
     allowedOrigins,
     lawyerApprovedPublish: parseBool(env.LAWYER_APPROVED_PUBLISH, false),
     secureCookies: parseBool(env.SECURE_COOKIES, isProd),
     trustProxy: parseBool(env.TRUST_PROXY, isProd),
     maxUploadBytes: parseIntEnv(env.MAX_UPLOAD_BYTES, 'MAX_UPLOAD_BYTES', 25 * 1024 * 1024, 1, 200 * 1024 * 1024),
     questions: loadQuestions(env),
+    lawyerWorkspaces: loadLawyerWorkspaces(env.PILOT_WORKSPACES_FILE, accounts),
     encryptionKey,
     downloadUrlSecret: Buffer.from(dlSecret, 'utf8'),
     downloadUrlTtlSeconds: ttl,
@@ -232,6 +279,23 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PilotConfig {
     accessLogAnchorStdout: parseBool(env.PILOT_ACCESS_LOG_ANCHOR_STDOUT, true),
     anchorEmail: loadAnchorEmailConfig(env, accounts),
   };
+}
+
+function loadLawyerWorkspaces(file: string | undefined, accounts: Account[]) {
+  if (!file) return [];
+  const rows: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
+  if (!Array.isArray(rows)) throw new ConfigError('PILOT_WORKSPACES_FILE must contain an array');
+  return rows.map(row => {
+    if (!row || !accounts.some(a => a.role === 'lawyer' && a.id === row.lawyerId) ||
+        typeof row.label !== 'string' || !row.label.trim() || typeof row.origin !== 'string') {
+      throw new ConfigError('Invalid lawyer workspace entry');
+    }
+    const url = new URL(row.origin);
+    if (url.protocol !== 'https:' || ![url.origin, url.origin + '/'].includes(row.origin)) {
+      throw new ConfigError('Workspace address must be a plain HTTPS origin');
+    }
+    return { lawyerId: String(row.lawyerId), label: row.label.trim() as string, origin: url.origin };
+  });
 }
 
 /** Questionnaire prompts are loaded from an untracked JSON file; a generic placeholder is used otherwise. */

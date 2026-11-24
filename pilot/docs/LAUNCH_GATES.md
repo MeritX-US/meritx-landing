@@ -37,53 +37,21 @@ tier that will be used — retention period, training use, deletion on request �
 numbers in `docs/AI_VENDOR_TERMS_CHECKLIST.md`. Those numbers are needed again at case close, for
 `destroy-case --ack-ai-vendor-data <vendor>=<days|zero>`.
 
-## Gate 2 — Consent text (soft, but it leaves a mark)
+## Gate 2 ? Lawyer-approved consent document
 
-**The consent document itself is not in this system.** The repository is public, and the document is
-the law firm's professional work product. What the employee sees is a pointer to it
-(`public/app.js`):
+The employee reads the document in the case before agreeing. Store the approved UTF-8 plain-text
+file in the host's private files and set `PILOT_CONSENT_FILE` to its path. Set
+`PILOT_CONSENT_VERSION` to a stable ID for that approved version. The agreement records the
+employee account, timestamp, version, and SHA-256 digest.
 
-> Please read the privacy and AI processing consent provided by your attorney before continuing.
-> \[ I have read and agree \]
+1. The lawyer finalises the document after reviewing the relevant vendor terms and approves the text.
+2. Archive that copy and set the private file path and version on the production service.
+3. After deployment, check the employee view using fictional test data. Verify that the full text and
+   version are displayed, and that the questionnaire opens after agreement.
 
-The system records only who agreed, when, and to *which version*:
-
-```json
-"consent": { "accountId": "u-emp", "signedAt": "…", "version": "draft-lawyer-review-required" }
-```
-
-So `CONSENT_VERSION` (`src/app.ts`) is a label naming an external document, not draft text awaiting
-edits. Its current value says, on every signature it stamps, that the document had not been through
-the lawyer.
-
-This gate does not block anything. An employee can sign today and the questionnaire and uploads
-will open up. What it guarantees is that the record cannot later be mistaken for informed consent
-to an approved document.
-
-### Opening it
-
-1. **The lawyer finalises the document** (outside this system): what is collected, how it is stored,
-   which AI vendors receive it and on what terms, how long until destruction. It carries the firm's
-   name, not MeritX's.
-2. **Change the label** in `pilot/src/app.ts`:
-   ```diff
-   - export const CONSENT_VERSION = 'draft-lawyer-review-required';
-   + export const CONSENT_VERSION = '2026-11-03-privacy-ai-consent-v1';
-   ```
-   Any string will do as long as it identifies that exact document and version unambiguously —
-   date + name + version is the usual shape.
-3. **PR, merge, deploy.** From then on each signature carries the new label.
-4. **Deliver the document to the employee** through the firm's own channel, and **archive it**.
-   Proving later what someone agreed to depends on the label and the archived file matching.
-
-### Why a code constant, not an env var or an admin screen
-
-- An **env var** can be changed by anyone with host-dashboard access, unreviewed and untraceable.
-- An **admin screen** would let MeritX ops quietly change what users agreed to — which breaks the
-  rule that MeritX never reaches into the substance of the case.
-- A **code constant** requires a commit with an author, a review and a deploy.
-
-Changing a legal document should be inconvenient.
+Updating the text or version requires a new agreement for intake. If the production document is
+missing, the employee sees a message to contact their attorney. The synthetic preview displays a
+separately labelled sample.
 
 ## Gate 3 — Deployment (semi-hard)
 
@@ -127,7 +95,7 @@ The consent document has to name the vendors and their terms, and those come out
 
 ```
 verify AI vendor terms  →  write them into the consent document  →  lawyer signs off
-  →  change CONSENT_VERSION  →  owner approves deployment  →  deploy  →  real data
+  →  configure the approved file and version  →  owner approves deployment  →  deploy  →  real data
 ```
 
 Skipping ahead means asking an employee to consent to data processing whose terms nobody has read

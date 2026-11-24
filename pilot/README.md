@@ -20,6 +20,20 @@ deployment** with the public demo in `app/` and the landing site. The public dem
 
 ## Run locally (synthetic data only)
 
+### Optional lawyer case directory
+
+For a firm operating separate case workspaces, set `PILOT_WORKSPACES_FILE` to a private JSON
+file outside the repo and static directories. Example with synthetic values:
+
+```json
+[{"lawyerId":"lawyer","label":"Matter B","origin":"https://case-b.example.test"}]
+```
+
+Use the local lawyer account ID and neutral case labels. Each link opens a separately
+provisioned workspace on a distinct hostname, with its own allowlist, disk, encryption and
+signing keys. The destination authenticates the lawyer independently. Update the file and
+restart to change the directory. This first increment requires manual case provisioning.
+
 ```bash
 cd pilot
 npm ci
@@ -80,7 +94,8 @@ status, the access log and a four-field account list — never case substance.
 - `<meta name="robots" content="noindex...">` in the only HTML page.
 - No `/uploads` static route; downloads only via `POST /api/materials/:id/download-url` → `/files/:id?exp&sig` (≤ 300 s, default 60 s, HMAC-signed, bound to the issuing session, visibility re-checked).
 - Strict CORS: no wildcard; foreign-origin state-changing requests are rejected (CSRF).
-- Do not link the pilot host from the landing site or sitemap.
+- Landing's `/workspace/` entry can redirect to the separate sign-in page after deployment.
+  Keep the workspace origin out of the public sitemap.
 - The public Netlify site returns a forced 404 for `/pilot` and `/pilot/*` (`netlify.toml`, tested in `test/netlify-public-site.test.ts`).
 
 See `docs/DEPLOYMENT.md`, `docs/AUDIT_ANCHORING.md` and `docs/TODO_audit_log_and_case_destruction.md`.
@@ -108,3 +123,108 @@ Prompts come from the untracked `AI_PROMPTS_FILE`. The result is an **unapproved
 - `npm run destroy-case:prod` (production image, `node dist/src/scripts/destroy-case.js`) / `npm run destroy-case` (dev).
   Dry run by default. It reports complete only with `--ack-render-snapshots-deleted` and `--ack-ai-vendor-data <vendor>=<days|zero>`.
   See `docs/TODO_audit_log_and_case_destruction.md`.
+
+## Lawyer draft matter register
+
+For a local walkthrough with synthetic matters, set `PILOT_DRAFT_REGISTER_DIR` to a private
+directory outside the pilot case and web root. Supply a separate random 32-byte base64 key
+through `PILOT_DRAFT_REGISTER_KEY_FILE` or `PILOT_DRAFT_REGISTER_KEY`, then restart the pilot.
+Leave both settings unset to keep the register disabled.
+
+Sign in as a lawyer and open **Manage draft matters**. Enter an internal reference, create
+a draft, and use the matter selector to view or update its status. Each account sees its own
+register. **Back to pilot case** returns to the existing questionnaire, materials and assessment.
+
+For an employee walkthrough, select a synthetic draft, choose an employee and click
+**Send case invitation**. The invitation appears on that employee's home screen after
+sign-in or refresh. Open **Accept invitation for** the matter, confirm its consent, submit
+the questionnaire, and upload a synthetic document. The lawyer can select **View intake**
+on the same draft to read the answers and download the file. Invitations are delivered in
+the app. Each draft has one assigned employee. To invite different employees across
+drafts, enable the draft register, add employees to the existing account allowlist, set
+`PILOT_MAX_ACCOUNTS` for the new total, and set `PILOT_PRIMARY_EMPLOYEE_ID` to the original
+case employee's existing account ID. On startup with multiple employees, pilot records
+that original case assignment. Other employees enter through **My matters**.
+
+### Enterprise trial
+
+Enable the draft register and give the trial participants individual allowlisted accounts.
+Use one pilot instance per enterprise and law firm pairing. Configure the primary employee
+ID and account cap as described above when adding more than one employee.
+
+1. HR signs in to **Enterprise workspace** and sends an internal reference, employee work
+   email and brief request to the law firm.
+2. The lawyer opens **Case requests and drafts** and accepts or returns the request. A
+   return includes a message that HR can use to revise and resubmit. After acceptance,
+   the lawyer sends a case invitation to the allowlisted employee matching the work email.
+   For an employee without an account, the workspace administrator provisions it first.
+3. The employee opens the invitation from **My matters**, reads the consent document,
+   submits the questionnaire and uploads supporting files.
+4. HR uses **Refresh progress** to see each request’s current stage and next action.
+   The employer can see its original request and the lawyer’s return message. Intake
+   answers, materials, assessments, and notes remain accessible only to their case roles.
+
+For a hosted trial, follow [deployment setup](docs/DEPLOYMENT.md) and the
+[launch gates](docs/LAUNCH_GATES.md). Use fictional data until the firm approves the
+production consent and completes the applicable vendor checks.
+
+### MVP playbook checklist
+
+In the pilot case or under **View intake** for a draft, the lawyer can select a playbook
+and scenario, then link uploaded files to checklist items. The checklist shows required
+items awaiting a linked file. A linked file records the lawyer's classification and still
+requires substantive review. The selection and file links are encrypted with the case.
+
+`src/playbookCatalog.json` is the document checklist snapshot from
+`app/server/playbooks/*.json`. Update the snapshot when changing the MVP's document lists
+or scenario definitions. The pilot checklist uses the existing case files locally.
+
+### MVP petition preparation
+
+The lawyer opens **Open petition preparation** in the original case or under **View intake**.
+Review facts and their sources, edit follow-up questions and the petition letter, and choose
+which uploads to include as exhibits. Save and sign off to export the exhibit index, letter,
+and selected PDF, image, or plain-text exhibits as a single PDF.
+
+The form editor reuses the MVP's G-28, I-140, I-485 and I-765 field definitions and PDF
+templates. It prefills matching identity fields from case facts and questionnaire answers.
+Review the applicable form, complete and save its fields, then sign off to export its
+PDF separately. Verify the bundled template edition before filing. The PDF text renderer
+currently uses the standard Helvetica character set.
+
+To enable draft AI extraction, configure the pilot's verified provider and add a
+`petition` object with `system` and `user` strings to the untracked `AI_PROMPTS_FILE`.
+Extraction requires recorded consent for the selected case. It uses that case's
+questionnaire and the files the lawyer explicitly checks. The supported substitutions
+are `{{fields}}`, `{{answers}}`, `{{materials}}`, `{{playbook}}`, and `{{transcript}}`.
+The lawyer reviews extracted facts, sources, follow-ups and the letter before saving.
+
+### Consultation, playbook and research tools
+
+Open **Consultation and playbook tools** in a case. Upload an MP3 or WAV to that case,
+then transcribe it and summarize the transcript. The lawyer can edit and save both.
+When extracting petition facts, explicitly select the saved transcript to include it.
+Audio transcription and source-linked public research require a verified Gemini model
+with audio and Google Search support. Enter public search topics without private case details.
+
+The playbook editor can copy an MVP template into the encrypted case, simulate it with
+sample facts, and suggest edits with Copilot. Saved playbooks are selectable in that case's
+checklist. The checklist suggests classifications for selected uploads and lets the lawyer
+apply each suggestion. In petition preparation, select a passage to revise or regenerate
+the letter from saved facts. Review the results before saving and signing off.
+
+For outbound consultation recording, enable `PILOT_TWILIO_ENABLED=true` and configure
+`TWILIO_ACCOUNT_SID`, `TWILIO_API_KEY_SID`, `TWILIO_API_KEY_SECRET` (or its `_FILE` variant),
+`TWILIO_PHONE_NUMBER`, and `PILOT_LAWYER_PHONE`. Use a verified Twilio number and E.164
+phone numbers. The lawyer confirms prior recording permission before dialing. Twilio calls
+the lawyer first, connects the client, and records the connected call. Use **Import call
+recording** after the call to store a case-scoped copy. Review Twilio's recording retention
+settings and include the vendor copy in the case closeout. Existing inbound recordings
+can be downloaded from the account and uploaded as audio to the appropriate case.
+
+Run one server process per register directory. Each lawyer's references and statuses are
+stored together in an encrypted file. Each draft's consent, answers, and materials live
+under its own intake directory with a key derived from the register key and matter ID.
+Marking a draft closed retains its entry. The pilot
+case destruction command operates on the pilot case only. Register retention and individual
+matter deletion need to be defined before using the register with real cases.

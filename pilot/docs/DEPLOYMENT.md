@@ -2,8 +2,8 @@
 
 ## Principle
 A new, separate service. Do **not** reuse the public demo's Render service, Netlify site,
-API keys, env vars, disk or domain. Nothing changes `app/`, `robots.txt` or `sitemap.xml` of the public site. The only public-site change is a
-`netlify.toml` rule that returns 404 for `/pilot` and `/pilot/*` so pilot files are never served there.
+API keys, env vars, disk or domain. The public site's `/pilot` and `/pilot/*` routes return
+404. Landing uses `/workspace/` to hand invited users to the separate service's login page.
 
 ## Steps (for the MeritX owner, after approval)
 1. Approve the paid services below.
@@ -13,12 +13,36 @@ API keys, env vars, disk or domain. Nothing changes `app/`, `robots.txt` or `sit
    `SESSION_SECRET`, `PILOT_ACCOUNTS` (or a secret file + `PILOT_ACCOUNTS_FILE`), optional
    `PILOT_QUESTIONNAIRE_FILE`, `PILOT_ENCRYPTION_KEY` (back it up offline in a password manager:
    losing it means the data is unrecoverable), `DOWNLOAD_URL_SECRET`, and later `AI_*`.
-4. Use the default `*.onrender.com` name or an unlisted subdomain; never link it from the
-   landing site/sitemap. Only one person holds production access.
+4. Verify login on the host-provided HTTPS address or attach `workspace.meritx.us`. Once
+   the service is ready for invited users, enable the public Workspace sign-in handoff below.
 5. Smoke test with synthetic accounts: `/robots.txt`, `X-Robots-Tag`, 401 on `/api/case`,
    each role's view. Then rotate to the 5 real accounts.
 6. **No real files until PR2 is merged and deployed, AI vendor terms are verified,
    and the lawyer has approved the consent text.** See `docs/LAUNCH_GATES.md` for all of them.
+
+## Enterprise trial setup
+
+Provision a separate instance for one enterprise and its partner firm. On a new Render
+disk mounted at `/data`, set `PILOT_DATA_DIR=/data/original` and
+`PILOT_DRAFT_REGISTER_DIR=/data/enterprise-register` so both stores persist in separate
+directories. Set `PILOT_DRAFT_REGISTER_KEY` to a separate 32-byte base64 key and back it up
+alongside the original case key. For an existing service, retain the original data directory
+until any storage migration has been planned and verified.
+
+Allowlist the HR contact, lawyer, employees and admin. Set `PILOT_MAX_ACCOUNTS` to cover
+the total and set `PILOT_PRIMARY_EMPLOYEE_ID` for a multi-employee instance. Run the
+[enterprise trial walkthrough](../README.md#enterprise-trial) with fictional cases. Establish
+the trial's retention and individual case closeout procedure before accepting actual
+documents. Set the lawyer-approved consent file and version as described in the launch gates.
+
+## Landing sign-in handoff
+
+After the workspace DNS, HTTPS and login checks pass, set `MERITX_WORKSPACE_URL` on
+Netlify to the workspace origin, for example `https://workspace.meritx.us/`, and rebuild
+Landing. The build generates an exact redirect for `/workspace/`. Verify in a private
+browser window that **Workspace sign in** opens the invitation-only login. If the setting
+is absent, that route displays the invitation instructions and a trial-request link.
+Leave the workspace origin out of the public sitemap.
 
 ## Config the MeritX owner must fill in
 | Variable | What | Where |

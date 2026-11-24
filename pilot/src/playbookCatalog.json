@@ -1,0 +1,74 @@
+[
+  {
+    "id": "eb1a_v1",
+    "caseType": "eb1a",
+    "scenarios": {"I140_Only": "I-140 Petition Only", "Concurrent_AOS": "Concurrent I-140 & I-485 (Adjustment of Status)", "Consular_DS260": "Consular Processing (Post I-140 Approval)"},
+    "documents": [
+      {"id": "beneficiary_passport", "label": "Beneficiary passport biographic page", "required": true, "scenarios": ["I140_Only", "Concurrent_AOS", "Consular_DS260"]},
+      {"id": "statement_of_intent", "label": "Statement detailing plans to continue work in area of expertise", "required": true, "scenarios": ["I140_Only", "Concurrent_AOS", "Consular_DS260"]},
+      {"id": "i94_record", "label": "I-94 / entry record", "required": true, "scenarios": ["Concurrent_AOS"]},
+      {"id": "current_visa_or_status_doc", "label": "Current visa / status document", "required": false, "scenarios": ["Concurrent_AOS"]},
+      {"id": "i693_medical", "label": "I-693 medical exam (civil surgeon)", "required": true, "scenarios": ["Concurrent_AOS"]}
+    ]
+  },
+  {
+    "id": "general_intake_v1",
+    "caseType": "unknown",
+    "scenarios": {"General_Inquiry": "Pending classification"},
+    "documents": [
+      {"id": "passport_or_id", "label": "Government-issued ID or Passport", "required": false, "scenarios": ["General_Inquiry"]}
+    ]
+  },
+  {
+    "id": "l1a_multinational_executive",
+    "caseType": "L-1A Visa",
+    "scenarios": {"New_Office_Petition": "L-1A New Office Petition", "Established_Office_Petition": "L-1A Established Office Petition"},
+    "documents": [
+      {"id": "beneficiary_passport", "label": "Beneficiary passport (all pages)", "required": true, "scenarios": ["New_Office_Petition", "Established_Office_Petition"]},
+      {"id": "beneficiary_resume", "label": "Beneficiary curriculum vitae / resume", "required": true, "scenarios": ["New_Office_Petition", "Established_Office_Petition"]},
+      {"id": "overseas_employment_letter", "label": "Overseas company employment/verification letter (title, duties, dates, salary)", "required": true, "scenarios": ["New_Office_Petition", "Established_Office_Petition"]},
+      {"id": "overseas_payroll_records", "label": "Overseas company payroll records / pay stubs", "required": false, "scenarios": ["New_Office_Petition", "Established_Office_Petition"]},
+      {"id": "overseas_org_chart", "label": "Overseas company organizational chart", "required": true, "scenarios": ["New_Office_Petition", "Established_Office_Petition"]},
+      {"id": "us_org_chart", "label": "U.S. company organizational chart (proposed, for a new office)", "required": true, "scenarios": ["New_Office_Petition", "Established_Office_Petition"]},
+      {"id": "company_registration_documents", "label": "Corporate registration/formation documents for both the U.S. and overseas companies", "required": true, "scenarios": ["New_Office_Petition", "Established_Office_Petition"]},
+      {"id": "ownership_evidence", "label": "Stock certificates / ownership evidence showing the qualifying relationship", "required": true, "scenarios": ["New_Office_Petition", "Established_Office_Petition"]},
+      {"id": "us_company_ein_confirmation", "label": "U.S. company IRS EIN confirmation letter", "required": true, "scenarios": ["New_Office_Petition", "Established_Office_Petition"]},
+      {"id": "business_plan", "label": "Business plan with staffing and financial projections", "required": true, "scenarios": ["New_Office_Petition"]},
+      {"id": "us_company_financials", "label": "U.S. company financial statements / federal tax returns", "required": false, "scenarios": ["Established_Office_Petition"]}
+    ]
+  },
+  {
+    "id": "marriage_gc_v1",
+    "caseType": "marriage_green_card",
+    "scenarios": {"USC_AOS": "U.S. Citizen petitioner, beneficiary in U.S., Adjustment of Status", "LPR_petitioner": "Lawful Permanent Resident petitioner (F2A preference)", "consular_DS260": "Beneficiary abroad, consular processing"},
+    "documents": [
+      {"id": "beneficiary_passport", "label": "Beneficiary passport biographic page", "required": true, "scenarios": ["USC_AOS", "LPR_petitioner", "consular_DS260"]},
+      {"id": "beneficiary_birth_certificate", "label": "Beneficiary birth certificate (translated if needed)", "required": true, "scenarios": ["USC_AOS", "LPR_petitioner", "consular_DS260"]},
+      {"id": "petitioner_status_proof", "label": "Petitioner USC proof (passport/naturalization cert) or LPR green card", "required": true, "scenarios": ["USC_AOS", "LPR_petitioner", "consular_DS260"]},
+      {"id": "marriage_certificate", "label": "Marriage certificate", "required": true, "scenarios": ["USC_AOS", "LPR_petitioner", "consular_DS260"]},
+      {"id": "prior_divorce_or_death_certs", "label": "Divorce decrees / death certificates for prior marriages", "required": false, "scenarios": ["USC_AOS", "LPR_petitioner", "consular_DS260"]},
+      {"id": "i94_record", "label": "I-94 / entry record", "required": true, "scenarios": ["USC_AOS", "LPR_petitioner"]},
+      {"id": "current_visa_or_status_doc", "label": "Current visa / status document", "required": false, "scenarios": ["USC_AOS", "LPR_petitioner"]},
+      {"id": "petitioner_tax_return_recent", "label": "Most recent federal tax return / transcript", "required": true, "scenarios": ["USC_AOS", "LPR_petitioner", "consular_DS260"]},
+      {"id": "petitioner_w2_or_paystub", "label": "W-2 or recent pay stubs", "required": true, "scenarios": ["USC_AOS", "LPR_petitioner", "consular_DS260"]},
+      {"id": "petitioner_employment_letter", "label": "Employment verification letter", "required": false, "scenarios": ["USC_AOS", "LPR_petitioner", "consular_DS260"]},
+      {"id": "joint_sponsor_i864", "label": "Joint sponsor I-864 + financials", "required": false, "scenarios": ["USC_AOS", "LPR_petitioner", "consular_DS260"]},
+      {"id": "i693_medical", "label": "I-693 medical exam (civil surgeon)", "required": true, "scenarios": ["USC_AOS", "LPR_petitioner"]},
+      {"id": "panel_physician_medical", "label": "Panel physician medical exam (abroad)", "required": true, "scenarios": ["consular_DS260"]},
+      {"id": "police_certificates", "label": "Police certificates from countries of residence", "required": true, "scenarios": ["consular_DS260"]}
+    ]
+  },
+  {
+    "id": "niw_v1",
+    "caseType": "eb2_niw",
+    "scenarios": {"NIW_Standalone": "Standalone EB-2 NIW Petition", "Concurrent_NIW_AOS": "Concurrent NIW I-140 & I-485"},
+    "documents": [
+      {"id": "beneficiary_passport", "label": "Beneficiary passport biographic page", "required": true, "scenarios": ["NIW_Standalone", "Concurrent_NIW_AOS"]},
+      {"id": "proposed_endeavor_statement", "label": "Statement detailing the proposed endeavor and its national importance", "required": true, "scenarios": ["NIW_Standalone", "Concurrent_NIW_AOS"]},
+      {"id": "degree_certificate_or_experience_evidence", "label": "Advanced degree certificate, or Bachelor's degree plus experience letters", "required": true, "scenarios": ["NIW_Standalone", "Concurrent_NIW_AOS"]},
+      {"id": "i94_record", "label": "I-94 / entry record", "required": true, "scenarios": ["Concurrent_NIW_AOS"]},
+      {"id": "current_visa_or_status_doc", "label": "Current visa / status document", "required": false, "scenarios": ["Concurrent_NIW_AOS"]},
+      {"id": "i693_medical", "label": "I-693 medical exam (civil surgeon)", "required": true, "scenarios": ["Concurrent_NIW_AOS"]}
+    ]
+  }
+]

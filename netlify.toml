@@ -1,5 +1,5 @@
 [build]
-  command = "cd app/client && npm install && npm run build"
+  command = "npm install --prefix app/client && npm run build --prefix app/client && node scripts/configure-workspace.mjs"
   publish = "."
 
 [[headers]]

@@ -22,6 +22,7 @@ COPY --from=build /pilot/node_modules ./node_modules
 COPY --from=build /pilot/dist ./dist
 COPY package.json ./
 COPY public ./public
+COPY uscis-forms ./uscis-forms
 RUN mkdir -p /data && chown node:node /data
 USER node
 EXPOSE 3101

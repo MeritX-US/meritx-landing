@@ -7,6 +7,12 @@ import { Auth, allow, ConcurrencyLimiter, type AuthedRequest } from './auth';
 import { detectFileType } from './fileType';
 import { EncryptedFileStore, CASE_STATUSES, type Store, type CaseStatus, type Material } from './store';
 import { Cipher } from './crypto';
+import { DraftRegister } from './draftRegister';
+import { casePlaybooks } from './caseTools';
+import { mountPetition } from './petitionRoutes';
+import { mountCaseTools } from './caseToolsRoutes';
+import { hasCurrentConsent } from './consent';
+import { mountEnterpriseCases } from './enterpriseRoutes';
 import { AiClient, AiProviderError, fillTemplate, type FetchLike } from './ai/provider';
 import { AccessLog, parseAnchor, stdoutAnchorSink, type AnchorSink } from './accessLog';
 import { securityHeaders, strictCors, requireHttps, ROBOTS_TXT } from './security';
@@ -16,7 +22,6 @@ export const ALLOWED_MIME = new Set([
   'application/pdf', 'image/png', 'image/jpeg', 'text/plain',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ]);
-export const CONSENT_VERSION = 'draft-lawyer-review-required';
 
 /** The ONLY fields an account listing may expose. */
 export const ACCOUNT_SUMMARY_KEYS = ['enabled', 'id', 'name', 'role'] as const;
@@ -24,12 +29,25 @@ export function accountSummary(a: { id: string; name: string; role: string; enab
   return { id: a.id, name: a.name, role: a.role, enabled: a.enabled };
 }
 
-export interface AppDeps { store?: Store; log?: AccessLog; fetch?: FetchLike; auth?: (auth: Auth) => void; anchorSink?: AnchorSink }
+export interface AppDeps { store?: Store; log?: AccessLog; fetch?: FetchLike; voiceFetch?: typeof fetch; auth?: (auth: Auth) => void; anchorSink?: AnchorSink }
 
 export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
   const app = express();
   const cipher = new Cipher(cfg.encryptionKey);
   const store: Store = deps.store || new EncryptedFileStore(cfg.dataDir, cipher);
+  const original = store.read();
+  if (original.primaryEmployeeId && original.primaryEmployeeId !== cfg.primaryEmployeeId) {
+    throw new Error('Configured employee does not match the original case employee');
+  }
+  if (!original.primaryEmployeeId && cfg.accounts.filter(account => account.role === 'employee').length > 1) {
+    const historicalOwners = [original.consent?.accountId, original.questionnaire.ownerId];
+    if (historicalOwners.some(owner => owner && owner !== cfg.primaryEmployeeId)) {
+      throw new Error('Configured employee does not match the original case records');
+    }
+    store.update(state => { state.primaryEmployeeId = cfg.primaryEmployeeId; });
+  }
+  const originalCaseAccess = (account: { id: string; role: string }) =>
+    account.role !== 'employee' || account.id === cfg.primaryEmployeeId;
   // Revoked sessions are persisted in the (encrypted) case data store, so logout survives restarts.
   const auth = new Auth(cfg, {
     load: () => store.read().revokedSessions || {},
@@ -39,6 +57,7 @@ export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
   // Every append also prints {event:'access_log_anchor', seq, entries, hash} to stdout (Render logs = off-disk anchor).
   const log = deps.log || new AccessLog(cfg.dataDir, cipher, { anchorSink: deps.anchorSink || (cfg.accessLogAnchorStdout ? stdoutAnchorSink : null) });
   const ai = new AiClient(cfg.ai, deps.fetch);
+  const drafts = cfg.draftRegister && new DraftRegister(cfg.draftRegister.dir, cfg.draftRegister.key);
   const now = () => new Date().toISOString();
 
   app.disable('x-powered-by');
@@ -56,7 +75,7 @@ export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
   };
 
   const audit = (req: AuthedRequest, action: string, outcome: 'ok' | 'denied' | 'error' = 'ok', resource?: string) =>
-    log.append({ actor: req.account?.id || 'anonymous', role: req.account?.role || 'none', action, resource, outcome });
+    log.append({ actor: req.account?.id || 'anonymous', role: req.account?.role || 'none', action, resource: req.res?.locals.matterId ? [req.res.locals.matterId, resource].filter(Boolean).join('/') : resource, outcome });
 
   // ---------- public, data-free endpoints ----------
   app.get('/robots.txt', (_req, res) => res.type('text/plain').send(ROBOTS_TXT));
@@ -113,7 +132,84 @@ export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
 
   api.get('/me', (req: AuthedRequest, res) => {
     const a = req.account!;
-    res.json({ id: a.id, name: a.name, role: a.role, flags: { lawyerApprovedPublish: cfg.lawyerApprovedPublish } });
+    const workspaces = a.role === 'lawyer' ? cfg.lawyerWorkspaces?.filter(w => w.lawyerId === a.id)
+      .map(({ label, origin }) => ({ label, origin })) : undefined;
+    res.json({ id: a.id, name: a.name, role: a.role, flags: { lawyerApprovedPublish: cfg.lawyerApprovedPublish },
+      ...(!originalCaseAccess(a) ? { originalCaseAccess: false } : {}),
+      ...(drafts && a.role === 'lawyer' ? { invitees: cfg.accounts.filter(x => x.enabled && x.role === 'employee')
+        .map(x => ({ id: x.id, name: x.name })) } : {}),
+      ...(workspaces?.length ? { workspaces } : {}), ...(drafts && ['lawyer', 'employee', 'enterprise'].includes(a.role) ? { draftRegister: true } : {}) });
+  });
+
+  const intake = express.Router();
+  if (drafts) {
+    const draftFiles = express.Router();
+    draftFiles.get('/files/:id', serveDownload);
+    const lawyer = cfg.accounts.find(a => a.role === 'lawyer')!;
+    mountEnterpriseCases(api, drafts, lawyer.id, audit);
+    const requestedAccount = (email: string) => cfg.accounts.find(account => account.role === 'employee' && account.enabled && account.email === email);
+    api.get('/matter-invitations', allow('employee'), (req: AuthedRequest, res) => {
+      const rows = drafts.list(lawyer.id).filter(r => r.invitation?.employeeId === req.account!.id);
+      audit(req, 'draft.invitations.list');
+      res.json(rows.map(r => ({ id: r.id, label: r.label, accepted: r.invitation!.accepted })));
+    });
+    api.post('/draft-matters/:id/invite', allow('lawyer'), (req: AuthedRequest, res) => {
+      const row = drafts.list(req.account!.id).find(entry => entry.id === req.params.id);
+      if (!row) return res.status(404).json({ error: 'matter unavailable' });
+      if (row.request && row.request.decision !== 'accepted')
+        return res.status(409).json({ error: 'Accept the enterprise request first' });
+      const employee = cfg.accounts.find(a => a.role === 'employee' && a.enabled && a.id === req.body?.employeeId);
+      if (!employee) return res.status(400).json({ error: 'invalid employee' });
+      if (row.request && employee.id !== requestedAccount(row.request.email)?.id)
+        return res.status(409).json({ error: 'Invite the employee matching the requested work email' });
+      const invitation = drafts.invite(req.account!.id, req.params.id, employee.id);
+      if (invitation === 'missing') return res.status(404).json({ error: 'matter unavailable' });
+      if (invitation === 'assigned') return res.status(409).json({ error: 'Matter already assigned to another employee' });
+      if (invitation === 'pending') return res.status(409).json({ error: 'Accept the enterprise request first' });
+      audit(req, 'draft.invite', 'ok', req.params.id);
+      res.json({ ok: true, invitation });
+    });
+    api.post('/matter-invitations/:id/accept', allow('employee'), (req: AuthedRequest, res) => {
+      if (!drafts.accept(lawyer.id, req.params.id, req.account!.id))
+        return res.status(404).json({ error: 'invitation unavailable' });
+      audit(req, 'draft.accept', 'ok', req.params.id);
+      res.json({ ok: true });
+    });
+    api.use('/draft-matters/:matterId/intake', allow('employee', 'lawyer'), (req: AuthedRequest, res, next) => {
+      const row = drafts.list(lawyer.id).find(r => r.id === req.params.matterId);
+      if (!row || (row.request && row.request.decision !== 'accepted') || (req.account!.role === 'employee' &&
+          (!row.invitation?.accepted || row.invitation.employeeId !== req.account!.id)))
+        return res.status(404).json({ error: 'matter unavailable' });
+      res.locals.intakeStore = drafts.intakeStore(row);
+      res.locals.matterId = row.id;
+      next();
+    }, intake, draftFiles);
+    api.get('/draft-matters', allow('lawyer'), (req: AuthedRequest, res) => {
+      const rows = drafts.list(req.account!.id);
+      audit(req, 'draft.list');
+      res.json(rows.map(row => row.request ? { ...row, requestedEmployeeId: requestedAccount(row.request.email)?.id ?? null } : row));
+    });
+    api.post('/draft-matters', allow('lawyer'), (req: AuthedRequest, res) => {
+      const label = req.body?.label;
+      if (typeof label !== 'string' || !label.trim() || label.trim().length > 80)
+        return res.status(400).json({ error: 'Enter a matter reference of 1 to 80 characters' });
+      const row = drafts.create(req.account!.id, label.trim());
+      audit(req, 'draft.create', 'ok', row.id);
+      res.status(201).json(row);
+    });
+    api.put('/draft-matters/:id/status', allow('lawyer'), (req: AuthedRequest, res) => {
+      if (!CASE_STATUSES.includes(req.body?.status)) return res.status(400).json({ error: 'invalid status' });
+      const row = drafts.setStatus(req.account!.id, req.params.id, req.body.status);
+      if (!row) return res.status(404).json({ error: 'matter not found' });
+      audit(req, 'draft.status.update', 'ok', row.id);
+      res.json(row);
+    });
+  }
+
+  // The routes below serve the original case. Invited matters are handled above.
+  api.use((req: AuthedRequest, res, next) => {
+    if (!originalCaseAccess(req.account!)) return res.status(403).json({ error: 'Original case unavailable' });
+    next();
   });
 
   api.get('/case', (req: AuthedRequest, res) => {
@@ -141,29 +237,96 @@ export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
     res.json({ ok: true });
   });
 
+  const intakeStore = (res: Response): Store => res.locals.intakeStore || store;
+  mountPetition(intake, intakeStore, ai, cfg.ai.prompts?.petition, cfg.consentDocument, audit);
+  mountCaseTools(intake, intakeStore, ai, cfg, audit, deps.voiceFetch);
+  const downloadIdentity = (res: Response, id: string) => res.locals.matterId ? res.locals.matterId + '/' + id : id;
+
+  intake.get('/playbook-checklist', allow('lawyer'), (req: AuthedRequest, res) => {
+    const state = intakeStore(res).read();
+    const playbooks = casePlaybooks(state);
+    const classifyAvailable = ai.enabled && hasCurrentConsent(state, cfg.consentDocument);
+    const selection = state.playbook;
+    const playbook = playbooks.find(p => p.id === selection?.id);
+    const documents = playbook?.documents.filter(d => d.scenarios.includes(selection!.scenario)) ?? [];
+    const materials = state.materials.map(m => ({
+      id: m.id,
+      filename: m.filename,
+      ...(classifyAvailable ? { classifiable: ['application/pdf', 'text/plain', 'image/jpeg', 'image/png'].includes(m.mimeType) } : {}),
+      documentId: playbook ? m.checklistDocuments?.[playbook.id] ?? null : null,
+    }));
+    audit(req, 'playbook.checklist.view');
+    res.json({ catalog: playbooks.map(({ id, caseType, scenarios }) => ({ id, caseType, scenarios })),
+      selection, documents, materials, classifyAvailable });
+  });
+
+  intake.put('/playbook-checklist', allow('lawyer'), (req: AuthedRequest, res) => {
+    const { id, scenario } = req.body ?? {};
+    const target = intakeStore(res);
+    const playbook = casePlaybooks(target.read()).find(p => p.id === id);
+    if (!playbook || typeof scenario !== 'string' || !Object.hasOwn(playbook.scenarios, scenario))
+      return res.status(400).json({ error: 'Select an available playbook and scenario' });
+    target.update(state => { state.playbook = { id: playbook.id, scenario }; });
+    audit(req, 'playbook.checklist.select');
+    res.json({ ok: true });
+  });
+
+  intake.put('/playbook-checklist/materials/:id', allow('lawyer'), (req: AuthedRequest, res) => {
+    const { playbookId, scenario, documentId } = req.body ?? {};
+    const target = intakeStore(res);
+    const state = target.read();
+    const selection = state.playbook;
+    if (!selection || selection.id !== playbookId || selection.scenario !== scenario)
+      return res.status(409).json({ error: 'The selected playbook changed. Reload the checklist.' });
+    const playbook = casePlaybooks(state).find(p => p.id === selection.id);
+    if (documentId !== null && !playbook?.documents.some(d => d.id === documentId && d.scenarios.includes(selection.scenario)))
+      return res.status(400).json({ error: 'Select a document from the current checklist' });
+    if (!state.materials.some(m => m.id === req.params.id)) return res.status(404).json({ error: 'material not found' });
+    target.update(current => {
+      const material = current.materials.find(m => m.id === req.params.id)!;
+      const links = material.checklistDocuments ??= {};
+      if (documentId === null) delete links[selection.id];
+      else links[selection.id] = documentId;
+    });
+    audit(req, 'playbook.checklist.link', 'ok', req.params.id);
+    res.json({ ok: true });
+  });
+
+  intake.get('/consent', allow('employee', 'lawyer'), (req: AuthedRequest, res) => {
+    const employeeId = req.account!.role === 'employee' ? req.account!.id : undefined;
+    const signed = hasCurrentConsent(intakeStore(res).read(), cfg.consentDocument, employeeId);
+    res.json({ signed, document: cfg.consentDocument ?? null });
+  });
   // ---------- consent (employee must sign before questionnaire/upload) ----------
-  api.post('/consent', allow('employee'), (req: AuthedRequest, res) => {
+  intake.post('/consent', allow('employee'), (req: AuthedRequest, res) => {
     if (req.body?.agree !== true) return res.status(400).json({ error: 'agree must be true' });
-    store.update(st => { st.consent = { accountId: req.account!.id, signedAt: now(), version: CONSENT_VERSION }; });
+    const document = cfg.consentDocument;
+    if (!document) return res.status(412).json({ error: 'Your attorney has not made the consent document available yet' });
+    if ((!document.preview || req.body?.digest !== undefined) && req.body?.digest !== document.digest)
+      return res.status(409).json({ error: 'The consent document changed. Reload it before agreeing.' });
+    intakeStore(res).update(st => {
+      if (!hasCurrentConsent(st, document, req.account!.id))
+        st.consent = { accountId: req.account!.id, signedAt: now(), version: document.version, digest: document.digest };
+    });
     audit(req, 'consent.sign');
     res.json({ ok: true });
   });
   const requireConsent = (req: AuthedRequest, res: Response, next: NextFunction) => {
     if (req.account!.role !== 'employee') return next();
-    const c = store.read().consent;
-    if (!c || c.accountId !== req.account!.id) return res.status(412).json({ error: 'consent required' });
+    if (!hasCurrentConsent(intakeStore(res).read(), cfg.consentDocument, req.account!.id))
+      return res.status(412).json({ error: 'consent required' });
     next();
   };
 
   // ---------- questionnaire ----------
-  api.get('/questionnaire', allow('employee', 'lawyer'), (req: AuthedRequest, res) => {
-    const q = store.read().questionnaire;
+  intake.get('/questionnaire', allow('employee', 'lawyer'), (req: AuthedRequest, res) => {
+    const q = intakeStore(res).read().questionnaire;
     if (req.account!.role === 'employee' && q.ownerId && q.ownerId !== req.account!.id) return res.status(403).json({ error: 'forbidden' });
     audit(req, 'questionnaire.view');
     res.json({ questions: cfg.questions, answers: q.answers, updatedAt: q.updatedAt, submittedAt: q.submittedAt });
   });
 
-  api.put('/questionnaire', allow('employee'), requireConsent, (req: AuthedRequest, res) => {
+  intake.put('/questionnaire', allow('employee'), requireConsent, (req: AuthedRequest, res) => {
     const answers = req.body?.answers;
     if (!answers || typeof answers !== 'object' || Array.isArray(answers)) return res.status(400).json({ error: 'answers must be an object' });
     const allowed = new Set(cfg.questions.map(q => q.id));
@@ -172,7 +335,7 @@ export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
       if (!allowed.has(k)) continue;
       clean[k] = String(v ?? '').slice(0, 20000);
     }
-    store.update(st => {
+    intakeStore(res).update(st => {
       st.questionnaire = {
         ownerId: req.account!.id,
         answers: { ...st.questionnaire.answers, ...clean },
@@ -188,14 +351,14 @@ export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
   // ---------- materials ----------
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: cfg.maxUploadBytes, files: 1 } });
 
-  api.get('/materials', allow('employee', 'lawyer'), (req: AuthedRequest, res) => {
+  intake.get('/materials', allow('employee', 'lawyer'), (req: AuthedRequest, res) => {
     audit(req, 'materials.list');
-    const s = store.read();
+    const s = intakeStore(res).read();
     res.json(visibleMaterials(req.account!, s).map(m =>
       req.account!.role === 'lawyer' ? { ...materialMeta(m), ownerId: m.ownerId, category: m.category } : materialMeta(m)));
   });
 
-  api.post('/materials', allow('employee', 'lawyer'), requireConsent, upload.single('file'), (req: AuthedRequest, res) => {
+  intake.post('/materials', allow('employee', 'lawyer'), requireConsent, upload.single('file'), (req: AuthedRequest, res) => {
     const f = req.file;
     if (!f) return res.status(400).json({ error: 'file required' });
     // Type is decided by the file's content (magic bytes), never by the client-reported MIME.
@@ -203,29 +366,34 @@ export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
     if (!detected || !ALLOWED_MIME.has(detected)) return res.status(415).json({ error: 'unsupported file type' });
     const id = crypto.randomUUID();
     const filename = path.basename(f.originalname).replace(/[^\w.\- ()]/g, '_').slice(0, 200) || 'file';
-    store.putBlob(id, f.buffer);
-    store.update(st => {
-      st.materials.push({ id, ownerId: req.account!.id, filename, mimeType: detected, size: f.size, uploadedAt: now(), category: null });
-    });
+    const target = intakeStore(res);
+    target.putBlob(id, f.buffer);
+    try {
+      target.update(st => {
+        st.materials.push({ id, ownerId: req.account!.id, filename, mimeType: detected, size: f.size, uploadedAt: now(), category: null });
+      });
+    } catch (err) { target.deleteBlob(id); throw err; }
     audit(req, 'material.upload', 'ok', id);
     res.status(201).json({ id });
   });
 
   /** Owner (employee) or lawyer only. 404 (not 403) for others so ids can't be probed. */
-  function findVisibleMaterial(req: AuthedRequest) {
-    const s = store.read();
+  function findVisibleMaterial(req: AuthedRequest, selectedStore: Store = store) {
+    const s = selectedStore.read();
     return visibleMaterials(req.account!, s).find(m => m.id === req.params.id) || null;
   }
 
   // Short-lived signed download URL (bound to the requesting account). No static /uploads.
-  api.post('/materials/:id/download-url', allow('employee', 'lawyer'), (req: AuthedRequest, res) => {
-    const m = findVisibleMaterial(req);
+  intake.post('/materials/:id/download-url', allow('employee', 'lawyer'), (req: AuthedRequest, res) => {
+    const m = findVisibleMaterial(req, intakeStore(res));
     if (!m) { audit(req, 'material.downloadUrl', 'denied', req.params.id); return res.status(404).json({ error: 'not found' }); }
     const exp = Math.floor(Date.now() / 1000) + cfg.downloadUrlTtlSeconds;
-    const sig = signDownload(m.id, req.account!.id, exp);
+    const sig = signDownload(downloadIdentity(res, m.id), req.account!.id, exp);
     audit(req, 'material.downloadUrl', 'ok', m.id);
-    res.json({ url: `/files/${m.id}?exp=${exp}&sig=${sig}`, expiresAt: new Date(exp * 1000).toISOString() });
+    res.json({ url: `${res.locals.matterId ? req.baseUrl : ''}/files/${m.id}?exp=${exp}&sig=${sig}`, expiresAt: new Date(exp * 1000).toISOString() });
   });
+
+  api.use(intake);
 
   api.put('/materials/:id/category', allow('lawyer'), (req: AuthedRequest, res) => {
     const cat = String(req.body?.category || '').trim().slice(0, 100) || null;
@@ -331,6 +499,8 @@ export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
     const s = store.read();
     // Guardrail: no visa-specific AI output before the lawyer has chosen the visa type.
     if (!s.case.visaType) return res.status(409).json({ error: 'set visa type first' });
+    if (!cfg.consentDocument?.preview && !hasCurrentConsent(s, cfg.consentDocument))
+      return res.status(412).json({ error: 'Consent required for this matter' });
     const ids: string[] = Array.isArray(req.body?.materialIds) ? req.body.materialIds.map(String) : [];
     const mats = s.materials.filter(m => ids.includes(m.id));
     // A blob that is missing, empty, or undecryptable (corrupt, or encrypted under a rotated
@@ -396,24 +566,26 @@ export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
   // ---------- signed file downloads ----------
   // Requires BOTH a valid, unexpired signature AND the same signed-in account it was issued to,
   // and re-checks visibility at download time.
-  app.get('/files/:id', (req: AuthedRequest, res) => {
+  function serveDownload(req: AuthedRequest, res: Response) {
     res.setHeader('Cache-Control', 'no-store');
     const acct = auth.resolve(req);
     if (!acct) return res.status(401).json({ error: 'unauthenticated' });
+    if (!res.locals.matterId && !originalCaseAccess(acct)) return res.status(403).json({ error: 'Original case unavailable' });
     req.account = acct;
     const exp = Number(req.query.exp), sig = String(req.query.sig || '');
-    if (!Number.isFinite(exp) || exp < Math.floor(Date.now() / 1000) || !verifyDownload(req.params.id, acct.id, exp, sig)) {
+    if (!Number.isFinite(exp) || exp < Math.floor(Date.now() / 1000) || !verifyDownload(downloadIdentity(res, req.params.id), acct.id, exp, sig)) {
       audit(req, 'material.download', 'denied', req.params.id);
       return res.status(403).json({ error: 'link invalid or expired' });
     }
-    const m = findVisibleMaterial(req);
-    const data = m ? store.getBlob(m.id) : null;
+    const m = findVisibleMaterial(req, intakeStore(res));
+    const data = m ? intakeStore(res).getBlob(m.id) : null;
     if (!m || !data) { audit(req, 'material.download', 'denied', req.params.id); return res.status(404).json({ error: 'not found' }); }
     audit(req, 'material.download', 'ok', m.id);
     res.setHeader('Content-Type', m.mimeType);
     res.setHeader('Content-Disposition', `attachment; filename="${m.filename.replace(/"/g, '')}"`);
     res.send(data);
-  });
+  }
+  app.get('/files/:id', serveDownload);
 
   // ---------- static UI (login page + shell; contains no data) ----------
   app.use(express.static(publicDir(), { index: 'index.html', dotfiles: 'deny', redirect: false }));

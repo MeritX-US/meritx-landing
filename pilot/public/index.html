@@ -6,23 +6,38 @@
   <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
   <meta name="googlebot" content="noindex, nofollow">
   <meta name="referrer" content="no-referrer">
-  <title>Private workspace</title>
+  <title>MeritX | Private workspace</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
+  <header class="site-header">
+    <div class="site-header-inner">
+      <span class="wordmark">MeritX</span>
+      <div id="account" class="account" hidden>
+        <span id="who"></span>
+        <button id="logout" type="button">Sign out</button>
+      </div>
+    </div>
+  </header>
   <main id="root">
-    <section id="login" hidden>
-      <h1>Private workspace</h1>
-      <p class="muted">Invite-only. If you were not invited, close this page.</p>
-      <form id="login-form">
-        <label>Email <input name="email" type="email" autocomplete="username" required></label>
-        <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
-        <button type="submit">Sign in</button>
-        <p id="login-error" class="error" role="alert"></p>
-      </form>
+    <section id="login" class="login-layout" hidden>
+      <div class="login-intro">
+        <span class="eyebrow">Private pilot</span>
+        <h1>Your case <em>workspace.</em></h1>
+        <p>Access the questionnaire, case materials and requests shared with you by your attorney.</p>
+      </div>
+      <div class="card login-card">
+        <h2>Sign in</h2>
+        <p class="muted">Use the email and password from your invitation.</p>
+        <form id="login-form">
+          <label>Email <input name="email" type="email" autocomplete="username" required></label>
+          <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
+          <button class="button-primary" type="submit">Sign in</button>
+          <p id="login-error" class="error" role="alert"></p>
+        </form>
+      </div>
     </section>
     <section id="app" hidden>
-      <header><span id="who"></span> <button id="logout" type="button">Sign out</button></header>
       <div id="view"></div>
     </section>
   </main>

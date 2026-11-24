@@ -1,5 +1,6 @@
 import type { Account, PilotConfig } from './config';
 import type { PilotState, Material } from './store';
+import { hasCurrentConsent } from './consent';
 
 /**
  * Role-scoped projections of the single case. Every API response that carries
@@ -65,7 +66,7 @@ export function caseViewFor(acct: Account, cfg: PilotConfig, s: PilotState) {
       return {
         role: 'employee',
         ...statusView(s),
-        consentSigned: !!(s.consent && s.consent.accountId === acct.id),
+        consentSigned: hasCurrentConsent(s, cfg.consentDocument, acct.id),
         questionnaire: s.questionnaire.ownerId === acct.id || s.questionnaire.ownerId === null
           ? { answers: s.questionnaire.answers, updatedAt: s.questionnaire.updatedAt, submittedAt: s.questionnaire.submittedAt }
           : null,

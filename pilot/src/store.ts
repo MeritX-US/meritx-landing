@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import type { Cipher } from './crypto';
+import type { PetitionDraft } from './petition';
+import type { CaseToolsState } from './caseTools';
 
 /**
  * Single-case data model for the private pilot. One case, one employee,
@@ -26,6 +28,7 @@ export interface Material {
   size: number;
   uploadedAt: string;
   category: string | null; // lawyer-editable classification
+  checklistDocuments?: Record<string, string>; // playbook ID -> document ID
 }
 
 export interface Todo { id: string; text: string; createdAt: string; published: boolean }
@@ -38,13 +41,17 @@ export interface Assessment {
 }
 
 export interface PilotState {
+  caseTools?: CaseToolsState;
+  primaryEmployeeId?: string; // original case membership, pinned when multiple employees are enabled
+  petition?: PetitionDraft;
+  playbook?: { id: string; scenario: string };
   case: {
     status: CaseStatus;
     updatedAt: string;
     visaType: string | null; // set by lawyer only
     visaTypeSetAt: string | null;
   };
-  consent: { accountId: string; signedAt: string; version: string } | null;
+  consent: { accountId: string; signedAt: string; version: string; digest?: string } | null;
   questionnaire: { ownerId: string | null; answers: Record<string, string>; updatedAt: string | null; submittedAt: string | null };
   materials: Material[];
   todos: Todo[];

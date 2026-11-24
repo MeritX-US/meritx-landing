@@ -120,6 +120,77 @@ test('route: 503 when AI disabled', async () => {
   assert.equal((await a.lawyer.post('/api/assessment/generate')).status, 503);
 });
 
+test('petition extraction uses consent and case sources, and leaves results unsaved for review', async t => {
+  const env = aiEnv('openai');
+  t.after(() => fs.rmSync(path.dirname(env.AI_PROMPTS_FILE), { recursive: true, force: true }));
+  const prompts = JSON.parse(fs.readFileSync(env.AI_PROMPTS_FILE, 'utf8'));
+  prompts.petition = { system: 'Synthetic system', user: 'Synthetic template' };
+  fs.writeFileSync(env.AI_PROMPTS_FILE, JSON.stringify(prompts));
+  const draft = { facts: {
+    beneficiary_given_name: { value: 'Synthetic', source: 'answer:notes' },
+    beneficiary_family_name: { value: 'Unknown', source: 'not-in-case' },
+  }, followUps: ['Confirm date'], letter: 'Synthetic letter' };
+  const { f, calls } = mockFetch({ choices: [{ message: { content: JSON.stringify(draft) } }] });
+  const { app } = makeApp(env, { fetch: f });
+  const { employee, lawyer } = await agents(app);
+  const url = '/api/petition/extract';
+  await employee.post(url).send({ materialIds: [] }).expect(403);
+  await lawyer.post(url).send({ materialIds: [] }).expect(412);
+  assert.equal(calls.length, 0);
+  await employee.post('/api/consent').send({ agree: true }).expect(200);
+  await employee.put('/api/questionnaire').send({ answers: { notes: 'Synthetic answer' } }).expect(200);
+  await lawyer.post(url).send({ materialIds: ['other-case-file'] }).expect(404);
+  const result = await lawyer.post(url).send({ materialIds: [] }).expect(200);
+  assert.deepEqual(result.body.facts, { beneficiary_given_name: draft.facts.beneficiary_given_name });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].body.store, false);
+  assert.match(calls[0].body.messages[1].content.at(-1).text, /Synthetic answer/);
+  assert.deepEqual((await lawyer.get('/api/petition')).body.facts, {});
+});
+
+test('case tools use selected files, keep AI suggestions unsaved, and require grounded public sources', async t => {
+  const env = aiEnv('gemini');
+  t.after(() => fs.rmSync(path.dirname(env.AI_PROMPTS_FILE), { recursive: true, force: true }));
+  const reply: { candidates: { content: { parts: { text: string }[] }; groundingMetadata?: object }[] } =
+    { candidates: [{ content: { parts: [{ text: '' }] } }] };
+  const output = (value: unknown) => { reply.candidates[0].content.parts[0].text = typeof value === 'string' ? value : JSON.stringify(value); };
+  const { f, calls } = mockFetch(reply);
+  const { app } = makeApp(env, { fetch: f });
+  const { lawyer, employee } = await agents(app);
+  const tools = '/api/case-tools';
+  await employee.get(tools).expect(403);
+  await lawyer.post(tools + '/ai/classify').send({ materialIds: [] }).expect(412);
+  await employee.post('/api/consent').send({ agree: true }).expect(200);
+  const catalog = (await lawyer.get(tools).expect(200)).body;
+  const book = { ...catalog.playbooks.find((entry: { id: string }) => entry.id === 'eb1a_v1'), id: 'synthetic-playbook' };
+  await lawyer.put(tools + '/playbook').send({ playbook: book, revision: catalog.revision }).expect(200);
+  await lawyer.put('/api/playbook-checklist').send({ id: book.id, scenario: 'I140_Only' }).expect(200);
+  const file = await employee.post('/api/materials').attach('file', Buffer.from('Synthetic document'), 'note.txt').expect(201);
+  const valid = { materialId: file.body.id, documentId: 'beneficiary_passport' };
+  output({ links: [valid, { ...valid, materialId: 'another-case' }, { ...valid, documentId: 'i94_record' }] });
+  const proposed = await lawyer.post(tools + '/ai/classify').send({ materialIds: [file.body.id] }).expect(200);
+  assert.deepEqual(proposed.body.links, [valid]);
+  assert.equal((await lawyer.get('/api/playbook-checklist')).body.materials[0].documentId, null);
+  const recording = await lawyer.post(tools + '/audio').attach('audio', Buffer.from('RIFF0000WAVE'), 'synthetic.wav').expect(201);
+  output('Synthetic transcript');
+  await lawyer.post(tools + '/ai/transcribe').send({ materialIds: [recording.body.id] }).expect(200);
+  assert.equal(calls.at(-1)?.body.contents[0].parts[0].inline_data.mime_type, 'audio/wav');
+  assert.equal((await lawyer.get(tools)).body.consultation, undefined);
+  await lawyer.post(tools + '/ai/research').send({ text: 'Synthetic public topic' }).expect(502);
+  reply.candidates[0].groundingMetadata = { groundingChunks: [{ web: { uri: 'https://public.example.test', title: 'Source' } }] };
+  const research = await lawyer.post(tools + '/ai/research').send({ text: 'Synthetic public topic' }).expect(200);
+  assert.deepEqual(research.body.sources, [{ url: 'https://public.example.test', title: 'Source' }]);
+  assert.deepEqual(calls.at(-1)?.body.tools, [{ google_search: {} }]);
+  output({ ...book, caseType: 'Suggested name' });
+  await lawyer.post(tools + '/ai/copilot').send({ playbook: book, instruction: 'Rename the case type' }).expect(200);
+  assert.notEqual((await lawyer.get(tools)).body.playbooks.find((entry: { id: string }) => entry.id === book.id).caseType, 'Suggested name');
+  output('Synthetic review output');
+  for (const [task, input] of [['summarize', { text: 'Synthetic transcript' }], ['refine', { text: 'Synthetic letter' }],
+    ['regenerate', {}], ['simulate', { playbook: book, text: 'Synthetic facts' }]] as const) {
+    await lawyer.post(tools + '/ai/' + task).send(input).expect(200);
+  }
+});
+
 test('generate: a material whose blob cannot be read is reported, never a crash or a hang', async () => {
   // Express 4 ignores a rejected promise from an async handler, so a throwing store used to
   // hang the request and bring the process down with an unhandled rejection.

@@ -197,6 +197,28 @@ a {
     color: var(--heading-color);
 }
 
+@media (min-width: 769px) and (max-width: 1050px) {
+    .nav {
+        gap: 1rem;
+    }
+
+    .nav .btn {
+        padding-inline: 1rem;
+    }
+}
+
+.workspace-access {
+    padding-top: 2rem;
+}
+
+.workspace-access h1 {
+    margin-bottom: 1rem;
+}
+
+.workspace-access .btn {
+    margin: 0.25rem;
+}
+
 /* Buttons */
 .btn {
     display: inline-block;

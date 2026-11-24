@@ -15,8 +15,11 @@ import type { AiConfig } from '../config';
  */
 
 export interface AiAttachment { mimeType: string; data: Buffer; filename: string }
-export interface AiRequest { system: string; prompt: string; attachments?: AiAttachment[] }
-export interface AiResult { text: string; provider: string; model: string; requestId: string | null }
+export interface AiRequest { system: string; prompt: string; attachments?: AiAttachment[]; webSearch?: boolean }
+export interface AiResult {
+  text: string; provider: string; model: string; requestId: string | null;
+  sources?: { title: string; url: string }[];
+}
 export type FetchLike = (url: string, init: { method: string; headers: Record<string, string>; body: string; signal?: AbortSignal }) => Promise<{ ok: boolean; status: number; headers: { get(n: string): string | null }; json(): Promise<any> }>;
 
 export class AiDisabledError extends Error { constructor() { super('AI provider is disabled (AI_PROVIDER=none)'); } }
@@ -24,7 +27,7 @@ export class AiProviderError extends Error { constructor(public status: number, 
 
 /** Inline types each provider accepts. Anything else is skipped (lawyer reviews it manually). */
 const INLINE = {
-  gemini: new Set(['application/pdf', 'image/png', 'image/jpeg', 'text/plain']),
+  gemini: new Set(['application/pdf', 'image/png', 'image/jpeg', 'text/plain', 'audio/wav', 'audio/mp3']),
   openai: new Set(['application/pdf', 'image/png', 'image/jpeg', 'text/plain']),
   anthropic: new Set(['application/pdf', 'image/png', 'image/jpeg', 'text/plain']),
 };
@@ -43,6 +46,7 @@ export class AiClient {
   constructor(private cfg: AiConfig, private fetchImpl: FetchLike = (globalThis.fetch as any)) {}
 
   get enabled() { return this.cfg.provider !== 'none'; }
+  get supportsAudioAndSearch() { return this.cfg.provider === 'gemini'; }
   get label() { return `${this.cfg.provider}:${this.cfg.model || '-'}`; }
 
   /** Attachments that will be sent vs skipped, without sending anything. */
@@ -54,6 +58,7 @@ export class AiClient {
 
   async generate(req: AiRequest): Promise<AiResult> {
     if (!this.enabled) throw new AiDisabledError();
+    if (req.webSearch && !this.supportsAudioAndSearch) throw new AiDisabledError();
     const { send } = this.partition(req.attachments);
     const textAtts = send.filter(a => a.mimeType === 'text/plain');
     const binAtts = send.filter(a => a.mimeType !== 'text/plain');
@@ -62,7 +67,7 @@ export class AiClient {
     const timer = setTimeout(() => ctrl.abort(), this.cfg.timeoutMs);
     try {
       switch (this.cfg.provider) {
-        case 'gemini': return await this.gemini(req.system, prompt, binAtts, ctrl.signal);
+        case 'gemini': return await this.gemini(req.system, prompt, binAtts, ctrl.signal, req.webSearch);
         case 'openai': return await this.openai(req.system, prompt, binAtts, ctrl.signal);
         case 'anthropic': return await this.anthropic(req.system, prompt, binAtts, ctrl.signal);
       }
@@ -79,17 +84,24 @@ export class AiClient {
   }
 
   // Gemini API (paid tier = Cloud project with active billing). generateContent with inline_data; never the Files API.
-  private async gemini(system: string, prompt: string, atts: AiAttachment[], signal: AbortSignal): Promise<AiResult> {
+  private async gemini(system: string, prompt: string, atts: AiAttachment[], signal: AbortSignal, webSearch?: boolean): Promise<AiResult> {
     const base = this.cfg.baseUrl || 'https://generativelanguage.googleapis.com';
     const url = `${base}/v1beta/models/${encodeURIComponent(this.cfg.model)}:generateContent`;
     const body = {
       systemInstruction: { parts: [{ text: system }] },
       contents: [{ role: 'user', parts: [...atts.map(a => ({ inline_data: { mime_type: a.mimeType, data: a.data.toString('base64') } })), { text: prompt }] }],
       generationConfig: { maxOutputTokens: this.cfg.maxOutputTokens },
+      ...(webSearch ? { tools: [{ google_search: {} }] } : {}),
     };
     const { json } = await this.post(url, { 'x-goog-api-key': this.cfg.apiKey }, body, signal);
     const text = (json?.candidates?.[0]?.content?.parts || []).map((p: any) => p.text || '').join('');
-    return { text, provider: 'gemini', model: this.cfg.model, requestId: json?.responseId || null };
+    const chunks = json?.candidates?.[0]?.groundingMetadata?.groundingChunks;
+    const sources = Array.isArray(chunks) ? chunks.flatMap(chunk => {
+      const web = chunk?.web;
+      return typeof web?.uri === 'string' && /^https:\/\//i.test(web.uri)
+        ? [{ url: web.uri, title: typeof web.title === 'string' ? web.title : web.uri }] : [];
+    }).slice(0, 30) : [];
+    return { text, provider: 'gemini', model: this.cfg.model, requestId: json?.responseId || null, ...(webSearch ? { sources } : {}) };
   }
 
   // OpenAI Chat Completions with inline file/image parts and store=false.

@@ -6,3 +6,4 @@ build/
 *.log
 app/server/uploads/*
 app/server/records.json
+/_redirects

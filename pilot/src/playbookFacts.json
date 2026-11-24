@@ -1,0 +1,54 @@
+{
+  "eb1a_v1": {
+    "ieee_senior_member_status": "Is the applicant an IEEE Senior Member?",
+    "patent_names": "Names of any patents held by the applicant (if applicable)"
+  },
+  "general_intake_v1": {
+    "client_identity": "Client full legal name & DOB",
+    "immigration_goals": "Primary immigration goal or visa type sought",
+    "award_names": "Names of any awards, prizes, or scholarships received by the applicant",
+    "media_names": "Names of any major media outlets or publications that have featured the applicant",
+    "association_names": "Names of any elite professional associations or memberships",
+    "journal_names": "Names of any journals or conferences where the applicant has published",
+    "organization_names": "Names of any organizations where the applicant held a leading or critical role",
+    "exhibition_names": "Names of any artistic exhibitions or showcases featuring the applicant's work",
+    "paper_names": "Exact titles of any scholarly articles or research papers authored by the applicant"
+  },
+  "l1a_multinational_executive": {
+    "us_company_is_new_office": "Has the U.S. company been doing business for less than 1 year (new office)?",
+    "overseas_employment_duration_months": "How many continuous months, within the last 3 years, was the beneficiary employed full-time by the overseas qualifying organization?",
+    "overseas_position_title": "Beneficiary's overseas job title",
+    "overseas_job_duties_summary": "Summary of the beneficiary's executive/managerial duties overseas",
+    "us_position_title": "Beneficiary's proposed U.S. job title",
+    "us_job_duties_summary": "Summary of the beneficiary's proposed executive/managerial duties in the U.S.",
+    "qualifying_relationship_type": "Relationship between the U.S. company and the overseas company (parent, subsidiary, branch, or affiliate)",
+    "us_company_years_in_operation": "How many years has the U.S. company been operating?",
+    "us_company_subordinate_count": "How many employees will directly report to the beneficiary in the U.S.?"
+  },
+  "marriage_gc_v1": {
+    "petitioner_identity": "Petitioner full legal name & DOB",
+    "petitioner_immigration_status": "Petitioner status (USC / LPR)",
+    "beneficiary_identity": "Beneficiary full legal name & DOB",
+    "beneficiary_location": "Beneficiary currently inside U.S. or abroad",
+    "marriage_date": "Date of marriage",
+    "marriage_location": "Place of marriage",
+    "cohabitation_status": "Do the spouses live together; since when",
+    "address_history": "Address timeline for both spouses (5 yrs)",
+    "prior_marriages": "Prior marriages of either spouse (count + termination)",
+    "beneficiary_entry_record": "Beneficiary most recent entry: date, place, manner (I-94 / inspection)",
+    "beneficiary_lawful_entry": "Was last entry lawful / inspected",
+    "immigration_history": "Overstay, prior denials, removal/deportation, unlawful presence",
+    "criminal_history": "Any arrests or convictions (either spouse)",
+    "petitioner_income": "Petitioner income & household size (I-864 sufficiency)",
+    "children_dependents": "Children / dependents of the marriage",
+    "priority_date_current": "Is F2A priority date current (LPR only)"
+  },
+  "niw_v1": {
+    "filing_strategy": "Filing strategy (standalone_niw vs concurrent with I-485)",
+    "beneficiary_location": "Is the beneficiary currently inside or outside the United States?",
+    "priority_date_current": "Is the beneficiary's priority date current under the Visa Bulletin?",
+    "advanced_degree_qualification": "Does the beneficiary hold a Master's/PhD, or a Bachelor's plus 5 years progressive experience, or otherwise qualify via Exceptional Ability?",
+    "proposed_endeavor_description": "Description of the beneficiary's proposed endeavor in the United States",
+    "independent_expert_letters_count": "Number of independent (non-collaborator) expert recommendation letters obtained"
+  }
+}
