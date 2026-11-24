@@ -19,7 +19,33 @@
     return data;
   }
   const STATUSES = ['invited', 'intake', 'in_review', 'documents_needed', 'drafting', 'filed', 'closed'];
-  const label = (s) => s.replace(/_/g, ' ');
+  const roleLabels = { enterprise: 'HR', lawyer: 'Attorney', employee: 'Employee', admin: 'Administrator' };
+  const caseStatusLabels = {
+    invited: 'Invitation pending', intake: 'Collecting information', in_review: 'Attorney review',
+    documents_needed: 'Documents requested', drafting: 'Preparing application', filed: 'Filed', closed: 'Closed',
+  };
+
+  function questionnaireView(q, empty = 'No questionnaire answers yet.') {
+    const titles = new Map(q.questions.map(question => [question.id, question.text]));
+    const answers = Object.entries(q.answers).filter(([, answer]) => answer.trim());
+    return el('div', {},
+      el('p', { class: 'muted' }, q.submittedAt ? 'Submitted ' + new Date(q.submittedAt).toLocaleString() :
+        answers.length ? 'Saved by the employee. Awaiting submission.' : empty),
+      answers.length ? el('dl', { class: 'questionnaire-answers' }, answers.map(([id, answer]) =>
+        el('div', {}, el('dt', {}, titles.get(id) || id.replace(/[_-]/g, ' ')), el('dd', {}, answer)))) :
+        q.submittedAt ? el('p', { class: 'muted' }, 'No answers were provided.') : '');
+  }
+
+  function taskButton(text, run, feedback, attrs = {}) {
+    const button = el('button', { type: 'button', ...attrs, onclick: async () => {
+      button.disabled = true;
+      feedback.textContent = '';
+      try { await run(); }
+      catch (error) { feedback.textContent = error.message; }
+      finally { button.disabled = false; }
+    } }, text);
+    return button;
+  }
 
   function consentPanel(base, consent, refresh) {
     const panel = el('section', { class: 'card' }, el('h3', {}, 'Case consent'));
@@ -48,7 +74,7 @@
       $('#login').hidden = true; $('#app').hidden = false;
       $('#account').hidden = false;
       $('#synthetic-demo').hidden = !me.syntheticDemo;
-      $('#who').textContent = `${me.name} (${me.role})`;
+      $('#who').textContent = `${me.name} · ${roleLabels[me.role] || me.role}`;
       try { await render(me); }
       catch (e) { $('#view').replaceChildren(el('p', { class: 'notice error', role: 'alert' }, e.message)); }
     } catch (e) {
@@ -61,9 +87,13 @@
   $('#login-form').addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const f = new FormData(ev.target);
+    const submit = ev.target.querySelector('button[type=submit]');
+    submit.disabled = true;
     $('#login-error').textContent = '';
-    try { await api('POST', '/auth/login', { email: f.get('email'), password: f.get('password') }); ev.target.reset(); boot(); }
-    catch (e) { $('#login-error').textContent = e.status === 429 ? 'Too many attempts. Try later.' : 'Sign-in failed.'; }
+    try { await api('POST', '/auth/login', { email: f.get('email'), password: f.get('password') }); ev.target.reset(); await boot(); }
+    catch (e) { $('#login-error').textContent = e.status === 429 ? 'Too many attempts. Wait a moment and try again.' :
+      e.status === 401 ? 'Check your email and password, then try again.' : 'Sign-in is unavailable. Try again in a moment.'; }
+    finally { submit.disabled = false; }
   });
   $('#logout').addEventListener('click', async () => { await api('POST', '/auth/logout'); boot(); });
 
@@ -73,7 +103,7 @@
     const rows = list.map((m) => el('tr', {},
         el('td', {}, m.filename), el('td', {}, new Date(m.uploadedAt).toLocaleString()),
         lawyer ? [el('td', {}, el('input', { 'aria-label': `Category for ${m.filename}`, value: m.category || '', onchange: (e) => api('PUT', `/api/materials/${m.id}/category`, { category: e.target.value }) }))] : [],
-        el('td', {}, el('button', { type: 'button', onclick: async () => {
+        el('td', {}, el('button', { type: 'button', 'aria-label': 'Download ' + m.filename, onclick: async () => {
           // short-lived signed URL, bound to this session
           const { url } = await api('POST', `${base}/materials/${m.id}/download-url`); window.location.assign(url);
         } }, 'Download'))));
@@ -82,15 +112,23 @@
   }
   function uploadForm(after, base = '/api') {
     const input = el('input', { type: 'file', 'aria-label': 'File to upload' });
-    return el('div', {}, input, el('button', { class: 'button-primary', type: 'button', onclick: async () => {
-      if (!input.files[0]) return; const fd = new FormData(); fd.append('file', input.files[0]);
-      try { await api('POST', base + '/materials', fd, true); after(); } catch (e) { alert('Upload failed: ' + e.message); }
-    } }, 'Upload'));
+    const feedback = el('p', { role: 'status' });
+    return el('div', {}, input, taskButton('Upload file', async () => {
+      if (!input.files[0]) throw new Error('Choose a file to upload.');
+      const fd = new FormData();
+      fd.append('file', input.files[0]);
+      await api('POST', base + '/materials', fd, true);
+      const uploaded = input.files[0].name;
+      input.value = '';
+      await after();
+      feedback.textContent = uploaded + ' uploaded.';
+    }, feedback, { class: 'button-primary' }), feedback);
   }
 
   async function renderPlaybookChecklist(panel, base) {
     const url = base + '/playbook-checklist';
-    panel.replaceChildren(el('h3', {}, 'Playbook checklist'));
+    panel.replaceChildren(el('h3', {}, 'Playbook checklist'),
+      el('p', { class: 'muted' }, 'Choose a playbook and filing scenario to see which documents to collect.'));
     const feedback = el('p', { role: 'status' });
     panel.append(feedback);
     try {
@@ -203,11 +241,28 @@
     };
     try {
       const draft = await api('GET', url);
+      const { questions } = await api('GET', base + '/questionnaire');
+      const sources = [
+        ...draft.materials.map(file => [file.id, file.filename]),
+        ...questions.map(question => ['answer:' + question.id, 'Questionnaire: ' + question.text]),
+        ['consultation', 'Consultation transcript'],
+      ];
       const factInputs = Object.entries(draft.fields).map(([id, title]) => {
         const value = el('input', { value: draft.facts[id]?.value || '', maxlength: 2000 });
-        const source = el('input', { value: draft.facts[id]?.source || '', maxlength: 300, placeholder: 'Source reference' });
-        const box = el('div', {}, el('label', {}, title, value), el('label', {}, 'Source for ' + title, source));
-        return { id, value, source, box };
+        const source = el('select', {}, el('option', { value: '' }, 'Attorney entry'),
+          sources.map(([key, name]) => el('option', { value: key }, name)), el('option', { value: '__other' }, 'Other source'));
+        const other = el('input', { maxlength: 300 });
+        const otherLabel = el('label', { hidden: '' }, 'Describe the source', other);
+        source.addEventListener('change', () => { otherLabel.hidden = source.value !== '__other'; });
+        function setSource(reference) {
+          const known = sources.some(([key]) => key === reference);
+          source.value = known ? reference : reference && reference !== 'Attorney entry' ? '__other' : '';
+          other.value = source.value === '__other' ? reference : '';
+          otherLabel.hidden = source.value !== '__other';
+        }
+        setSource(draft.facts[id]?.source);
+        const box = el('div', {}, el('label', {}, title, value), el('label', {}, 'Source for ' + title, source), otherLabel);
+        return { id, value, setSource, getSource: () => (source.value === '__other' ? other.value.trim() : source.value) || 'Attorney entry', box };
       });
       const followUps = el('textarea', { rows: 4 }, draft.followUps.join('\n'));
       const letter = el('textarea', { rows: 12, maxlength: 50000 }, draft.letter);
@@ -217,7 +272,8 @@
           input.checked = selected.includes(m.id);
           return { input, label: el('label', {}, input, ' ', m.filename) };
         });
-        return { box: el('fieldset', {}, el('legend', {}, title), inputs.map(row => row.label)),
+        return { box: el('fieldset', {}, el('legend', {}, title), inputs.length ? inputs.map(row => row.label) :
+          el('p', { class: 'muted' }, 'No supported files are available for selection.')),
           values: () => inputs.filter(row => row.input.checked).map(row => row.input.value) };
       }
       if (draft.aiAvailable) {
@@ -230,7 +286,7 @@
             const fact = result.facts[field.id];
             if (!fact) continue;
             field.value.value = fact.value;
-            field.source.value = fact.source;
+            field.setSource(fact.source);
           }
           followUps.value = result.followUps.join('\n');
           letter.value = result.letter;
@@ -239,8 +295,7 @@
       }
       const exhibits = choices('Exhibits in the package', draft.materials.filter(m => m.packageSupported), draft.exhibitIds);
       panel.append(el('details', {}, el('summary', {}, 'Facts and sources'),
-        el('p', {}, 'Source references can use an upload ID or questionnaire answer ID.'),
-        draft.materials.length ? el('ul', {}, draft.materials.map(m => el('li', {}, m.filename, ' · ', m.id))) : '',
+        el('p', { class: 'muted' }, 'Choose a source for each fact you enter.'),
         factInputs.map(row => row.box)),
         el('label', {}, 'Follow-up questions, one per line', followUps),
         el('label', {}, 'Petition letter draft', letter), exhibits.box);
@@ -269,7 +324,7 @@
       }
       function edits() {
         const facts = Object.fromEntries(factInputs.filter(row => row.value.value.trim()).map(row =>
-          [row.id, { value: row.value.value.trim(), source: row.source.value.trim() || 'Attorney entry' }]));
+          [row.id, { value: row.value.value.trim(), source: row.getSource() }]));
         return { revision: draft.revision, facts, letter: letter.value,
           followUps: followUps.value.split('\n').map(line => line.trim()).filter(Boolean), exhibitIds: exhibits.values() };
       }
@@ -586,37 +641,155 @@
     return panel;
   }
 
+  function questionnaireEditor(q, base) {
+    const feedback = el('p', { role: 'status' });
+    const state = el('p', { class: 'muted' });
+    const showState = () => {
+      state.textContent = q.submittedAt ? 'Submitted to your attorney on ' + new Date(q.submittedAt).toLocaleString() + '.' :
+        'Save your work and return later, or submit your answers to your attorney.';
+      draftButton.hidden = !!q.submittedAt;
+      submitButton.textContent = q.submittedAt ? 'Update submitted answers' : 'Submit to attorney';
+    };
+    const form = el('form', { onsubmit: event => event.preventDefault() }, q.questions.map(question =>
+      el('label', {}, question.text, el('textarea', { name: question.id }, q.answers[question.id] || ''))));
+    let saving = false;
+    const save = submit => async () => {
+      if (saving) return;
+      saving = true;
+      try {
+        await api('PUT', base + '/questionnaire', { answers: Object.fromEntries(new FormData(form)), submit });
+        const current = await api('GET', base + '/questionnaire');
+        q.submittedAt = current.submittedAt;
+        showState();
+        feedback.textContent = submit ? 'Answers submitted.' : 'Answers saved.';
+      } finally { saving = false; }
+    };
+    const draftButton = taskButton('Save draft', save(false), feedback);
+    const submitButton = taskButton('Submit to attorney', save(true), feedback, { class: 'button-primary' });
+    showState();
+    return el('div', {}, state, form, draftButton, submitButton, feedback);
+  }
+
+  function documentRequestsPanel(base, lawyer, files) {
+    const panel = el('section', { class: 'intake-section', id: 'document-requests', tabindex: '-1' });
+    const endpoint = base + '/document-requests';
+    const feedback = el('p', { role: 'status' });
+    const list = el('div', { class: 'document-requests-list' });
+    const chosen = new Map();
+    panel.append(el('h2', {}, 'Document requests'), feedback, list);
+    const statusText = { requested: 'Waiting for employee', submitted: 'Waiting for attorney review',
+      returned: 'Needs replacement', accepted: 'Accepted', canceled: 'Canceled' };
+    async function load() {
+      try {
+        const { requests, closed } = await api('GET', endpoint);
+        const items = lawyer ? requests : requests.filter(item => item.status !== 'canceled');
+        list.replaceChildren(...(items.length ? items.map(item => renderItem(item, closed)) :
+          [el('p', { class: 'muted' }, 'No additional documents requested.')]));
+        sendForm.hidden = !lawyer || closed;
+        if (closed) feedback.textContent = 'This case is closed.';
+      } catch (error) { feedback.textContent = error.message; }
+    }
+    function renderItem(item, closed) {
+      const rowFeedback = el('p', { role: 'status' });
+      const state = item.status;
+      const card = el('article', { class: 'enterprise-request' },
+        el('div', { class: 'enterprise-request-heading' }, el('h3', {}, item.title),
+          el('span', { class: 'status-pill', 'data-status': state }, statusText[state])),
+        item.instructions ? el('p', {}, item.instructions) : '',
+        item.feedback ? el('p', { class: 'notice' }, 'Attorney feedback · ' + item.feedback) : '');
+      const submitted = item.materialIds.map(id => files.find(file => file.id === id)).filter(Boolean);
+      if (submitted.length) card.append(el('ul', {}, submitted.map(file =>
+        el('li', {}, file.filename, ' ', taskButton('Download', async () => {
+          const { url } = await api('POST', base + '/materials/' + file.id + '/download-url');
+          window.location.assign(url);
+        }, rowFeedback, { 'aria-label': 'Download ' + file.filename })))));
+      const needsFile = state === 'requested' || state === 'returned';
+      if (lawyer && !closed) {
+        const note = el('textarea', { maxlength: 1000 });
+        const review = (decision, text, attrs) => taskButton(text, async () => {
+          if (decision === 'returned' && !note.value.trim()) { note.focus(); throw new Error('Enter a reason for returning these files.'); }
+          await api('PUT', endpoint + '/' + item.id + '/review', { decision, feedback: note.value, revision: item.revision });
+          await load();
+          feedback.textContent = decision === 'accepted' ? 'Documents accepted.' :
+            decision === 'returned' ? 'Request returned to the employee.' : 'Document request canceled.';
+        }, rowFeedback, attrs);
+        if (state === 'submitted') card.append(review('accepted', 'Accept documents', { class: 'button-primary' }),
+          el('label', {}, 'Instructions if returning', note), review('returned', 'Return to employee'));
+        else if (needsFile) card.append(review('canceled', 'Cancel request'));
+      }
+      if (!lawyer && needsFile && !closed) {
+        card.append(el('p', {}, 'Select the files that answer this request. You can also ', el('a', { href: '#supporting-files' }, 'upload a new file'), '.'));
+        if (files.length) {
+          const selected = chosen.get(item.id) ?? new Set();
+          chosen.set(item.id, selected);
+          const checks = files.map(file => {
+            const input = el('input', { type: 'checkbox', onchange: () => {
+              if (input.checked) selected.add(file.id);
+              else selected.delete(file.id);
+            } });
+            input.checked = selected.has(file.id);
+            return el('label', {}, input, ' ', file.filename);
+          });
+          card.append(el('fieldset', {}, el('legend', {}, 'Files for ' + item.title), checks),
+            taskButton('Submit selected files', async () => {
+              if (!selected.size) throw new Error('Select at least one file to submit.');
+              await api('PUT', endpoint + '/' + item.id + '/submit', { materialIds: [...selected], revision: item.revision });
+              chosen.delete(item.id);
+              await load();
+              feedback.textContent = 'Files sent to your attorney.';
+            }, rowFeedback, { class: 'button-primary' }));
+        }
+      }
+      card.append(rowFeedback);
+      return card;
+    }
+    const title = el('input', { maxlength: 120, required: '' });
+    const instructions = el('textarea', { maxlength: 1000 });
+    const sendForm = el('details', { hidden: '' }, el('summary', {}, 'Request a document'),
+      el('label', {}, 'Document name', title), el('label', {}, 'Instructions for the employee', instructions),
+      taskButton('Send document request', async () => {
+        if (!title.value.trim()) { title.focus(); throw new Error('Enter a document name.'); }
+        await api('POST', endpoint, { title: title.value, instructions: instructions.value });
+        title.value = instructions.value = '';
+        sendForm.open = false;
+        await load();
+        feedback.textContent = 'Document request sent to the employee.';
+      }, feedback, { class: 'button-primary' }));
+    panel.append(sendForm);
+    return { panel, load, updateFiles: next => { files = next; return load(); } };
+  }
+
   async function openIntake(me, row) {
     const base = '/api/draft-matters/' + row.id + '/intake';
     const panel = el('section', { class: 'card' });
     $('#view').replaceChildren(panel);
-    panel.append(el('button', { onclick: () => me.role === 'lawyer' ? openDraftRegister(me, row.id) : render(me) }, 'Back to workspace'), el('h1', {}, row.label));
-    if (me.role === 'lawyer') panel.append(workspaceTools());
+    panel.append(el('button', { onclick: () => me.role === 'lawyer' ? openDraftRegister(me, row.id) : render(me) },
+      me.role === 'lawyer' ? 'All cases and requests' : 'Back to my cases'), el('h1', {}, row.label));
+    if (me.role === 'lawyer') panel.append(workspaceTools(true));
     const refresh = () => openIntake(me, row);
     try {
       const consent = await api('GET', base + '/consent');
       if (me.role === 'employee' && !consent.signed) {
+        panel.append(el('p', { class: 'muted' }, 'First, review the consent. Then answer the questionnaire and upload any supporting files.'));
         panel.append(consentPanel(base, consent, refresh));
         return;
       }
       const q = await api('GET', base + '/questionnaire');
       const files = await api('GET', base + '/materials');
-      panel.append(el('h4', {}, 'Questionnaire'), el('p', {}, q.submittedAt ? 'Submitted ' + new Date(q.submittedAt).toLocaleString() : 'Awaiting submission'));
-      const form = el('form', {});
-      for (const question of q.questions) {
-        const field = el('textarea', { name: question.id }, q.answers[question.id] || '');
-        field.readOnly = me.role === 'lawyer';
-        form.append(el('label', {}, question.text, field));
-      }
-      panel.append(form);
-      if (me.role === 'employee') panel.append(el('button', { onclick: async () => {
-        try {
-          await api('PUT', base + '/questionnaire', { answers: Object.fromEntries(new FormData(form)), submit: true });
-          refresh();
-        } catch (e) { alert(e.message); }
-      } }, 'Submit answers'));
-      panel.append(el('h4', {}, 'Materials'), materialsTable(files, false, base));
-      if (me.role === 'employee') panel.append(uploadForm(refresh, base));
+      const isEmployee = me.role === 'employee';
+      const documents = el('div', {}, materialsTable(files, false, base));
+      const requests = documentRequestsPanel(base, !isEmployee, files);
+      panel.append(requests.panel, el('section', { class: 'intake-section' },
+        el('h2', {}, isEmployee ? 'Questionnaire' : 'Employee questionnaire'),
+        isEmployee ? questionnaireEditor(q, base) : questionnaireView(q)),
+        el('section', { class: 'intake-section', id: 'supporting-files', tabindex: '-1' }, el('h2', {}, 'Supporting files'),
+          isEmployee ? el('p', { class: 'muted' }, 'Upload any files your attorney asked for.') : '', documents,
+          isEmployee ? uploadForm(async () => {
+            const updated = await api('GET', base + '/materials');
+            documents.replaceChildren(materialsTable(updated, false, base));
+            await requests.updateFiles(updated);
+          }, base) : ''));
+      await requests.load();
       if (me.role === 'lawyer') {
         const checklist = el('section', { id: 'playbook-tools', tabindex: '-1' });
         panel.append(checklist, petitionPanel(base), caseToolsPanel(base, () => renderPlaybookChecklist(checklist, base)));
@@ -628,14 +801,20 @@
   async function showInvitations(me, container) {
     try {
       const rows = await api('GET', '/api/matter-invitations');
-      container.append(el(me.originalCaseAccess === false ? 'h1' : 'h3', {}, 'My matters'));
-      if (!rows.length) container.append(el('p', {}, 'No case invitations yet.'));
-      for (const row of rows) container.append(el('button', { onclick: async () => {
-        try {
-          if (!row.accepted) await api('POST', '/api/matter-invitations/' + row.id + '/accept');
-          openIntake(me, row);
-        } catch (e) { alert(e.message); }
-      } }, (row.accepted ? 'Open ' : 'Accept invitation for ') + row.label));
+      if (!rows.length) container.append(el('h3', {}, 'No case invitations yet'),
+        el('p', { class: 'muted' }, 'When your attorney invites you, the case will appear here.'),
+        el('button', { type: 'button', onclick: () => render(me) }, 'Check for invitations'));
+      for (const row of rows.sort((a, b) => Number(a.accepted) - Number(b.accepted))) {
+        const feedback = el('p', { role: 'status' });
+        container.append(el('article', { class: 'enterprise-request' }, el('h3', {}, row.label),
+          el('p', { class: row.pendingDocuments ? 'notice' : 'muted' }, row.pendingDocuments
+            ? row.pendingDocuments + (row.pendingDocuments === 1 ? ' document request needs your response.' : ' document requests need your response.')
+            : row.accepted ? 'Open the case to see your submitted answers and files.' : 'Your attorney invited you to complete the case questionnaire.'),
+          taskButton(row.accepted ? 'Open ' + row.label : 'Accept invitation for ' + row.label, async () => {
+            if (!row.accepted) await api('POST', '/api/matter-invitations/' + row.id + '/accept');
+            await openIntake(me, row);
+          }, feedback, row.accepted ? {} : { class: 'button-primary' }), feedback));
+      }
     } catch (e) { container.textContent = e.message; }
   }
 
@@ -647,6 +826,7 @@
     employee_intake: ['Employee completing intake', 'Complete the questionnaire and upload any supporting materials'],
     intake_submitted: ['Intake submitted', 'Review the submitted intake'],
     documents_needed: ['Additional documents requested', 'Follow the law firm’s instructions for supplying documents'],
+    documents_submitted: ['Documents submitted', 'Review the additional documents'],
     in_review: ['In attorney review', 'Review the case'],
     drafting: ['Preparing application', 'Prepare the application'],
     filed: ['Filed', ''],
@@ -655,27 +835,35 @@
 
   async function renderEnterprise() {
     const view = $('#view');
-    const panel = el('section', { class: 'card', id: 'new-enterprise-request' });
+    const panel = el('section', { class: 'card', id: 'new-enterprise-request', hidden: '' });
     const requests = el('section', { class: 'card' }, el('h2', {}, 'Case progress'));
-    view.replaceChildren(el('header', { class: 'workspace-heading' }, el('h1', {}, 'Enterprise workspace')), panel, requests);
     const feedback = el('p', { role: 'status' });
-    const title = el('h2', {}, 'Start a case');
+    const title = el('h2', {}, 'New case request');
     const reference = el('input', { required: '', maxlength: 80 });
     const email = el('input', { type: 'email', required: '', maxlength: 254, autocomplete: 'off' });
     const summary = el('textarea', { required: '', maxlength: 1000 });
     const send = el('button', { class: 'button-primary' }, 'Send to law firm');
     const list = el('div', { class: 'enterprise-requests' });
+    view.replaceChildren(el('header', { class: 'workspace-heading' }, el('h1', {}, 'Enterprise workspace'),
+      el('button', { class: 'button-primary', type: 'button', onclick: () => panel.hidden ? edit() : reference.focus() }, 'Start a case')), feedback, requests, panel);
     let revise;
     function edit(row) {
       revise = row;
-      title.textContent = row ? 'Revise ' + row.reference : 'Start a case';
+      panel.hidden = false;
+      requests.before(panel);
+      title.textContent = row ? 'Revise ' + row.reference : 'New case request';
       send.textContent = row ? 'Resubmit to law firm' : 'Send to law firm';
       reference.value = row?.reference ?? '';
       email.value = row?.email ?? '';
       summary.value = row?.summary ?? '';
-      cancel.hidden = !row;
+      reference.focus();
     }
-    const cancel = el('button', { type: 'button', hidden: '', onclick: () => edit() }, 'Cancel revision');
+    function closeForm() {
+      panel.hidden = true;
+      requests.after(panel);
+      revise = undefined;
+    }
+    const cancel = el('button', { type: 'button', onclick: closeForm }, 'Cancel');
     const endpoint = '/api/enterprise/requests';
     async function update() {
       const rows = await api('GET', endpoint);
@@ -693,7 +881,7 @@
           reference.focus();
         } }, 'Revise request'));
         return body;
-      }) : [el('p', { class: 'muted' }, 'No case requests yet.')]));
+      }) : [el('p', { class: 'muted' }, 'No cases yet. Start a case to send a request to your law firm.')]));
     }
     panel.append(title, el('p', { class: 'muted' }, 'Send the employee’s work email and a short request to the law firm.'),
       el('form', { onsubmit: async event => {
@@ -703,13 +891,13 @@
         try {
           await api(revise ? 'PUT' : 'POST', revise ? endpoint + '/' + revise.id : endpoint,
             { reference: reference.value, email: email.value, summary: summary.value });
-          edit();
+          closeForm();
           feedback.textContent = 'Request sent to the law firm.';
           await update();
         } catch (error) { feedback.textContent = error.message; }
         finally { send.disabled = false; }
       } }, el('label', {}, 'Internal case reference', reference), el('label', {}, 'Employee work email', email),
-      el('label', {}, 'Brief request', summary), send, cancel, feedback));
+      el('label', {}, 'Brief request', summary), send, cancel));
     const refresh = el('button', { type: 'button', onclick: async () => {
       try { await update(); } catch (error) { feedback.textContent = error.message; }
     } }, 'Refresh progress');
@@ -719,15 +907,22 @@
 
   async function openDraftRegister(me, matterId) {
     const panel = el('section', { class: 'card' });
-    $('#view').replaceChildren(panel);
     const error = el('p', { role: 'alert' });
-    panel.append(el('button', { type: 'button', onclick: () => render(me) }, 'Back to pilot case'),
-      el('h1', {}, 'Draft matters'), error);
+    $('#view').replaceChildren(el('header', { class: 'workspace-heading' }, el('h1', {}, 'Attorney workspace'),
+      el('button', { type: 'button', onclick: () => render(me, true) }, 'Open original case')), panel);
+    panel.append(el('h2', {}, 'Cases and requests'), error);
     try {
       const rows = await api('GET', '/api/draft-matters');
       rows.sort((a, b) => Number(b.request?.decision === 'pending') - Number(a.request?.decision === 'pending'));
+      const queue = el('p', { class: 'muted' });
+      function showQueue() {
+        const pending = rows.filter(row => row.request?.decision === 'pending').length;
+        queue.textContent = pending ? pending + (pending === 1 ? ' request needs your review.' : ' requests need your review.') :
+          rows.length ? 'No new employer requests. Select a case to continue.' : 'No cases yet. Start a case or wait for a request from HR.';
+      }
+      panel.append(queue);
       const select = el('select', { 'aria-label': 'Draft matter' });
-      const status = el('select', { 'aria-label': 'Draft status' }, STATUSES.map(s => el('option', { value: s }, label(s))));
+      const status = el('select', { 'aria-label': 'Case status' }, STATUSES.map(s => el('option', { value: s }, caseStatusLabels[s])));
       const saveStatus = el('button', {}, 'Save status');
       const edit = el('form', { onsubmit: async ev => {
         ev.preventDefault();
@@ -738,13 +933,14 @@
           row.status = saved.status;
           error.textContent = 'Status saved for ' + row.label + '.';
         } catch (e) { error.textContent = e.message; }
-      } }, select, status, saveStatus);
+      } }, el('label', {}, 'Select a case', select), status, saveStatus);
       const optionLabel = row => row.label + (row.request?.decision === 'pending' ? ' · Request to review' : '');
       function addOption(row) { select.append(el('option', { value: row.id }, optionLabel(row))); }
       function showSelected() {
         error.textContent = '';
         actions.replaceChildren();
         const row = rows.find(r => r.id === select.value);
+        edit.hidden = !row;
         const active = row && (!row.request || row.request.decision === 'accepted');
         status.hidden = saveStatus.hidden = !active;
         if (!row) return;
@@ -761,6 +957,7 @@
               try {
                 const updated = await api('POST', '/api/draft-matters/' + row.id + '/decision', { decision: value, note: reason.value });
                 Object.assign(row, updated);
+                showQueue();
                 Array.from(select.options).find(option => option.value === row.id).textContent = optionLabel(row);
                 if (select.value === row.id) showSelected();
               } catch (e) { error.textContent = e.message; }
@@ -771,11 +968,12 @@
           }
           actions.append(el('p', { class: 'muted' }, 'Accepted by law firm'));
         }
-        actions.append(el('button', { onclick: () => openIntake(me, row) }, 'View intake'));
+        const open = el('button', { class: 'button-primary', onclick: () => openIntake(me, row) }, 'Open case');
         if (row.invitation) {
           const employee = me.invitees.find(person => person.id === row.invitation.employeeId);
           actions.append(el('p', {}, employee?.name || row.invitation.employeeId, ' · ',
             row.invitation.accepted ? 'Invitation accepted' : 'Invitation pending'));
+          actions.append(open);
         } else if (row.request && !row.requestedEmployeeId) {
           actions.append(el('p', { class: 'notice' }, 'Ask your workspace administrator to add an employee account for this work email, then reopen the request.'));
         } else if (me.invitees.length) {
@@ -793,7 +991,9 @@
               showSelected();
             } catch (e) { error.textContent = e.message; }
             finally { send.disabled = false; }
-          } }, el('label', {}, 'Employee', invitee), send));
+          } }, el('label', {}, 'Employee to invite', invitee), send), open);
+        } else {
+          actions.append(open);
         }
       }
       const actions = el('div', {});
@@ -801,48 +1001,55 @@
       if (rows.some(row => row.id === matterId)) select.value = matterId;
       select.addEventListener('change', showSelected);
       showSelected();
+      showQueue();
       const ref = el('input', { required: '', maxlength: 80 });
       const create = el('button', { class: 'button-primary' }, 'Create draft');
-      panel.append(el('form', { onsubmit: async ev => {
+      const createForm = el('form', { onsubmit: async ev => {
         ev.preventDefault();
         create.disabled = true;
         try {
           const row = await api('POST', '/api/draft-matters', { label: ref.value });
-          rows.push(row); addOption(row); select.value = row.id; ref.value = ''; showSelected();
+          rows.push(row); addOption(row); select.value = row.id; ref.value = ''; showSelected(); showQueue();
         } catch (e) { error.textContent = e.message; }
         finally { create.disabled = false; }
-      } }, el('label', {}, 'Internal matter reference', ref), create), edit, actions);
+      } }, el('label', {}, 'Internal case reference', ref), create);
+      panel.append(edit, actions, el('details', {}, el('summary', {}, 'Start a case without an HR request'), createForm));
+      if (me.workspaces?.length) $('#view').append(el('nav', { class: 'card', 'aria-label': 'Other case workspaces' },
+        el('h3', {}, 'Other case workspaces'), el('ul', {}, me.workspaces.map(w => el('li', {}, el('a', { href: w.origin, rel: 'noreferrer' }, w.label))))));
     } catch (e) { error.textContent = e.message; }
   }
 
-  function workspaceTools() {
+  function workspaceTools(withRequests = false) {
     return el('nav', { class: 'workspace-tools', 'aria-label': 'Lawyer tools' },
-      [['playbook-tools', 'Materials checklist'], ['petition-tools', 'Petition and USCIS forms'],
+      [...(withRequests ? [['document-requests', 'Document requests']] : []),
+        ['playbook-tools', 'Materials checklist'], ['petition-tools', 'Petition and USCIS forms'],
         ['case-tools', 'Consultation and playbooks']].map(([id, text]) =>
         el('a', { href: '#' + id }, text)));
   }
 
-  async function render(me) {
+  async function render(me, originalCase = false) {
     const view = $('#view'); view.innerHTML = '';
     if (me.role === 'enterprise' && me.draftRegister) return renderEnterprise();
-    if (me.role === 'employee' && me.originalCaseAccess === false) {
-      const invitations = el('section', { class: 'card' });
-      view.append(invitations);
+    if (me.role === 'lawyer' && me.draftRegister && !originalCase) return openDraftRegister(me);
+    if (me.role === 'employee' && me.draftRegister && !originalCase) {
+      const invitations = el('section', { class: 'card case-list' });
+      const header = el('header', { class: 'workspace-heading' }, el('h1', {}, 'My cases'));
+      if (me.originalCaseAccess !== false) header.append(el('button', { type: 'button', onclick: () => render(me, true) }, 'Open original case'));
+      view.append(header, invitations);
       await showInvitations(me, invitations);
       return;
     }
     const c = await api('GET', '/api/case');
     view.append(el('header', { class: 'workspace-heading' },
-      el('h1', {}, 'Case workspace'),
+      el('h1', {}, me.role === 'admin' ? 'Workspace administration' : me.draftRegister ? 'Original case' : 'Case workspace'),
       el('div', { class: 'case-meta' },
-        el('span', { class: 'status-pill', 'data-status': c.status }, label(c.status)),
+        el('span', { class: 'status-pill', 'data-status': c.status }, caseStatusLabels[c.status]),
         el('p', { class: 'muted' }, el('small', {}, `Updated ${new Date(c.updatedAt).toLocaleString()}`)))));
-    const rerender = () => render(me);
+    const rerender = () => render(me, originalCase);
 
     if (me.role === 'employee') {
       if (me.draftRegister) {
-        const invitations = el('section', { class: 'card' });
-        view.append(invitations); showInvitations(me, invitations);
+        view.firstElementChild.append(el('button', { type: 'button', onclick: () => render(me) }, 'Back to my cases'));
       }
       view.append(el('p', { class: 'notice' }, c.disclaimer));
       if (!c.consentSigned) {
@@ -851,16 +1058,15 @@
       }
       view.append(el('div', { class: 'card' }, el('h3', {}, 'To do'), c.todos.length ? el('ul', {}, c.todos.map((t) => el('li', {}, t.text))) : el('p', { class: 'muted' }, 'Nothing requested right now.')));
       const q = await api('GET', '/api/questionnaire');
-      const form = el('form', {}, q.questions.map((qq) => el('label', {}, qq.text, el('textarea', { name: qq.id }, q.answers[qq.id] || ''))));
-      const save = (submit) => async () => { const answers = {}; new FormData(form).forEach((v, k) => (answers[k] = v)); await api('PUT', '/api/questionnaire', { answers, submit }); rerender(); };
-      view.append(el('div', { class: 'card' }, el('h3', {}, 'Background questionnaire'), form,
-        el('button', { type: 'button', onclick: save(false) }, 'Save'), el('button', { class: 'button-primary', type: 'button', onclick: save(true) }, 'Submit')));
-      view.append(el('div', { class: 'card' }, el('h3', {}, 'My materials'), materialsTable(c.materials, false), uploadForm(rerender)));
+      view.append(el('div', { class: 'card' }, el('h3', {}, 'Background questionnaire'), questionnaireEditor(q, '/api')));
+      const documents = el('div', {}, materialsTable(c.materials, false));
+      view.append(el('div', { class: 'card' }, el('h3', {}, 'My materials'), documents,
+        uploadForm(async () => documents.replaceChildren(materialsTable(await api('GET', '/api/materials'), false)))));
       if (c.assessment) view.append(el('div', { class: 'card' }, el('h3', {}, 'Assessment from your attorney'), el('p', {}, c.assessment.text), el('p', { class: 'muted' }, c.assessment.label)));
     }
 
     if (me.role === 'lawyer') {
-      if (me.draftRegister) view.firstElementChild.append(el('button', { class: 'button-primary', type: 'button', onclick: () => openDraftRegister(me) }, 'Case requests and drafts'));
+      if (me.draftRegister) view.firstElementChild.append(el('button', { type: 'button', onclick: () => openDraftRegister(me) }, 'All cases and requests'));
       view.append(workspaceTools());
       if (me.workspaces?.length) {
         view.append(el('nav', { class: 'card', 'aria-label': 'Case workspaces' },
@@ -868,12 +1074,17 @@
             el('li', {}, el('a', { href: w.origin, rel: 'noreferrer' }, w.label))))));
       }
       view.append(el('p', { class: 'notice' }, c.aiNotice));
-      const sel = el('select', { onchange: async (e) => { await api('PUT', '/api/case/status', { status: e.target.value }); rerender(); } }, STATUSES.map((s) => { const o = el('option', { value: s }, label(s)); if (s === c.status) o.selected = true; return o; }));
+      const sel = el('select', { onchange: async (e) => { await api('PUT', '/api/case/status', { status: e.target.value }); rerender(); } }, STATUSES.map(s => {
+        const option = el('option', { value: s }, caseStatusLabels[s]);
+        option.selected = s === c.status;
+        return option;
+      }));
       const visa = el('input', { value: c.visaType || '', placeholder: 'Visa type (set by attorney)' });
       view.append(el('div', { class: 'card' }, el('h3', {}, 'Case'), el('label', {}, 'Status', sel), el('label', {}, 'Visa type', visa),
         el('button', { type: 'button', onclick: async () => { await api('PUT', '/api/case/visa-type', { visaType: visa.value }); rerender(); } }, 'Save visa type'),
         el('p', { class: 'muted' }, `Consent: ${c.consent ? 'signed ' + new Date(c.consent.signedAt).toLocaleString() : 'not signed'}`)));
-      view.append(el('div', { class: 'card' }, el('h3', {}, 'Questionnaire answers'), el('pre', {}, JSON.stringify(c.questionnaire.answers, null, 2))));
+      const q = await api('GET', '/api/questionnaire');
+      view.append(el('div', { class: 'card' }, el('h3', {}, 'Employee questionnaire'), questionnaireView(q)));
       view.append(el('div', { class: 'card' }, el('h3', {}, 'All materials'), materialsTable(c.materials, true), uploadForm(rerender)));
       const checklist = el('section', { id: 'playbook-tools', class: 'card', tabindex: '-1' });
       view.append(checklist);
@@ -887,26 +1098,35 @@
       const a = c.assessment; const ta = el('textarea', { 'aria-label': 'Eligibility assessment draft' }, a ? a.text : '');
       view.append(el('div', { class: 'card' }, el('h3', {}, 'Eligibility assessment (attorney only until approved)'), ta,
         el('button', { type: 'button', onclick: async () => { await api('PUT', '/api/assessment', { text: ta.value }); rerender(); } }, 'Save (revokes approval)'),
-        el('button', { type: 'button', onclick: async () => {
+        !me.syntheticDemo ? el('button', { type: 'button', onclick: async () => {
           try { await api('POST', '/api/assessment/generate', { materialIds: c.materials.map((m) => m.id) }); rerender(); }
           catch (e) { alert('AI draft failed: ' + e.message); }
-        } }, 'Generate AI draft (attorney review only)'),
+        } }, 'Generate AI draft (attorney review only)') : '',
         a ? (a.approval ? el('button', { type: 'button', onclick: async () => { await api('POST', '/api/assessment/revoke'); rerender(); } }, 'Revoke approval')
                         : el('button', { type: 'button', onclick: async () => { await api('POST', '/api/assessment/approve'); rerender(); } }, 'Approve')) : '',
-        el('p', { class: 'muted' }, `Approved: ${a && a.approval ? 'yes' : 'no'}. Employee can see it only when approved AND LAWYER_APPROVED_PUBLISH is ${c.flags.lawyerApprovedPublish ? 'ON (currently on)' : 'on (currently OFF)'}.`)));
+        el('p', { class: 'muted' }, !c.flags.lawyerApprovedPublish ? 'Assessment sharing is off. Only attorneys can see this draft.' :
+          a?.approval ? 'Approved and visible to the employee.' : 'Private draft. Approve it when ready to share with the employee.')));
     }
 
     if (me.role === 'lawyer' || me.role === 'admin') {
-      const btn = el('button', { type: 'button', onclick: async () => {
+      const feedback = el('p', { role: 'status' });
+      const btn = taskButton('Show access log', async () => {
         const rows = await api('GET', '/api/access-log');
-        // A line that failed decryption or the hash-chain check is shown as such (never hidden).
-        box.replaceChildren(el('table', {}, rows.slice(-100).reverse().map((r) => r.corrupted_or_tampered
-          ? el('tr', { class: 'tampered' }, el('td', { colspan: '5' }, `line ${r.line}: CORRUPTED OR TAMPERED (${r.reason || 'integrity check failed'})`))
-          : el('tr', {}, el('td', {}, r.ts), el('td', {}, r.actor), el('td', {}, r.action), el('td', {}, r.resource || ''), el('td', {}, r.outcome)))));
-      } }, 'Show access log');
+        const columns = ['Time', 'Account', 'Action', 'Reference', 'Result'];
+        const events = rows.slice(-100).reverse().map(r => r.corrupted_or_tampered
+          ? el('tr', { class: 'tampered' }, el('td', { colspan: '5' }, `Line ${r.line}: integrity check failed (${r.reason || 'unknown reason'})`))
+          : el('tr', {}, el('td', {}, new Date(r.ts).toLocaleString()), el('td', {}, r.actor), el('td', {}, r.action),
+            el('td', {}, r.resource || '—'), el('td', {}, r.outcome)));
+        box.replaceChildren(events.length ? el('table', {}, el('thead', {}, el('tr', {},
+          columns.map(column => el('th', { scope: 'col' }, column)))), el('tbody', {}, events)) :
+          el('p', { class: 'muted' }, 'No activity recorded yet.'));
+      }, feedback);
       const box = el('div', { class: 'table-scroll' });
-      view.append(el('div', { class: 'card' }, el('h3', {}, 'Access log'), btn, box));
+      view.append(el('div', { class: 'card' }, el('h3', {}, 'Access log'), btn, feedback, box));
     }
   }
   boot();
+  api('GET', '/healthz').then(status => {
+    $('#demo-login-note').hidden = !status.syntheticDemo;
+  }).catch(() => {});
 })();

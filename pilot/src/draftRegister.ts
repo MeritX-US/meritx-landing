@@ -96,10 +96,9 @@ export class DraftRegister {
     const key = crypto.createHmac('sha256', Buffer.from(this.key, 'base64')).update('matter-intake|' + row.id).digest('base64');
     return new EncryptedFileStore(this.intakeDir(row), new Cipher(key));
   }
-  submissionTime(row: DraftMatter) {
+  intakeState(row: DraftMatter) {
     if (!row.invitation?.accepted || !fs.existsSync(path.join(this.intakeDir(row), 'state.enc'))) return null;
-    const state = this.intakeStore(row).read();
-    return state.questionnaire.ownerId === row.invitation.employeeId ? state.questionnaire.submittedAt : null;
+    return this.intakeStore(row).read();
   }
   setStatus(owner: string, id: string, status: CaseStatus) {
     const rows = this.list(owner);

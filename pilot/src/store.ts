@@ -33,6 +33,17 @@ export interface Material {
 
 export interface Todo { id: string; text: string; createdAt: string; published: boolean }
 
+export interface DocumentRequest {
+  id: string;
+  title: string;
+  instructions: string;
+  status: 'requested' | 'submitted' | 'returned' | 'accepted' | 'canceled';
+  materialIds: string[];
+  feedback?: string;
+  revision: string;
+  updatedAt: string;
+}
+
 export interface Assessment {
   text: string;
   source: 'ai' | 'lawyer';
@@ -41,6 +52,7 @@ export interface Assessment {
 }
 
 export interface PilotState {
+  documentRequests?: DocumentRequest[];
   caseTools?: CaseToolsState;
   primaryEmployeeId?: string; // original case membership, pinned when multiple employees are enabled
   petition?: PetitionDraft;

@@ -9,14 +9,24 @@ function progress(row: DraftMatter, drafts: DraftRegister) {
   if (row.status === 'closed' || row.status === 'filed') return { stage: row.status, next: null, updatedAt: row.updatedAt };
   if (!row.invitation) return { stage: 'accepted', next: 'Law firm', updatedAt: row.updatedAt };
   if (!row.invitation.accepted) return { stage: 'invitation_sent', next: 'Employee', updatedAt: row.updatedAt };
-  if (row.status === 'documents_needed') return { stage: row.status, next: 'Employee', updatedAt: row.updatedAt };
-  if (row.status === 'in_review' || row.status === 'drafting') return { stage: row.status, next: 'Law firm', updatedAt: row.updatedAt };
-  const submitted = drafts.submissionTime(row);
+  const intake = drafts.intakeState(row);
+  const documents = (intake?.documentRequests ?? []).filter(item => item.status !== 'canceled');
+  const updated = documents.reduce((latest, item) => item.updatedAt > latest ? item.updatedAt : latest, row.updatedAt ?? '');
+  if (documents.some(item => item.status === 'requested' || item.status === 'returned'))
+    return { stage: 'documents_needed', next: 'Employee', updatedAt: updated };
+  if (documents.some(item => item.status === 'submitted'))
+    return { stage: 'documents_submitted', next: 'Law firm', updatedAt: updated };
+  if (row.status === 'documents_needed') return documents.length
+    ? { stage: 'in_review', next: 'Law firm', updatedAt: updated }
+    : { stage: row.status, next: 'Employee', updatedAt: row.updatedAt };
+  if (row.status === 'in_review' || row.status === 'drafting')
+    return { stage: row.status, next: 'Law firm', updatedAt: updated };
+  const submitted = intake?.questionnaire.ownerId === row.invitation.employeeId ? intake.questionnaire.submittedAt : null;
   if (submitted) return {
     stage: 'intake_submitted', next: 'Law firm',
-    updatedAt: row.updatedAt && row.updatedAt > submitted ? row.updatedAt : submitted,
+    updatedAt: updated > submitted ? updated : submitted,
   };
-  return { stage: 'employee_intake', next: 'Employee', updatedAt: row.updatedAt };
+  return { stage: 'employee_intake', next: 'Employee', updatedAt: updated };
 }
 
 function enterpriseView(row: DraftMatter, drafts: DraftRegister) {

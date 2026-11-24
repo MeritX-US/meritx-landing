@@ -219,6 +219,18 @@ a:hover { color: var(--ink); }
 }
 .enterprise-request-heading h3 { margin: 0; }
 .enterprise-request .status-pill { text-transform: none; }
+.case-list { display: grid; gap: .9rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); }
+.case-list > h3, .case-list > p { grid-column: 1 / -1; }
+.case-list > button { justify-self: start; }
+.intake-section { margin-block: 1.25rem; padding-block-start: 1rem; border-block-start: 1px solid var(--rule-soft); }
+.document-requests-list { display: grid; gap: .75rem; }
+.document-requests-list .status-pill { text-transform: none; }
+.document-requests-list .status-pill[data-status="accepted"] { background: #edf2e9; border-color: #cbd8c1; color: var(--sage); }
+.document-requests-list .status-pill[data-status="returned"] { background: #fbefed; border-color: #e2bdbb; color: var(--oxblood); }
+.questionnaire-answers { display: grid; gap: .75rem; }
+.questionnaire-answers > div { padding: .7rem .85rem; border-inline-start: 2px solid var(--rule); background: var(--paper); }
+.questionnaire-answers dt { margin-block-end: .3rem; font-weight: 600; }
+.questionnaire-answers dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .enterprise-request .notice { margin-block: .65rem; }
 .status-pill[data-status="returned"] { background: #fbefed; border-color: #e2bdbb; color: var(--oxblood); }
 .status-pill[data-status="intake_submitted"] { background: #edf2e9; border-color: #cbd8c1; color: var(--sage); }

@@ -13,6 +13,7 @@ import { mountPetition } from './petitionRoutes';
 import { mountCaseTools } from './caseToolsRoutes';
 import { hasCurrentConsent } from './consent';
 import { mountEnterpriseCases } from './enterpriseRoutes';
+import { mountDocumentRequests } from './documentRequests';
 import { AiClient, AiProviderError, fillTemplate, type FetchLike } from './ai/provider';
 import { AccessLog, parseAnchor, stdoutAnchorSink, type AnchorSink } from './accessLog';
 import { securityHeaders, strictCors, requireHttps, ROBOTS_TXT } from './security';
@@ -79,7 +80,7 @@ export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
 
   // ---------- public, data-free endpoints ----------
   app.get('/robots.txt', (_req, res) => res.type('text/plain').send(ROBOTS_TXT));
-  app.get('/healthz', (_req, res) => res.json({ ok: true }));
+  app.get('/healthz', (_req, res) => res.json({ ok: true, ...(cfg.syntheticDemo ? { syntheticDemo: true } : {}) }));
 
   // ---------- auth ----------
   app.post('/auth/login', async (req: AuthedRequest, res, next) => {
@@ -146,13 +147,18 @@ export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
   if (drafts) {
     const draftFiles = express.Router();
     draftFiles.get('/files/:id', serveDownload);
+    mountDocumentRequests(draftFiles, res => res.locals.intakeStore, cfg.consentDocument, audit);
     const lawyer = cfg.accounts.find(a => a.role === 'lawyer')!;
     mountEnterpriseCases(api, drafts, lawyer.id, audit);
     const requestedAccount = (email: string) => cfg.accounts.find(account => account.role === 'employee' && account.enabled && account.email === email);
     api.get('/matter-invitations', allow('employee'), (req: AuthedRequest, res) => {
       const rows = drafts.list(lawyer.id).filter(r => r.invitation?.employeeId === req.account!.id);
       audit(req, 'draft.invitations.list');
-      res.json(rows.map(r => ({ id: r.id, label: r.label, accepted: r.invitation!.accepted })));
+      res.json(rows.map(r => {
+        const requests = r.status === 'closed' ? [] : drafts.intakeState(r)?.documentRequests ?? [];
+        const pending = requests.filter(request => request.status === 'requested' || request.status === 'returned').length;
+        return { id: r.id, label: r.label, accepted: r.invitation!.accepted, ...(pending ? { pendingDocuments: pending } : {}) };
+      }));
     });
     api.post('/draft-matters/:id/invite', allow('lawyer'), (req: AuthedRequest, res) => {
       const row = drafts.list(req.account!.id).find(entry => entry.id === req.params.id);
@@ -183,6 +189,7 @@ export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
         return res.status(404).json({ error: 'matter unavailable' });
       res.locals.intakeStore = drafts.intakeStore(row);
       res.locals.matterId = row.id;
+      res.locals.matterStatus = row.status;
       next();
     }, intake, draftFiles);
     api.get('/draft-matters', allow('lawyer'), (req: AuthedRequest, res) => {

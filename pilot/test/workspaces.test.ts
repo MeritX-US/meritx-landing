@@ -59,7 +59,8 @@ test('enterprise sends requests, revises a return, and tracks two cases without 
   await second.get(draft + a + '/intake/materials').expect(404);
   await employee.post(draft + a + '/intake/consent').send({ agree: true }).expect(200);
   await employee.put(draft + a + '/intake/questionnaire').send({ answers: { notes: 'Private synthetic answer' }, submit: true }).expect(200);
-  await employee.post(draft + a + '/intake/materials').attach('file', Buffer.from('Synthetic file'), 'synthetic-evidence.txt').expect(201);
+  const material = (await employee.post(draft + a + '/intake/materials')
+    .attach('file', Buffer.from('Synthetic file'), 'synthetic-evidence.txt').expect(201)).body.id;
   await second.post(draft + b + '/intake/consent').send({ agree: true }).expect(200);
   await second.put(draft + b + '/intake/questionnaire').send({ answers: { notes: 'Second private answer' } }).expect(200);
   await progress(a, 'intake_submitted', 'Law firm');
@@ -70,6 +71,29 @@ test('enterprise sends requests, revises a return, and tracks two cases without 
   assert.doesNotMatch(results, /Private synthetic answer|Second private answer|synthetic-evidence/);
   await lawyer.put(draft + a + '/status').send({ status: 'in_review' }).expect(200);
   await progress(a, 'in_review', 'Law firm');
+
+  const documents = draft + a + '/intake/document-requests';
+  const item = (await lawyer.post(documents).send({ title: 'Private request title', instructions: 'Private request instructions' }).expect(201)).body;
+  await progress(a, 'documents_needed', 'Employee');
+  await progress(b, 'employee_intake', 'Employee');
+  await enterprise.get(documents).expect(403);
+  await second.get(documents).expect(404);
+  await employee.post(documents).send({ title: 'Not permitted', instructions: '' }).expect(403);
+  const inbox = (await employee.get('/api/matter-invitations').expect(200)).body;
+  assert.equal(inbox.find((row: { id: string }) => row.id === a).pendingDocuments, 1);
+  await employee.put(documents + '/' + item.id + '/submit').send({ materialIds: ['not-in-case'], revision: item.revision }).expect(400);
+  const sent = (await employee.put(documents + '/' + item.id + '/submit')
+    .send({ materialIds: [material], revision: item.revision }).expect(200)).body;
+  await progress(a, 'documents_submitted', 'Law firm');
+  const returned = (await lawyer.put(documents + '/' + item.id + '/review')
+    .send({ decision: 'returned', feedback: 'Private review feedback', revision: sent.revision }).expect(200)).body;
+  await progress(a, 'documents_needed', 'Employee');
+  await employee.put(documents + '/' + item.id + '/submit').send({ materialIds: [material], revision: item.revision }).expect(409);
+  const resent = (await employee.put(documents + '/' + item.id + '/submit')
+    .send({ materialIds: [material], revision: returned.revision }).expect(200)).body;
+  await lawyer.put(documents + '/' + item.id + '/review').send({ decision: 'accepted', revision: resent.revision }).expect(200);
+  await progress(a, 'in_review', 'Law firm');
+  assert.doesNotMatch((await enterprise.get(endpoint)).text, /Private request title|Private request instructions|Private review feedback/);
 });
 
 test('production intake displays and records agreement to the exact consent document', async t => {

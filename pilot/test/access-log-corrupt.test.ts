@@ -74,6 +74,5 @@ test('GET /api/access-log: 200 with a corrupted line; bad line marked, others in
 test('UI: access-log table renders corrupted_or_tampered rows as such (with line number)', () => {
   const js = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   assert.match(js, /r\.corrupted_or_tampered/);
-  assert.match(js, /CORRUPTED OR TAMPERED/);
-  assert.match(js, /line \$\{r\.line\}/);
+  assert.match(js, /Line \$\{r\.line\}: integrity check failed/);
 });

@@ -164,6 +164,12 @@ ID and account cap as described above when adding more than one employee.
    The employer can see its original request and the lawyer’s return message. Intake
    answers, materials, assessments, and notes remain accessible only to their case roles.
 
+After initial intake, the attorney can open **Document requests** in a case and ask for
+a specific document. The employee sees pending requests in **My cases**, uploads a file
+under **Supporting files**, and submits the selected file against the request. The attorney
+accepts it or returns it with instructions. HR sees when the case is waiting on documents
+or on attorney review. Document names, instructions and attachments stay in the case.
+
 For a hosted trial, follow [deployment setup](docs/DEPLOYMENT.md) and the
 [launch gates](docs/LAUNCH_GATES.md). Use fictional data until the firm approves the
 production consent and completes the applicable vendor checks.
