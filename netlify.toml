@@ -2,6 +2,9 @@
   command = "npm install --prefix app/client && npm run build --prefix app/client && node scripts/configure-workspace.mjs"
   publish = "."
 
+[context.production.environment]
+  MERITX_WORKSPACE_URL = "https://meritx-workspace-demo.onrender.com/"
+
 [[headers]]
   for = "/*"
   [headers.values]
