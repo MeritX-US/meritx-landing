@@ -47,6 +47,7 @@
       const me = await api('GET', '/api/me');
       $('#login').hidden = true; $('#app').hidden = false;
       $('#account').hidden = false;
+      $('#synthetic-demo').hidden = !me.syntheticDemo;
       $('#who').textContent = `${me.name} (${me.role})`;
       try { await render(me); }
       catch (e) { $('#view').replaceChildren(el('p', { class: 'notice error', role: 'alert' }, e.message)); }

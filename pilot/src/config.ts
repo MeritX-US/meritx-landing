@@ -23,6 +23,7 @@ export interface Account {
 }
 
 export interface PilotConfig {
+  syntheticDemo?: boolean;
   primaryEmployeeId: string;
   consentDocument?: ConsentDocument;
   twilio?: TwilioConfig;

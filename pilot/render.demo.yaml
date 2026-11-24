@@ -1,0 +1,15 @@
+# Invite-only synthetic trial. Free compute, no disk, and no vendor APIs.
+services:
+  - type: web
+    name: meritx-workspace-demo
+    runtime: docker
+    rootDir: pilot
+    dockerfilePath: ./Dockerfile
+    dockerCommand: node dist/src/demoServer.js
+    plan: free
+    region: oregon
+    autoDeployTrigger: off
+    healthCheckPath: /healthz
+    envVars:
+      - key: PILOT_DEMO_PASSWORD
+        generateValue: true

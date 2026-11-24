@@ -135,6 +135,7 @@ export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
     const workspaces = a.role === 'lawyer' ? cfg.lawyerWorkspaces?.filter(w => w.lawyerId === a.id)
       .map(({ label, origin }) => ({ label, origin })) : undefined;
     res.json({ id: a.id, name: a.name, role: a.role, flags: { lawyerApprovedPublish: cfg.lawyerApprovedPublish },
+      ...(cfg.syntheticDemo ? { syntheticDemo: true } : {}),
       ...(!originalCaseAccess(a) ? { originalCaseAccess: false } : {}),
       ...(drafts && a.role === 'lawyer' ? { invitees: cfg.accounts.filter(x => x.enabled && x.role === 'employee')
         .map(x => ({ id: x.id, name: x.name })) } : {}),

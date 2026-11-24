@@ -133,6 +133,7 @@ a:hover { color: var(--ink); }
 #login-error { margin-block: .6rem 0; }
 
 #view { display: grid; gap: 1rem; }
+#synthetic-demo { margin-block-end: 1rem; }
 .workspace-heading {
   display: flex;
   justify-content: space-between;

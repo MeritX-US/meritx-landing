@@ -35,6 +35,18 @@ the total and set `PILOT_PRIMARY_EMPLOYEE_ID` for a multi-employee instance. Run
 the trial's retention and individual case closeout procedure before accepting actual
 documents. Set the lawyer-approved consent file and version as described in the launch gates.
 
+### Free synthetic trial
+
+Use the separate Render Blueprint at `pilot/render.demo.yaml`. It creates one free web
+service and generates `PILOT_DEMO_PASSWORD` in its environment. Retrieve the password from
+that service's Environment page and share it privately with the invited testers. The demo
+accounts are `enterprise@preview.example.test`, `lawyer@preview.example.test`,
+`employee@preview.example.test`, and `employee2@preview.example.test`.
+
+The demo restores two fictional cases at process startup. Requests and uploads added during
+a session are temporary. AI and phone vendors are disabled. Verify the hosted login before
+enabling the Landing handoff.
+
 ## Landing sign-in handoff
 
 After the workspace DNS, HTTPS and login checks pass, set `MERITX_WORKSPACE_URL` on
