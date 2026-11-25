@@ -48,7 +48,7 @@ export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
     store.update(state => { state.primaryEmployeeId = cfg.primaryEmployeeId; });
   }
   const originalCaseAccess = (account: { id: string; role: string }) =>
-    account.role !== 'employee' || account.id === cfg.primaryEmployeeId;
+    !cfg.guidedTrial && (account.role !== 'employee' || account.id === cfg.primaryEmployeeId);
   // Revoked sessions are persisted in the (encrypted) case data store, so logout survives restarts.
   const auth = new Auth(cfg, {
     load: () => store.read().revokedSessions || {},
@@ -137,6 +137,9 @@ export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
       .map(({ label, origin }) => ({ label, origin })) : undefined;
     res.json({ id: a.id, name: a.name, role: a.role, flags: { lawyerApprovedPublish: cfg.lawyerApprovedPublish },
       ...(cfg.syntheticDemo ? { syntheticDemo: true } : {}),
+      ...(cfg.guidedTrial ? { guidedTrial: true, ...(a.role === 'enterprise' ? {
+        trialEmployeeEmail: cfg.accounts.find(account => account.id === cfg.primaryEmployeeId)!.email,
+      } : {}) } : {}),
       ...(!originalCaseAccess(a) ? { originalCaseAccess: false } : {}),
       ...(drafts && a.role === 'lawyer' ? { invitees: cfg.accounts.filter(x => x.enabled && x.role === 'employee')
         .map(x => ({ id: x.id, name: x.name })) } : {}),
@@ -155,9 +158,17 @@ export function createApp(cfg: PilotConfig, deps: AppDeps = {}) {
       const rows = drafts.list(lawyer.id).filter(r => r.invitation?.employeeId === req.account!.id);
       audit(req, 'draft.invitations.list');
       res.json(rows.map(r => {
-        const requests = r.status === 'closed' ? [] : drafts.intakeState(r)?.documentRequests ?? [];
-        const pending = requests.filter(request => request.status === 'requested' || request.status === 'returned').length;
-        return { id: r.id, label: r.label, accepted: r.invitation!.accepted, ...(pending ? { pendingDocuments: pending } : {}) };
+        const invitation = r.invitation!;
+        const entry = { id: r.id, label: r.label, accepted: invitation.accepted };
+        if (!invitation.accepted) return { ...entry, task: 'accept_invitation' };
+        if (r.status === 'closed') return { ...entry, task: 'closed' };
+        const state = drafts.intakeState(r);
+        if (!state || !hasCurrentConsent(state, cfg.consentDocument, invitation.employeeId))
+          return { ...entry, task: 'review_consent' };
+        const pending = (state.documentRequests ?? []).filter(item => item.status === 'requested' || item.status === 'returned').length;
+        if (pending) return { ...entry, task: 'submit_documents', pendingDocuments: pending };
+        const submitted = state.questionnaire.ownerId === invitation.employeeId && state.questionnaire.submittedAt;
+        return { ...entry, task: submitted ? 'questionnaire_submitted' : 'complete_questionnaire' };
       }));
     });
     api.post('/draft-matters/:id/invite', allow('lawyer'), (req: AuthedRequest, res) => {

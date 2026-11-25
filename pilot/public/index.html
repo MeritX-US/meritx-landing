@@ -36,10 +36,69 @@
           <button class="button-primary" type="submit">Sign in</button>
           <p id="login-error" class="error" role="alert"></p>
         </form>
+        <details id="trial-organizer" hidden>
+          <summary>Trial links for organizers</summary>
+          <form id="trial-link-form">
+            <label>Organizer key <input name="key" type="password" autocomplete="off" required></label>
+            <label>Participant note (optional) <input name="note" maxlength="60" autocomplete="off" placeholder="For example, Acme HR pilot"></label>
+            <button type="submit" value="link">Generate link</button>
+            <button type="submit" value="activity">View trial activity</button>
+            <p id="trial-link-status" role="status"></p>
+            <div id="trial-share" hidden>
+              <label>Share this link with one trial participant <input id="trial-share-url" readonly></label>
+              <button id="trial-copy" type="button">Copy link</button>
+            </div>
+          </form>
+          <div id="trial-activity" class="trial-activity" hidden></div>
+        </details>
       </div>
+    </section>
+    <section id="trial-welcome" class="card" hidden>
+      <h1>Try MeritX Workspace</h1>
+      <p>Follow a fictional case from the first HR request through attorney review and employee document submission. You can switch between the three roles as you go.</p>
+      <p class="muted">Use only fictional information and sample files. Your private trial lasts up to two hours.</p>
+      <button id="trial-start" class="button-primary" type="button">Start trial as HR</button>
+      <button id="trial-back" type="button">Back to workspace</button>
+      <p id="trial-error" class="error" role="alert"></p>
     </section>
     <section id="app" hidden>
       <p id="synthetic-demo" class="notice" hidden>Fictional trial data only. Cases and uploads reset when the demo restarts.</p>
+      <section id="trial-roles" class="card" hidden>
+        <h2>Trial roles</h2>
+        <p class="muted">Each role sees the same case from its own workspace. Save any changes before switching.</p>
+        <div id="trial-role-buttons" role="group" aria-label="Trial role"></div>
+        <p id="trial-role-error" class="error" role="alert"></p>
+        <div id="trial-next" class="trial-next" role="status"></div>
+        <details id="trial-guide">
+          <summary>Walkthrough steps <span id="trial-count" class="muted"></span></summary>
+          <ol id="trial-steps" class="trial-steps"></ol>
+        </details>
+        <details id="trial-feedback">
+          <summary>Share feedback with your organizer</summary>
+          <form id="trial-feedback-form">
+            <fieldset>
+              <legend>How easy was the walkthrough?</legend>
+              <div class="trial-ease">
+                <label><input type="radio" name="ease" value="1" required> 1 Hard</label>
+                <label><input type="radio" name="ease" value="2"> 2</label>
+                <label><input type="radio" name="ease" value="3"> 3</label>
+                <label><input type="radio" name="ease" value="4"> 4</label>
+                <label><input type="radio" name="ease" value="5"> 5 Easy</label>
+              </div>
+            </fieldset>
+            <label>Where did you need help? <select name="stuck" id="trial-stuck"><option value="none">Nowhere</option></select></label>
+            <label>Anything else? (optional) <textarea name="comment" maxlength="1000" rows="3"></textarea></label>
+            <p class="muted">Your organizer sees your rating and comments. Don't include personal information.</p>
+            <button type="submit" class="button-primary">Send feedback</button>
+            <p id="trial-feedback-status" role="status"></p>
+          </form>
+        </details>
+        <div class="trial-footer">
+          <p id="trial-expiry" class="muted"></p>
+          <button id="trial-reset" type="button">Start over</button>
+        </div>
+        <p id="trial-reset-status" role="status"></p>
+      </section>
       <div id="view"></div>
     </section>
   </main>

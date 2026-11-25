@@ -239,7 +239,7 @@ export class Auth {
   }
 
   clearSession(req: Request, res: Response) {
-    const token = parseCookies(req.headers.cookie)[SESSION_COOKIE];
+    const token = this.sessionToken(req);
     if (token) {
       const p = verifyToken<SessionPayload>(token, this.cfg.sessionSecret);
       if (p?.nonce && typeof p.exp === 'number') this.revoke(p.nonce, p.exp);
@@ -256,16 +256,24 @@ export class Auth {
   }
 
   private cookie(value: string, maxAge: number): string {
-    const name = this.cfg.secureCookies ? `__Host-${SESSION_COOKIE}` : SESSION_COOKIE;
-    const attrs = [`${name}=${value}`, 'Path=/', 'HttpOnly', 'SameSite=Strict', `Max-Age=${maxAge}`];
+    const attrs = [`${this.cookieName()}=${value}`, 'Path=/', 'HttpOnly', 'SameSite=Strict', `Max-Age=${maxAge}`];
     if (this.cfg.secureCookies) attrs.push('Secure');
     return attrs.join('; ');
   }
 
+  private cookieName() {
+    const name = this.cfg.guidedTrial ? 'mx_guided_session' : SESSION_COOKIE;
+    return this.cfg.secureCookies ? `__Host-${name}` : name;
+  }
+
+  private sessionToken(req: Request) {
+    const cookies = parseCookies(req.headers.cookie);
+    return cookies[this.cookieName()] || (!this.cfg.guidedTrial ? cookies[SESSION_COOKIE] : undefined);
+  }
+
   /** Resolve the current account from the session cookie; checks expiry, revocation and the live allowlist. */
   resolve(req: Request): Account | null {
-    const cookies = parseCookies(req.headers.cookie);
-    const token = cookies[`__Host-${SESSION_COOKIE}`] || cookies[SESSION_COOKIE];
+    const token = this.sessionToken(req);
     if (!token) return null;
     const p = verifyToken<SessionPayload>(token, this.cfg.sessionSecret);
     if (!p || typeof p.sub !== 'string' || typeof p.exp !== 'number') return null;

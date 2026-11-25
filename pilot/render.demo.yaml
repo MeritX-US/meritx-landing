@@ -13,3 +13,5 @@ services:
     envVars:
       - key: PILOT_DEMO_PASSWORD
         generateValue: true
+      - key: PILOT_TRIAL_ORGANIZER_KEY
+        generateValue: true

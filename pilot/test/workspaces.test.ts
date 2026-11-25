@@ -37,6 +37,11 @@ test('enterprise sends requests, revises a return, and tracks two cases without 
     assert.equal(row.next, next);
     assert.ok(Object.keys(row).every(key => ['id', 'reference', 'email', 'summary', 'decision', 'note', 'stage', 'next', 'updatedAt'].includes(key)));
   };
+  const employeeTask = async (task: string, accepted = true, pendingDocuments?: number) => {
+    const inbox = (await employee.get('/api/matter-invitations').expect(200)).body;
+    assert.deepEqual(inbox, [{ id: a, label: requestA.reference, accepted, task,
+      ...(pendingDocuments ? { pendingDocuments } : {}) }]);
+  };
   await progress(a, 'awaiting_firm', 'Law firm');
   await lawyer.post(draft + a + '/invite').send({ employeeId: primary.id }).expect(409);
   await lawyer.get(draft + a + '/intake/questionnaire').expect(404);
@@ -52,13 +57,18 @@ test('enterprise sends requests, revises a return, and tracks two cases without 
   await lawyer.post(draft + a + '/invite').send({ employeeId: primary.id }).expect(200);
   await lawyer.post(draft + b + '/invite').send({ employeeId: secondary.id }).expect(200);
   await progress(a, 'invitation_sent', 'Employee');
+  await employeeTask('accept_invitation', false);
   await employee.post('/api/matter-invitations/' + a + '/accept').expect(200);
+  await employeeTask('review_consent');
   await second.post('/api/matter-invitations/' + b + '/accept').expect(200);
   await progress(a, 'employee_intake', 'Employee');
   await employee.get(draft + b + '/intake/questionnaire').expect(404);
   await second.get(draft + a + '/intake/materials').expect(404);
   await employee.post(draft + a + '/intake/consent').send({ agree: true }).expect(200);
+  await employee.put(draft + a + '/intake/questionnaire').send({ answers: { notes: 'Private draft' } }).expect(200);
+  await employeeTask('complete_questionnaire');
   await employee.put(draft + a + '/intake/questionnaire').send({ answers: { notes: 'Private synthetic answer' }, submit: true }).expect(200);
+  await employeeTask('questionnaire_submitted');
   const material = (await employee.post(draft + a + '/intake/materials')
     .attach('file', Buffer.from('Synthetic file'), 'synthetic-evidence.txt').expect(201)).body.id;
   await second.post(draft + b + '/intake/consent').send({ agree: true }).expect(200);
@@ -79,8 +89,7 @@ test('enterprise sends requests, revises a return, and tracks two cases without 
   await enterprise.get(documents).expect(403);
   await second.get(documents).expect(404);
   await employee.post(documents).send({ title: 'Not permitted', instructions: '' }).expect(403);
-  const inbox = (await employee.get('/api/matter-invitations').expect(200)).body;
-  assert.equal(inbox.find((row: { id: string }) => row.id === a).pendingDocuments, 1);
+  await employeeTask('submit_documents', true, 1);
   await employee.put(documents + '/' + item.id + '/submit').send({ materialIds: ['not-in-case'], revision: item.revision }).expect(400);
   const sent = (await employee.put(documents + '/' + item.id + '/submit')
     .send({ materialIds: [material], revision: item.revision }).expect(200)).body;
@@ -88,12 +97,16 @@ test('enterprise sends requests, revises a return, and tracks two cases without 
   const returned = (await lawyer.put(documents + '/' + item.id + '/review')
     .send({ decision: 'returned', feedback: 'Private review feedback', revision: sent.revision }).expect(200)).body;
   await progress(a, 'documents_needed', 'Employee');
+  await employeeTask('submit_documents', true, 1);
   await employee.put(documents + '/' + item.id + '/submit').send({ materialIds: [material], revision: item.revision }).expect(409);
   const resent = (await employee.put(documents + '/' + item.id + '/submit')
     .send({ materialIds: [material], revision: returned.revision }).expect(200)).body;
   await lawyer.put(documents + '/' + item.id + '/review').send({ decision: 'accepted', revision: resent.revision }).expect(200);
   await progress(a, 'in_review', 'Law firm');
+  await employeeTask('questionnaire_submitted');
   assert.doesNotMatch((await enterprise.get(endpoint)).text, /Private request title|Private request instructions|Private review feedback/);
+  await lawyer.put(draft + a + '/status').send({ status: 'closed' }).expect(200);
+  await employeeTask('closed');
 });
 
 test('production intake displays and records agreement to the exact consent document', async t => {
@@ -233,7 +246,8 @@ test('employee accepts an invitation and submits intake scoped to that matter', 
   const invitations = '/api/matter-invitations';
   await employee.post(invitations + '/' + second + '/accept').expect(404);
   await lawyer.post(matters + '/' + first + '/invite').send({ employeeId: 'employee' }).expect(200);
-  assert.deepEqual((await employee.get(invitations).expect(200)).body, [{ id: first, label: 'Matter A', accepted: false }]);
+  assert.deepEqual((await employee.get(invitations).expect(200)).body,
+    [{ id: first, label: 'Matter A', accepted: false, task: 'accept_invitation' }]);
   await employee.get(intake + '/materials').expect(404);
   await employee.post(invitations + '/' + first + '/accept').expect(200);
   for (const agent of [enterprise, admin]) await agent.get(intake + '/questionnaire').expect(403);

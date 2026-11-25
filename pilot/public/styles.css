@@ -303,6 +303,32 @@ th { color: var(--muted); font: 500 .75rem/1.4 var(--mono); }
 td input:not([type="checkbox"]):not([type="radio"]) { min-width: 7rem; }
 tr.tampered td { color: var(--oxblood); background: #fbefed; font-weight: 600; }
 
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+#trial-roles { margin-bottom: 1.5rem; }
+.trial-next { margin-block: .75rem .5rem; }
+.trial-next:empty { display: none; }
+.trial-next p { margin: 0 0 .5rem; }
+.trial-steps { margin: .5rem 0 0; padding-left: 1.4rem; }
+.trial-steps li { margin-block: .25rem; }
+.trial-steps li.done { color: var(--sage); }
+.trial-steps li.done::marker { content: "\2713  "; }
+.trial-step-role { display: inline-block; min-width: 4.5rem; font-size: .8rem; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+
+#trial-roles details { margin-block: .5rem; }
+.trial-ease { display: flex; flex-wrap: wrap; gap: .25rem 1rem; }
+.trial-ease label { display: inline-flex; align-items: center; gap: .3rem; margin: 0; }
+#trial-feedback-form { margin-block-start: .75rem; }
+.trial-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; margin-block-start: .5rem; }
+.trial-footer p { margin: 0; }
+.button-danger { border-color: var(--oxblood); color: var(--oxblood); }
+#trial-organizer button { width: auto; margin-inline-end: .5rem; }
+.trial-activity { margin-block-start: 1rem; }
+.trial-activity-row { padding-block: .75rem; border-top: 1px solid var(--rule-soft); }
+.trial-activity-row h4 { margin: 0; }
+.trial-activity-row .status-pill { text-transform: none; }
+.trial-activity-row p { margin: .3rem 0 0; }
+.trial-activity-feedback { margin: .5rem 0 0; padding: .5rem .75rem; border-left: 3px solid var(--rule); background: var(--inset); font-size: .875rem; }
+
 @media (max-width: 700px) {
   .login-layout { grid-template-columns: 1fr; gap: 1.35rem; padding-block: .35rem; }
   .login-intro h1, .login-intro p { max-width: none; }
